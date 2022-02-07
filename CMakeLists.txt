@@ -18,8 +18,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         set(CMAKE_CXX_FLAGS "-D_GLIBCXX_DEBUG")
     endif()
-    set(CMAKE_CXX_FLAGS "-g3 -fPIC")
-    set(CMAKE_C_FLAGS "-g3 -fPIC")
+    set(CMAKE_CXX_FLAGS "-g3 -fPIC -libverbs")
+    set(CMAKE_C_FLAGS "-g3 -fPIC -libverbs")
 
     # some stuff in the linker to make .so loading nicer
     set(CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -rdynamic -ldl" )
@@ -115,7 +115,7 @@ file(GLOB SERVER_SOURCE "src/server/*.cc")
 add_library(server OBJECT ${SERVER_SOURCE})
 
 # the communication
-file(GLOB COMMUNICATION_SOURCE "src/communication/*.cc")
+file(GLOB COMMUNICATION_SOURCE "src/communication/*.cc" "src/communication/infiniband/*.cc")
 add_library(communication OBJECT ${COMMUNICATION_SOURCE})
 
 # the ud functions
