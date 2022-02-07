@@ -398,7 +398,7 @@ int bbts_connect_context(bbts_context_t *ctx, std::string ip_or_server,
 }
 
 
-Connection::Connection(
+connection_t::connection_t(
   std::string dev_name,
   std::string ip_or_server)
 {
@@ -442,10 +442,10 @@ Connection::Connection(
 
   delete context;
 
-  poll_thread = std::thread(&Connection::poll, this);
+  poll_thread = std::thread(&connection_t::poll, this);
 }
 
-Connection::~Connection() {
+connection_t::~connection_t() {
   destruct = true;
   poll_thread.join();
 
@@ -457,30 +457,30 @@ Connection::~Connection() {
   ibv_close_device(this->context);
 }
 
-std::future<bool> Connection::send_bytes(tag_t send_tag, bytes_t bytes){
+std::future<bool> connection_t::send_bytes(tag_t send_tag, bytes_t bytes){
   if(send_tag == 0) {
     throw std::domain_error("tag cannot be zero");
   }
   std::lock_guard<std::mutex> lk(send_m);
   send_init_queue.push_back({
     send_tag,
-    std::unique_ptr<SendItem>(new SendItem(this, bytes))
+    std::unique_ptr<send_item_t>(new send_item_t(this, bytes))
   });
   return send_init_queue.back().second->get_future();
 }
 
-std::future<bytes_t> Connection::recv_bytes(tag_t recv_tag){
+std::future<bytes_t> connection_t::recv_bytes(tag_t recv_tag){
   if(recv_tag == 0) {
     throw std::domain_error("tag cannot be zero");
   }
   recv_init_queue.push_back({
     recv_tag,
-    std::unique_ptr<RecvItem>(new RecvItem(true))
+    std::unique_ptr<recv_item_t>(new recv_item_t(true))
   });
   return recv_init_queue.back().second->get_future();
 }
 
-Connection::SendItem::SendItem(Connection *connection, bytes_t b){
+connection_t::send_item_t::send_item_t(connection_t *connection, bytes_t b){
   bytes_mr = ibv_reg_mr(
       connection->protection_domain,
       bytes.data, bytes.size,
@@ -490,8 +490,8 @@ Connection::SendItem::SendItem(Connection *connection, bytes_t b){
   }
 }
 
-void Connection::SendItem::send(
-  Connection *connection, tag_t tag, uint64_t remote_addr, uint32_t remote_key)
+void connection_t::send_item_t::send(
+  connection_t *connection, tag_t tag, uint64_t remote_addr, uint32_t remote_key)
 {
   // TODO: what happens when size bigger than 2^31...
   // TODO: what wrid?
@@ -500,7 +500,7 @@ void Connection::SendItem::send(
     remote_addr, remote_key);
 }
 
-bytes_t Connection::RecvItem::init(Connection *connection, uint64_t size){
+bytes_t connection_t::recv_item_t::init(connection_t *connection, uint64_t size){
   if(bytes.data == nullptr || bytes.size < size) {
     bytes.data = (void*)(new char[size]);
     bytes.size = size;
@@ -512,7 +512,7 @@ bytes_t Connection::RecvItem::init(Connection *connection, uint64_t size){
   return bytes;
 }
 
-void Connection::post_open_send(tag_t tag, uint64_t size){
+void connection_t::post_open_send(tag_t tag, uint64_t size){
   send_message_queue.push({
     .type = bbts_message_t::message_type::open_send,
     .tag = tag,
@@ -520,7 +520,7 @@ void Connection::post_open_send(tag_t tag, uint64_t size){
   });
 }
 
-void Connection::post_open_recv(tag_t tag, uint64_t addr, uint64_t size, uint32_t key){
+void connection_t::post_open_recv(tag_t tag, uint64_t addr, uint64_t size, uint32_t key){
   send_message_queue.push({
     .type = bbts_message_t::message_type::open_recv,
     .tag = tag,
@@ -530,14 +530,14 @@ void Connection::post_open_recv(tag_t tag, uint64_t addr, uint64_t size, uint32_
   });
 }
 
-void Connection::post_close(tag_t tag){
+void connection_t::post_close(tag_t tag){
   send_message_queue.push({
     .type = bbts_message_t::message_type::close_send,
     .tag = tag
   });
 }
 
-void Connection::poll(){
+void connection_t::poll(){
   ibv_wc work_completion;
   while(!destruct) {
     // It's not important that the thread catches the destruct exactly.
@@ -555,7 +555,7 @@ void Connection::poll(){
           } else {
             // yes? the remote info is already available, so do a remote write
             bbts_message_t& msg = iter->second;
-            SendItem& send_item = *(item.second);
+            send_item_t& send_item = *(item.second);
             send_item.send(this, msg.tag, msg.addr, msg.key);
             pending_sends.erase(iter);
             // still add it to send items so it can inform the peer when a
@@ -632,7 +632,7 @@ void Connection::poll(){
         if(iter == send_items.end()) {
           throw std::runtime_error("this send item does not exist");
         }
-        SendItem& item = *(iter->second);
+        send_item_t& item = *(iter->second);
         item.pr.set_value(true);
         send_items.erase(iter);
       //} else if(!is_send && !is_message) {
@@ -654,16 +654,16 @@ void Connection::poll(){
 
         // now handle the message
         if(msg.type == bbts_message_t::message_type::open_send) {
-          // send an open recv command. If the RecvItem doesn't exist, create one.
+          // send an open recv command. If the recv_item_t doesn't exist, create one.
           auto iter = recv_items.find(msg.tag);
           if(iter == recv_items.end()) {
             iter = recv_items.insert({
               msg.tag,
-              std::unique_ptr<RecvItem>(new RecvItem(false))
+              std::unique_ptr<recv_item_t>(new recv_item_t(false))
             }).first;
           }
           // allocate and register memory
-          RecvItem& item = *(iter->second);
+          recv_item_t& item = *(iter->second);
           item.init(this, msg.size);
 
           post_open_recv(
@@ -681,7 +681,7 @@ void Connection::poll(){
               msg
             });
           } else {
-            SendItem& item = *(iter->second);
+            send_item_t& item = *(iter->second);
             item.send(this, msg.tag, msg.addr, msg.key);
           }
         } else if(msg.type == bbts_message_t::message_type::close_send) {
@@ -691,7 +691,7 @@ void Connection::poll(){
           if(iter == recv_items.end()) {
             throw std::runtime_error("invalid tag in close message");
           }
-          RecvItem& item = *(iter->second);
+          recv_item_t& item = *(iter->second);
           if(item.valid_promise) {
             if(item.is_set) {
               throw std::runtime_error("invalid promise state");

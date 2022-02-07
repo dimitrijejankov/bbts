@@ -14,8 +14,8 @@ namespace bbts {
 namespace ib {
 
 template <typename T>
-struct MemoryRegionWrapper {
-  MemoryRegionWrapper(ibv_pd *pd, bool remote_write=false){
+struct memory_region_wrapper_t {
+  memory_region_wrapper_t(ibv_pd *pd, bool remote_write=false){
     ptr = new T;
     mr = ibv_reg_mr(
         pd, ptr, sizeof(T),
@@ -27,7 +27,7 @@ struct MemoryRegionWrapper {
     }
   }
 
-  ~MemoryRegionWrapper(){
+  ~memory_region_wrapper_t(){
     if(ibv_dereg_mr(mr)) {
       //throw std::runtime_error("couldn't deregister memory region object");
     }

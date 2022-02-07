@@ -38,35 +38,35 @@ struct bbts_message_t {
   uint32_t key;
 };
 
-struct Connection {
-  Connection(
+struct connection_t {
+  connection_t(
     std::string dev_name,
     std::string ip_or_server);
 
-  ~Connection();
+  ~connection_t();
 
   // ASSUMPTION: send_bytes and recv_bytes will be called at
   // most once for each tag value.
 
   // Send these bytes. The memory can be released once the
   // returned future is ready. If the future returns a false,
-  // the data was not recieved by the peer Connection object.
+  // the data was not recieved by the peer connection_t object.
   // This does not guarantee that recieve_bytes was called
   // by the peer connection, though.
 
   std::future<bool> send_bytes(tag_t send_tag, bytes_t bytes);
   std::future<bytes_t> recv_bytes(tag_t recv_tag);
 private:
-  struct SendItem {
-    SendItem(Connection *connection, bytes_t b);
+  struct send_item_t {
+    send_item_t(connection_t *connection, bytes_t b);
 
-    ~SendItem() {
+    ~send_item_t() {
       if(bytes_mr) {
         ibv_dereg_mr(bytes_mr);
       }
     }
 
-    void send(Connection *connection, tag_t tag, uint64_t remote_addr, uint32_t remote_key);
+    void send(connection_t *connection, tag_t tag, uint64_t remote_addr, uint32_t remote_key);
 
     std::future<bool> get_future(){ return pr.get_future(); }
 
@@ -75,16 +75,16 @@ private:
     std::promise<bool> pr;
   };
 
-  struct RecvItem {
-    RecvItem(bool valid_promise): is_set(false), valid_promise(valid_promise){}
+  struct recv_item_t {
+    recv_item_t(bool valid_promise): is_set(false), valid_promise(valid_promise){}
 
-    ~RecvItem() {
+    ~recv_item_t() {
       if(bytes_mr) {
         ibv_dereg_mr(bytes_mr);
       }
     }
 
-    bytes_t init(Connection *connection, uint64_t size);
+    bytes_t init(connection_t *connection, uint64_t size);
 
     std::future<bytes_t> get_future(){
       if(valid_promise) {
@@ -101,8 +101,8 @@ private:
     std::promise<bytes_t> pr;
   };
 
-  using SendItemPtr = std::unique_ptr<SendItem>;
-  using RecvItemPtr = std::unique_ptr<RecvItem>;
+  using send_item_ptr_t = std::unique_ptr<send_item_t>;
+  using recv_item_ptr_t = std::unique_ptr<recv_item_t>;
 
 private:
   void post_open_send(tag_t tag, uint64_t size);
@@ -117,13 +117,13 @@ private:
   std::queue<bbts_message_t> send_message_queue;
   bool open;
 
-  std::vector<std::pair<tag_t, SendItemPtr> > send_init_queue;
-  std::vector<std::pair<tag_t, RecvItemPtr> > recv_init_queue;
+  std::vector<std::pair<tag_t, send_item_ptr_t> > send_init_queue;
+  std::vector<std::pair<tag_t, recv_item_ptr_t> > recv_init_queue;
 
   std::map<tag_t, bbts_message_t> pending_sends;
 
-  std::map<tag_t, SendItemPtr> send_items;
-  std::map<tag_t, RecvItemPtr> recv_items;
+  std::map<tag_t, send_item_ptr_t> send_items;
+  std::map<tag_t, recv_item_ptr_t> recv_items;
 
   std::mutex send_m, recv_m;
 
