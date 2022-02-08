@@ -1,6 +1,7 @@
 #include "connection.h"
 #include "utils.h"
 
+#include <random>
 #include <iostream>
 
 namespace bbts {
@@ -16,12 +17,15 @@ struct bbts_context_t {
   ibv_context  *context;
   ibv_pd    *pd;
   ibv_cq    *cq;
-  ibv_qp    *qp;
+  std::vector<ibv_qp_ptr> qps;
+  ibv_srq   *srq;
   ibv_port_attr portinfo;
+  // the first num_qp are recv messages, then the nex num_qp are send messages
   bbts_message_t *msgs;
   ibv_mr *msgs_mr;
-  uint64_t msg_remote_addr;
-  uint32_t msg_remote_key;
+  std::vector<uint64_t> msg_remote_addr;
+  std::vector<uint32_t> msg_remote_key;
+  uint8_t num_qp;
 };
 
 struct bbts_exch_t {
@@ -36,8 +40,6 @@ void bbts_post_rdma_write(
   void* local_addr, uint32_t local_size, uint32_t local_key,
   uint64_t remote_addr, uint32_t remote_key)
 {
-  std::cout << "POSTING RDMA WRITE[" << wr_id << "]: " << remote_key << std::endl;
-
   ibv_sge list = {
     .addr  = (uint64_t)local_addr,
     .length = local_size,
@@ -56,11 +58,6 @@ void bbts_post_rdma_write(
       }
     }
   };
-  // // desinated initializors set everything else to zero,
-  // // so this isn't necessary
-  // // memset(&(wr.wr), 0, sizeof(wr.wr));
-  // wr.wr.rdma.remote_addr = remote_addr;
-  // wr.wr.rdma.rkey = remote_key;
 
   ibv_send_wr *bad_wr;
 
@@ -75,12 +72,6 @@ void bbts_post_send(
   void* local_addr, uint32_t local_size, uint32_t local_key,
   uint64_t remote_addr, uint32_t remote_key)
 {
-  std::cout << "POSTING SEND[" << wr_id << "]: " << remote_key << std::endl;
-  //std::cout << "---------------- POST SEND --------------------" << std::endl;
-  //std::cout << "WR_ID: " << wr_id << std::endl;
-  //std::cout << "REMOTE ADDR: " << remote_addr << std::endl;
-  //std::cout << "REMOTE KEY:  " << remote_key  << std::endl;
-
   ibv_sge list = {
     .addr  = (uint64_t)local_addr,
     .length = local_size,
@@ -99,11 +90,6 @@ void bbts_post_send(
       }
     }
   };
-  // // desinated initializors set everything else to zero,
-  // // so this isn't necessary
-  // // memset(&(wr.wr), 0, sizeof(wr.wr));
-  // wr.wr.rdma.remote_addr = remote_addr;
-  // wr.wr.rdma.rkey = remote_key;
 
   ibv_send_wr *bad_wr;
 
@@ -113,12 +99,14 @@ void bbts_post_send(
 }
 
 void bbts_post_recv(
-  ibv_qp *qp,
+  ibv_srq *srq,
   uint64_t wr_id,
   void* local_addr, uint32_t local_size, uint32_t local_key,
   uint32_t expected_remote_key)
 {
-  std::cout << "POSTING RECV[" << wr_id << "]: " << expected_remote_key << std::endl;
+  // expected_remote_key is only for debugging purposes
+  //std::cout << "POSTING RECV[" << wr_id << "]: " << expected_remote_key << std::endl;
+
   ibv_sge list = {
     .addr  = (uint64_t)local_addr,
     .length = local_size,
@@ -131,16 +119,22 @@ void bbts_post_recv(
   };
   ibv_recv_wr *bad_wr;
 
-  if(ibv_post_recv(qp, &wr, &bad_wr)) {
+  if(ibv_post_srq_recv(srq, &wr, &bad_wr)) {
     throw std::runtime_error("Error in post recv");
   }
 }
 
 bbts_context_t* bbts_init_context(
     std::string dev_name,
+    int rank,
+    unsigned int num_qp,
     uint8_t ib_port = 1)
 {
   bbts_context_t *ctx = new bbts_context_t;
+  ctx->num_qp = num_qp;
+  ctx->qps             = std::vector<ibv_qp_ptr>(num_qp);
+  ctx->msg_remote_addr = std::vector<uint64_t>(num_qp);
+  ctx->msg_remote_key  = std::vector<uint32_t>(num_qp);
 
   ibv_device  *ib_dev = NULL;
   ibv_device **dev_list = ibv_get_device_list(NULL);
@@ -164,37 +158,62 @@ bbts_context_t* bbts_init_context(
     goto clean_device;
   }
 
-  ctx->msgs = new bbts_message_t[2];
+  ctx->msgs = new bbts_message_t[2*num_qp];
   ctx->msgs_mr = ibv_reg_mr(
       ctx->pd,
-      ctx->msgs, 2*sizeof(bbts_message_t),
+      ctx->msgs, 2*num_qp*sizeof(bbts_message_t),
       IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE);
   if(!ctx->msgs_mr) {
     goto clean_pd;
   }
 
-  ctx->cq = ibv_create_cq(ctx->context, 8, NULL, NULL, 0);
+  ctx->cq = ibv_create_cq(ctx->context, 2*num_qp, NULL, NULL, 0);
   if (!ctx->cq) {
     goto clean_mr;
+  }
+
+  {
+		ibv_srq_init_attr attr = {
+			.attr = {
+				.max_wr  = 2*num_qp,
+				.max_sge = 1
+			}
+		};
+    ctx->srq = ibv_create_srq(ctx->pd, &attr);
+    if(!ctx->srq) {
+      goto clean_cq;
+    }
   }
 
   {
     ibv_qp_init_attr init_attr = {
       .send_cq = ctx->cq,
       .recv_cq = ctx->cq,
+      .srq     = ctx->srq,
       .cap     = {
-        .max_send_wr  = 4, // TODO: probably should be one, right?
-        .max_recv_wr  = 4,
+        .max_send_wr  = 1,
+        .max_recv_wr  = 1,
         .max_send_sge = 1,
         .max_recv_sge = 1
       },
       .qp_type = IBV_QPT_RC
     };
 
-    ctx->qp = ibv_create_qp(ctx->pd, &init_attr);
-
-    if (!ctx->qp)  {
-      goto clean_cq;
+    int i;
+    for(i = 0; i != num_qp; ++i) {
+      if(i == rank) {
+        continue;
+      }
+      ctx->qps[i] = ibv_create_qp(ctx->pd, &init_attr);
+      if(!ctx->qps[i]) {
+        i -= 1;
+        for(; i >= 0; --i) {
+          if(i == rank)
+            continue;
+          ibv_destroy_qp(ctx->qps[i]);
+        }
+        goto clean_srq;
+      }
     }
   }
 
@@ -207,20 +226,32 @@ bbts_context_t* bbts_init_context(
       .port_num        = ib_port,
     };
 
-    if (ibv_modify_qp(ctx->qp, &attr,
-          IBV_QP_STATE              |
-          IBV_QP_PKEY_INDEX         |
-          IBV_QP_PORT               |
-          IBV_QP_ACCESS_FLAGS)) {
-      goto clean_qp;
+    for(int i = 0; i != num_qp; ++i) {
+      if(i == rank) {
+        continue;
+      }
+      if (ibv_modify_qp(ctx->qps[i], &attr,
+            IBV_QP_STATE              |
+            IBV_QP_PKEY_INDEX         |
+            IBV_QP_PORT               |
+            IBV_QP_ACCESS_FLAGS)) {
+        goto clean_qps;
+      }
     }
   }
 
   ibv_free_device_list(dev_list);
   return ctx;
 
-clean_qp:
-  ibv_destroy_qp(ctx->qp);
+clean_qps:
+  for(int i = 0; i != num_qp; ++i) {
+    if(i == rank)
+      continue;
+    ibv_destroy_qp(ctx->qps[i]);
+  }
+
+clean_srq:
+  ibv_destroy_srq(ctx->srq);
 
 clean_cq:
   ibv_destroy_cq(ctx->cq);
@@ -243,11 +274,13 @@ clean_dev_list:
   return nullptr;
 }
 
+// Move the queue pair through the states to get it into the
+// Ready to Send state.
 bool bbts_connect_context_helper(
-      bbts_context_t *ctx,
-      uint8_t ib_port,
-      int my_psn,
-			bbts_dest_t const& dest)
+  ibv_qp *qp,
+  uint8_t ib_port,
+  int my_psn,
+	bbts_dest_t const& dest)
 {
 	ibv_qp_attr attr = {
 		.qp_state		= IBV_QPS_RTR,
@@ -265,7 +298,7 @@ bool bbts_connect_context_helper(
 		.min_rnr_timer		= 12
 	};
 
-	if (ibv_modify_qp(ctx->qp, &attr,
+	if (ibv_modify_qp(qp, &attr,
 			  IBV_QP_STATE              |
 			  IBV_QP_AV                 |
 			  IBV_QP_PATH_MTU           |
@@ -282,7 +315,7 @@ bool bbts_connect_context_helper(
 	attr.rnr_retry	    = 7;
 	attr.sq_psn	    = my_psn;
 	attr.max_rd_atomic  = 1;
-	if (ibv_modify_qp(ctx->qp, &attr,
+	if (ibv_modify_qp(qp, &attr,
 			  IBV_QP_STATE              |
 			  IBV_QP_TIMEOUT            |
 			  IBV_QP_RETRY_CNT          |
@@ -295,16 +328,28 @@ bool bbts_connect_context_helper(
 	return true;
 }
 
+uint32_t random_psn() {
+  static std::random_device rd;
+  static std::mt19937 gen(rd());
+  static std::uniform_int_distribution<uint32_t> d;
+  return d(gen);
+}
+
 bool bbts_client_exch_dest_and_connect(
   bbts_context_t *ctx,
+  int qp_index,
   std::string servername,
   uint8_t ib_port, int port,
-  bbts_dest_t const& my_dest,
   bbts_dest_t& rem_dest)
 {
+  bbts_dest_t my_dest = {
+    .lid = ctx->portinfo.lid,
+    .qpn = ctx->qps[qp_index]->qp_num,
+    .psn = random_psn()
+  };
   bbts_exch_t my_stuff = {
     .dest = my_dest,
-    .addr = (uint64_t)(ctx->msgs + 1),
+    .addr = (uint64_t)(ctx->msgs + ctx->num_qp + qp_index),
     .rem_key = ctx->msgs_mr->rkey
   };
   bbts_exch_t rem_stuff;
@@ -313,10 +358,10 @@ bool bbts_client_exch_dest_and_connect(
     return false;
   }
   rem_dest = rem_stuff.dest;
-  ctx->msg_remote_addr = rem_stuff.addr;
-  ctx->msg_remote_key  = rem_stuff.rem_key;
+  ctx->msg_remote_addr[qp_index] = rem_stuff.addr;
+  ctx->msg_remote_key[qp_index]  = rem_stuff.rem_key;
 
-  if(!bbts_connect_context_helper(ctx, ib_port, my_dest.psn, rem_dest)) {
+  if(!bbts_connect_context_helper(ctx->qps[qp_index], ib_port, my_dest.psn, rem_dest)) {
     return false;
   }
 
@@ -325,13 +370,18 @@ bool bbts_client_exch_dest_and_connect(
 
 bool bbts_server_exch_dest_and_connect(
   bbts_context_t *ctx,
+  int qp_index,
   uint8_t ib_port, int port,
-  bbts_dest_t const& my_dest,
   bbts_dest_t& rem_dest)
 {
+  bbts_dest_t my_dest = {
+    .lid = ctx->portinfo.lid,
+    .qpn = ctx->qps[qp_index]->qp_num,
+    .psn = random_psn()
+  };
   bbts_exch_t my_stuff = {
     .dest = my_dest,
-    .addr = (uint64_t)(ctx->msgs + 1),
+    .addr = (uint64_t)(ctx->msgs + ctx->num_qp + qp_index),
     .rem_key = ctx->msgs_mr->rkey
   };
   bbts_exch_t rem_stuff;
@@ -339,60 +389,59 @@ bool bbts_server_exch_dest_and_connect(
         port,
         [&]()
         {
-          return bbts_connect_context_helper(ctx, ib_port, my_dest.psn, rem_stuff.dest);
+          return bbts_connect_context_helper(
+                  ctx->qps[qp_index], ib_port, my_dest.psn, rem_stuff.dest);
         },
         my_stuff, rem_stuff);
   if(!success) {
     return false;
   }
   rem_dest = rem_stuff.dest;
-  ctx->msg_remote_addr = rem_stuff.addr;
-  ctx->msg_remote_key  = rem_stuff.rem_key;
+  ctx->msg_remote_addr[qp_index] = rem_stuff.addr;
+  ctx->msg_remote_key[qp_index]  = rem_stuff.rem_key;
 
   return true;
 }
 
-int bbts_connect_context(bbts_context_t *ctx, std::string ip_or_server,
+int bbts_connect_context(
+    bbts_context_t *ctx,
+    int rank,
+    std::vector<std::string> ips,
     uint8_t ib_port = 1, int port = 18515)
 {
-  bool is_server = "server" == ip_or_server;
-
-  bbts_dest_t my_dest;
-  bbts_dest_t rem_dest;
+  std::vector<bbts_dest_t> rem_dests(ctx->num_qp);
 
   if (ibv_query_port(ctx->context, ib_port, &ctx->portinfo)) {
     return 1;
   }
 
-
-  my_dest.lid = ctx->portinfo.lid;
-  if (ctx->portinfo.link_layer != IBV_LINK_LAYER_ETHERNET && !my_dest.lid) {
-    return 1;
-  }
-
-  my_dest.qpn = ctx->qp->qp_num;
-  my_dest.psn = lrand48() & 0xffffff;
-
-  // Both the server and the client exch functions also call
-  // bbts_connect_context_helper, but they do so at different points in setting
-  // up the connection. It is unclear to me what
-  // 1. bbts_connect_context_helper is doing and should do, and
-  // 2. why, if at all, they must call the function when they do.
+  // Both the server and the client exch functions call bbts_connect_context_helper,
+  // but they do so at different points.
   // This code was built off of an experiment which was built off of with libibverbs
-  // pingpong example.
-  bool success_exch =
-    is_server
-    ? bbts_server_exch_dest_and_connect(ctx,               ib_port, port, my_dest, rem_dest)
-    : bbts_client_exch_dest_and_connect(ctx, ip_or_server, ib_port, port, my_dest, rem_dest);
-  if(!success_exch){
-    return 1;
+  // pingpong example, and that is what they did.
+  // It is unclear to me why that is the case.
+  //
+  for(int i = 0; i != ctx->num_qp; ++i) {
+    if(i == rank)
+      continue;
+
+    bool success_exch =
+      (i < rank)
+      ? bbts_server_exch_dest_and_connect(ctx, i,         ib_port, port, rem_dests[i])
+      : bbts_client_exch_dest_and_connect(ctx, i, ips[i], ib_port, port, rem_dests[i]);
+    if(!success_exch){
+      return 1;
+    }
   }
 
   // PRINT DEST INFO HERE
-	printf("local address:  LID 0x%04x, QPN 0x%06x, PSN 0x%06x\n",
-	       my_dest.lid, my_dest.qpn, my_dest.psn);
-	printf("remote address:  LID 0x%04x, QPN 0x%06x, PSN 0x%06x\n",
-	       rem_dest.lid, rem_dest.qpn, rem_dest.psn);
+  for(int i = 0; i != ctx->num_qp; ++i) {
+    if(i == rank) {
+      continue;
+    }
+    printf("remote address:  LID 0x%04x, QPN 0x%06x, PSN 0x%06x\n",
+           rem_dests[i].lid, rem_dests[i].qpn, rem_dests[i].psn);
+  }
 
   return 0;
 }
@@ -400,9 +449,16 @@ int bbts_connect_context(bbts_context_t *ctx, std::string ip_or_server,
 
 connection_t::connection_t(
   std::string dev_name,
-  std::string ip_or_server)
+  int rank,
+  std::vector<std::string> ips):
+    rank(rank), opens(ips.size()), send_message_queue(ips.size())
 {
-  bbts_context_t *context = bbts_init_context(dev_name);
+  int num_qp = ips.size();
+
+  bbts_context_t *context = bbts_init_context(
+    dev_name,
+    rank,
+    num_qp);
 
   if(!context) {
     throw std::runtime_error("make_connection: couldn't init context");
@@ -410,35 +466,35 @@ connection_t::connection_t(
 
   // post a receive before setting up a connection so that
   // when the connection is started, the receiving can occur
-  bbts_post_recv(
-    context->qp, 0,
-    (void*)context->msgs,
-    sizeof(bbts_message_t),
-    context->msgs_mr->lkey,
-    context->msgs_mr->rkey);
+  for(int i = 0; i != num_qp; ++i) {
+    if(i == rank)
+      continue;
+    bbts_post_recv(
+      context->srq, 0,
+      (void*)(context->msgs + i),
+      sizeof(bbts_message_t),
+      context->msgs_mr->lkey,
+      context->msgs_mr->rkey);
+  }
 
-  if(bbts_connect_context(context, ip_or_server)) {
+  if(bbts_connect_context(context, rank, ips)) {
     throw std::runtime_error("make_connection: couldn't connect context");
   }
 
-  open = true;
   destruct = false;
+  std::fill(opens.begin(), opens.end(), 1);
 
-  this->msg_recv         = context->msgs;
-  this->msg_send         = context->msgs + 1;
-  this->msgs_mr          = context->msgs_mr;
-  this->msg_remote_addr  = context->msg_remote_addr;
-  this->msg_remote_key   = context->msg_remote_key;
+  this->msgs_recv         = context->msgs;
+  this->msgs_send         = context->msgs + num_qp;
+  this->msgs_mr           = context->msgs_mr;
+  this->msgs_remote_addr  = context->msg_remote_addr;
+  this->msgs_remote_key   = context->msg_remote_key;
 
   this->context               = context->context;
   this->completion_queue      = context->cq;
   this->protection_domain     = context->pd;
-  this->queue_pair            = context->qp;
-
-  std::cout << "REMOTE ADDRESS "  << context->msg_remote_addr << std::endl;
-  std::cout << "REMOTE KEY "      << context->msg_remote_key  << std::endl;
-  std::cout << "LOCAL ADDRESS "   << ((uint64_t)context->msgs) << std::endl;
-  std::cout << "PEER REMOTE KEY " << context->msgs_mr->rkey    << std::endl;
+  this->queue_pairs           = context->qps;
+  this->shared_recv_queue     = context->srq;
 
   delete context;
 
@@ -449,21 +505,29 @@ connection_t::~connection_t() {
   destruct = true;
   poll_thread.join();
 
-  ibv_destroy_qp(this->queue_pair);
+  for(int i = 0; i != rank; ++i) {
+    if(i == rank)
+      continue;
+    ibv_destroy_qp(this->queue_pairs[i]);
+  }
+  ibv_destroy_srq(this->shared_recv_queue);
   ibv_destroy_cq(this->completion_queue);
   ibv_dereg_mr(this->msgs_mr);
-  delete[] msg_recv;
+  delete[] msgs_recv;
   ibv_dealloc_pd(this->protection_domain);
   ibv_close_device(this->context);
 }
 
-std::future<bool> connection_t::send_bytes(tag_t send_tag, bytes_t bytes){
+std::future<bool> connection_t::send_bytes(int dest_rank, tag_t send_tag, bytes_t bytes){
+  if(dest_rank == rank) {
+    throw std::invalid_argument("destination rank is same as current rank");
+  }
   if(send_tag == 0) {
-    throw std::domain_error("tag cannot be zero");
+    throw std::invalid_argument("tag cannot be zero");
   }
   std::lock_guard<std::mutex> lk(send_m);
   send_init_queue.push_back({
-    send_tag,
+    tag_rank_t(send_tag, dest_rank),
     std::unique_ptr<send_item_t>(new send_item_t(this, bytes))
   });
   return send_init_queue.back().second->get_future();
@@ -471,8 +535,9 @@ std::future<bool> connection_t::send_bytes(tag_t send_tag, bytes_t bytes){
 
 std::future<bytes_t> connection_t::recv_bytes(tag_t recv_tag){
   if(recv_tag == 0) {
-    throw std::domain_error("tag cannot be zero");
+    throw std::invalid_argument("tag cannot be zero");
   }
+  std::lock_guard<std::mutex> lk(recv_m);
   recv_init_queue.push_back({
     recv_tag,
     std::unique_ptr<recv_item_t>(new recv_item_t(true))
@@ -486,43 +551,50 @@ connection_t::send_item_t::send_item_t(connection_t *connection, bytes_t b){
       bytes.data, bytes.size,
       IBV_ACCESS_LOCAL_WRITE);
   if(!bytes_mr) {
-    throw std::runtime_error("couldn't register mr for bytes");
+    throw std::runtime_error("couldn't register mr for send bytes");
   }
 }
 
 void connection_t::send_item_t::send(
-  connection_t *connection, tag_t tag, uint64_t remote_addr, uint32_t remote_key)
+  connection_t *connection, tag_t tag, int dest_rank, uint64_t remote_addr, uint32_t remote_key)
 {
   // TODO: what happens when size bigger than 2^31...
   // TODO: what wrid?
-  bbts_post_rdma_write(connection->queue_pair, tag,
+  bbts_post_rdma_write(
+    connection->queue_pairs[dest_rank], tag,
     bytes.data, bytes.size, bytes_mr->lkey,
     remote_addr, remote_key);
 }
 
 bytes_t connection_t::recv_item_t::init(connection_t *connection, uint64_t size){
-  if(bytes.data == nullptr || bytes.size < size) {
-    bytes.data = (void*)(new char[size]);
-    bytes.size = size;
-  }
+  bytes.data = (void*)(new char[size]);
+  bytes.size = size;
+
   bytes_mr = ibv_reg_mr(
       connection->protection_domain,
       bytes.data, bytes.size,
       IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE);
+  if(!bytes_mr) {
+    throw std::runtime_error("couldn't register mr for recv bytes");
+  }
   return bytes;
 }
 
-void connection_t::post_open_send(tag_t tag, uint64_t size){
-  send_message_queue.push({
+void connection_t::post_open_send(int dest_rank, tag_t tag, uint64_t size){
+  send_message_queue[dest_rank].push({
     .type = bbts_message_t::message_type::open_send,
+    .rank = dest_rank,
     .tag = tag,
     .size = size
   });
 }
 
-void connection_t::post_open_recv(tag_t tag, uint64_t addr, uint64_t size, uint32_t key){
-  send_message_queue.push({
+void connection_t::post_open_recv(
+  int dest_rank, tag_t tag, uint64_t addr, uint64_t size, uint32_t key)
+{
+  send_message_queue[dest_rank].push({
     .type = bbts_message_t::message_type::open_recv,
+    .rank = dest_rank,
     .tag = tag,
     .addr = addr,
     .size = size,
@@ -530,183 +602,187 @@ void connection_t::post_open_recv(tag_t tag, uint64_t addr, uint64_t size, uint3
   });
 }
 
-void connection_t::post_close(tag_t tag){
-  send_message_queue.push({
+void connection_t::post_close(int dest_rank, tag_t tag){
+  send_message_queue[dest_rank].push({
     .type = bbts_message_t::message_type::close_send,
+    .rank = dest_rank,
     .tag = tag
   });
 }
 
 void connection_t::poll(){
-  ibv_wc work_completion;
-  while(!destruct) {
-    // It's not important that the thread catches the destruct exactly.
-    for(int i = 0; i != 1000000; ++i) {
-      // Empty the initialize queues
-      {
-        std::lock_guard<std::mutex> lk(send_m);
-        for(auto && item: send_init_queue) {
-          // does an rdma write already have to happen?
-          auto iter = pending_sends.find(item.first);
-          if(iter == pending_sends.end()) {
-            // no? send an open send so you can get the remote info
-            this->post_open_send(item.first, item.second->bytes.size);
-            send_items.insert(std::move(item));
-          } else {
-            // yes? the remote info is already available, so do a remote write
-            bbts_message_t& msg = iter->second;
-            send_item_t& send_item = *(item.second);
-            send_item.send(this, msg.tag, msg.addr, msg.key);
-            pending_sends.erase(iter);
-            // still add it to send items so it can inform the peer when a
-            // write has happened
-            send_items.insert(std::move(item));
-          }
-        }
-        send_init_queue.resize(0);
-      }
+  while(!destruct){}
 
-      {
-        std::lock_guard<std::mutex> lk(recv_m);
-        for(auto && item: recv_init_queue) {
-          auto iter = recv_items.find(item.first);
-          if(iter == recv_items.end()) {
-            recv_items.insert(std::move(item));
-          } else {
-            // There are currently two recv items, but since
-            // send_bytes and recv_bytes are only called once for each tag,
-            // this means that the only relevant promise is the one from
-            // the recv_bytes call in item--the one in recv_items is because
-            // an OpenRecv command has already been sent.
-
-            // If the bytes are alredy set,
-            //   (1) set the promsie and
-            //   (2) remove the entry in recv_items.
-            // Otherwise the bytes are not set,
-            //   move the relevant promise into recv_items
-            if(iter->second->is_set) {
-              item.second->pr.set_value(iter->second->bytes);
-              recv_items.erase(iter);
-            } else {
-              iter->second->pr = std::move(item.second->pr);
-            }
-          }
-        }
-        recv_init_queue.resize(0);
-      }
-
-      // Take something off of the message queue if open
-      if(open && !send_message_queue.empty()) {
-        *msg_send = send_message_queue.front();
-        send_message_queue.pop();
-        bbts_post_send(
-          queue_pair, 0,
-          (void*)msg_send, sizeof(bbts_message_t), msgs_mr->lkey,
-          msg_remote_addr, msg_remote_key);
-        open = false;
-      }
-
-      // poll for any events
-      int ne = ibv_poll_cq(completion_queue, 1, &work_completion);
-      if(!ne) {
-        continue;
-      }
-      if(work_completion.status) {
-        std::cout << "WORK COMPLETION STATUS " << work_completion.status << std::endl;
-        throw std::runtime_error("work completion error");
-      }
-
-      bool is_send = work_completion.opcode == 0;
-      bool is_rdma_write = work_completion.opcode == 1;
-      bool is_message = work_completion.wr_id == 0;
-      if(!is_message) {
-        if(!is_rdma_write) {
-          throw std::runtime_error("shouldn't happen");
-        }
-
-        // an rdma write occured
-        tag_t tag = work_completion.wr_id;
-        post_close(tag); // tell the peer we are done writing
-
-        auto iter = send_items.find(tag);
-        if(iter == send_items.end()) {
-          throw std::runtime_error("this send item does not exist");
-        }
-        send_item_t& item = *(iter->second);
-        item.pr.set_value(true);
-        send_items.erase(iter);
-      //} else if(!is_send && !is_message) {
-      //  throw std::runtime_error("how can you recv an rdma write?");
-      } else if(is_send && is_message) {
-        // a send item is completed and the message is available again
-        open = true;
-      } else if(!is_send && is_message) {
-        // a message has been recvd
-        // so post a recv back and handle the message
-
-        // copy the message here
-        bbts_message_t msg = *msg_recv;
-
-        bbts_post_recv(
-          queue_pair, 0,
-          (void*)msg_recv, sizeof(bbts_message_t),
-          msgs_mr->lkey, msgs_mr->rkey);
-
-        // now handle the message
-        if(msg.type == bbts_message_t::message_type::open_send) {
-          // send an open recv command. If the recv_item_t doesn't exist, create one.
-          auto iter = recv_items.find(msg.tag);
-          if(iter == recv_items.end()) {
-            iter = recv_items.insert({
-              msg.tag,
-              std::unique_ptr<recv_item_t>(new recv_item_t(false))
-            }).first;
-          }
-          // allocate and register memory
-          recv_item_t& item = *(iter->second);
-          item.init(this, msg.size);
-
-          post_open_recv(
-            msg.tag,
-            (uint64_t)item.bytes.data,
-            item.bytes.size,
-            item.bytes_mr->rkey);
-        } else if(msg.type == bbts_message_t::message_type::open_recv) {
-          // Do an rdma write if there is a send request available.
-          // Otherwise, save the message for when send_bytes is called.
-          auto iter = send_items.find(msg.tag);
-          if(iter == send_items.end()) {
-            pending_sends.insert({
-              msg.tag,
-              msg
-            });
-          } else {
-            send_item_t& item = *(iter->second);
-            item.send(this, msg.tag, msg.addr, msg.key);
-          }
-        } else if(msg.type == bbts_message_t::message_type::close_send) {
-          // the recv item knows it has been written to so set the future
-          // and delete it UNLESS the promise is invalid
-          auto iter = recv_items.find(msg.tag);
-          if(iter == recv_items.end()) {
-            throw std::runtime_error("invalid tag in close message");
-          }
-          recv_item_t& item = *(iter->second);
-          if(item.valid_promise) {
-            if(item.is_set) {
-              throw std::runtime_error("invalid promise state");
-            }
-            item.pr.set_value(item.bytes);
-            recv_items.erase(iter);
-          } else {
-            item.is_set = true;
-          }
-        } else {
-          throw std::runtime_error("invalid message type");
-        }
-      }
-    }
-  }
+// TODO
+//  ibv_wc work_completion;
+//  while(!destruct) {
+//    // It's not important that the thread catches the destruct exactly.
+//    for(int i = 0; i != 1000000; ++i) {
+//      // Empty the initialize queues
+//      {
+//        std::lock_guard<std::mutex> lk(send_m);
+//        for(auto && item: send_init_queue) {
+//          // does an rdma write already have to happen?
+//          auto iter = pending_sends.find(item.first);
+//          if(iter == pending_sends.end()) {
+//            // no? send an open send so you can get the remote info
+//            this->post_open_send(item.first, item.second->bytes.size);
+//            send_items.insert(std::move(item));
+//          } else {
+//            // yes? the remote info is already available, so do a remote write
+//            bbts_message_t& msg = iter->second;
+//            send_item_t& send_item = *(item.second);
+//            send_item.send(this, msg.tag, msg.addr, msg.key);
+//            pending_sends.erase(iter);
+//            // still add it to send items so it can inform the peer when a
+//            // write has happened
+//            send_items.insert(std::move(item));
+//          }
+//        }
+//        send_init_queue.resize(0);
+//      }
+//
+//      {
+//        std::lock_guard<std::mutex> lk(recv_m);
+//        for(auto && item: recv_init_queue) {
+//          auto iter = recv_items.find(item.first);
+//          if(iter == recv_items.end()) {
+//            recv_items.insert(std::move(item));
+//          } else {
+//            // There are currently two recv items, but since
+//            // send_bytes and recv_bytes are only called once for each tag,
+//            // this means that the only relevant promise is the one from
+//            // the recv_bytes call in item--the one in recv_items is because
+//            // an OpenRecv command has already been sent.
+//
+//            // If the bytes are alredy set,
+//            //   (1) set the promsie and
+//            //   (2) remove the entry in recv_items.
+//            // Otherwise the bytes are not set,
+//            //   move the relevant promise into recv_items
+//            if(iter->second->is_set) {
+//              item.second->pr.set_value(iter->second->bytes);
+//              recv_items.erase(iter);
+//            } else {
+//              iter->second->pr = std::move(item.second->pr);
+//            }
+//          }
+//        }
+//        recv_init_queue.resize(0);
+//      }
+//
+//      // Take something off of the message queue if open
+//      if(open && !send_message_queue.empty()) {
+//        *msg_send = send_message_queue.front();
+//        send_message_queue.pop();
+//        bbts_post_send(
+//          queue_pair, 0,
+//          (void*)msg_send, sizeof(bbts_message_t), msgs_mr->lkey,
+//          msg_remote_addr, msg_remote_key);
+//        open = false;
+//      }
+//
+//      // poll for any events
+//      int ne = ibv_poll_cq(completion_queue, 1, &work_completion);
+//      if(!ne) {
+//        continue;
+//      }
+//      if(work_completion.status) {
+//        std::cout << "WORK COMPLETION STATUS " << work_completion.status << std::endl;
+//        throw std::runtime_error("work completion error");
+//      }
+//
+//      bool is_send = work_completion.opcode == 0;
+//      bool is_rdma_write = work_completion.opcode == 1;
+//      bool is_message = work_completion.wr_id == 0;
+//      if(!is_message) {
+//        if(!is_rdma_write) {
+//          throw std::runtime_error("shouldn't happen");
+//        }
+//
+//        // an rdma write occured
+//        tag_t tag = work_completion.wr_id;
+//        post_close(tag); // tell the peer we are done writing
+//
+//        auto iter = send_items.find(tag);
+//        if(iter == send_items.end()) {
+//          throw std::runtime_error("this send item does not exist");
+//        }
+//        send_item_t& item = *(iter->second);
+//        item.pr.set_value(true);
+//        send_items.erase(iter);
+//      //} else if(!is_send && !is_message) {
+//      //  throw std::runtime_error("how can you recv an rdma write?");
+//      } else if(is_send && is_message) {
+//        // a send item is completed and the message is available again
+//        open = true;
+//      } else if(!is_send && is_message) {
+//        // a message has been recvd
+//        // so post a recv back and handle the message
+//
+//        // copy the message here
+//        bbts_message_t msg = *msg_recv;
+//
+//        bbts_post_recv(
+//          queue_pair, 0,
+//          (void*)msg_recv, sizeof(bbts_message_t),
+//          msgs_mr->lkey, msgs_mr->rkey);
+//
+//        // now handle the message
+//        if(msg.type == bbts_message_t::message_type::open_send) {
+//          // send an open recv command. If the recv_item_t doesn't exist, create one.
+//          auto iter = recv_items.find(msg.tag);
+//          if(iter == recv_items.end()) {
+//            iter = recv_items.insert({
+//              msg.tag,
+//              std::unique_ptr<recv_item_t>(new recv_item_t(false))
+//            }).first;
+//          }
+//          // allocate and register memory
+//          recv_item_t& item = *(iter->second);
+//          item.init(this, msg.size);
+//
+//          post_open_recv(
+//            msg.tag,
+//            (uint64_t)item.bytes.data,
+//            item.bytes.size,
+//            item.bytes_mr->rkey);
+//        } else if(msg.type == bbts_message_t::message_type::open_recv) {
+//          // Do an rdma write if there is a send request available.
+//          // Otherwise, save the message for when send_bytes is called.
+//          auto iter = send_items.find(msg.tag);
+//          if(iter == send_items.end()) {
+//            pending_sends.insert({
+//              msg.tag,
+//              msg
+//            });
+//          } else {
+//            send_item_t& item = *(iter->second);
+//            item.send(this, msg.tag, msg.addr, msg.key);
+//          }
+//        } else if(msg.type == bbts_message_t::message_type::close_send) {
+//          // the recv item knows it has been written to so set the future
+//          // and delete it UNLESS the promise is invalid
+//          auto iter = recv_items.find(msg.tag);
+//          if(iter == recv_items.end()) {
+//            throw std::runtime_error("invalid tag in close message");
+//          }
+//          recv_item_t& item = *(iter->second);
+//          if(item.valid_promise) {
+//            if(item.is_set) {
+//              throw std::runtime_error("invalid promise state");
+//            }
+//            item.pr.set_value(item.bytes);
+//            recv_items.erase(iter);
+//          } else {
+//            item.is_set = true;
+//          }
+//        } else {
+//          throw std::runtime_error("invalid message type");
+//        }
+//      }
+//    }
+//  }
 }
 
 } // namespace ib

@@ -20,18 +20,27 @@ struct bytes_t {
 };
 
 using tag_t = uint64_t;
+using ibv_qp_ptr = decltype(ibv_create_qp(NULL, NULL));
+
+struct tag_rank_t {
+  tag_rank_t(tag_t tag, int rank): tag(tag), rank(rank) {}
+
+  tag_t tag;
+  int rank;
+};
 
 // As an algebraic data type, bbts_message_t looks something like this:
 //   data BbtsMessage =
-//       OpenSend Size Tag
-//     | OpenRecv Addr Size Key Tag
-//     | CloseSend Tag
+//       OpenSend  Rank Tag Size
+//     | OpenRecv  Rank Tag Addr Size Key
+//     | CloseSend Rank Tag
 // Once an OpenRecv is obtained, write the data into it.
 // If an OpenRecv is not available, send an OpenSend command.
 // Send CloseSend to remote data  holder whenever a write has finished
 struct bbts_message_t {
   enum message_type { open_send, open_recv, close_send };
   message_type type;
+  int rank;
   tag_t tag;
   uint64_t addr;
   uint64_t size;
@@ -41,7 +50,8 @@ struct bbts_message_t {
 struct connection_t {
   connection_t(
     std::string dev_name,
-    std::string ip_or_server);
+    int rank,
+    std::vector<std::string> ips);
 
   ~connection_t();
 
@@ -53,8 +63,7 @@ struct connection_t {
   // the data was not recieved by the peer connection_t object.
   // This does not guarantee that recieve_bytes was called
   // by the peer connection, though.
-
-  std::future<bool> send_bytes(tag_t send_tag, bytes_t bytes);
+  std::future<bool> send_bytes(int dest_rank, tag_t send_tag, bytes_t bytes);
   std::future<bytes_t> recv_bytes(tag_t recv_tag);
 private:
   struct send_item_t {
@@ -66,7 +75,7 @@ private:
       }
     }
 
-    void send(connection_t *connection, tag_t tag, uint64_t remote_addr, uint32_t remote_key);
+    void send(connection_t *connection, tag_t tag, int dest_rank, uint64_t remote_addr, uint32_t remote_key);
 
     std::future<bool> get_future(){ return pr.get_future(); }
 
@@ -105,40 +114,44 @@ private:
   using recv_item_ptr_t = std::unique_ptr<recv_item_t>;
 
 private:
-  void post_open_send(tag_t tag, uint64_t size);
-  void post_open_recv(tag_t tag, uint64_t addr, uint64_t size, uint32_t key);
-  void post_close(tag_t tag);
+  void post_open_send(int dest_rank, tag_t tag, uint64_t size);
+  void post_open_recv(
+    int dest_rank, tag_t tag,
+    uint64_t addr, uint64_t size, uint32_t key);
+  void post_close(int dest_rank, tag_t tag);
   void poll();
 
 private:
+  int rank;
   std::thread poll_thread;
   std::atomic<bool> destruct;
 
-  std::queue<bbts_message_t> send_message_queue;
-  bool open;
+  std::vector<std::queue<bbts_message_t> > send_message_queue;
+  std::vector<char> opens;
 
-  std::vector<std::pair<tag_t, send_item_ptr_t> > send_init_queue;
-  std::vector<std::pair<tag_t, recv_item_ptr_t> > recv_init_queue;
+  std::vector<std::pair<tag_rank_t, send_item_ptr_t> > send_init_queue;
+  std::vector<std::pair<tag_t,      recv_item_ptr_t> > recv_init_queue;
 
-  std::map<tag_t, bbts_message_t> pending_sends;
+  std::map<tag_rank_t, bbts_message_t> pending_sends;
 
-  std::map<tag_t, send_item_ptr_t> send_items;
-  std::map<tag_t, recv_item_ptr_t> recv_items;
+  std::map<tag_rank_t, send_item_ptr_t> send_items;
+  std::map<tag_rank_t, recv_item_ptr_t> recv_items;
 
   std::mutex send_m, recv_m;
 
-  // msg_recv and msg_send live in consecutive memory, both managed
+  // msgs_recv and msgs_send live in consecutive memory, both managed
   // by msgs_mr
-  bbts_message_t* msg_recv;
-  bbts_message_t* msg_send;
+  bbts_message_t* msgs_recv;
+  bbts_message_t* msgs_send;
   ibv_mr* msgs_mr;
-  uint64_t msg_remote_addr;
-  uint32_t msg_remote_key;
+  std::vector<uint64_t> msgs_remote_addr;
+  std::vector<uint32_t> msgs_remote_key;
 
   ibv_context *context;
   ibv_cq *completion_queue;
   ibv_pd *protection_domain;
-  ibv_qp *queue_pair;
+  ibv_srq *shared_recv_queue;
+  std::vector<ibv_qp_ptr> queue_pairs;
 };
 
 
