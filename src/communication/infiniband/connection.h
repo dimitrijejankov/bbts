@@ -23,10 +23,18 @@ using tag_t = uint64_t;
 using ibv_qp_ptr = decltype(ibv_create_qp(NULL, NULL));
 
 struct tag_rank_t {
-  tag_rank_t(tag_t tag, int rank): tag(tag), rank(rank) {}
-
+  //tag_rank_t(tag_t tag, int rank): tag(tag), rank(rank) {}
   tag_t tag;
   int rank;
+};
+
+struct tag_rank_less_t {
+  bool operator()(tag_rank_t const& lhs, tag_rank_t const& rhs) const {
+    if(lhs.tag == rhs.tag) {
+      return lhs.rank < rhs.rank;
+    }
+    return lhs.tag < rhs.tag;
+  }
 };
 
 // As an algebraic data type, bbts_message_t looks something like this:
@@ -75,7 +83,10 @@ private:
       }
     }
 
-    void send(connection_t *connection, tag_t tag, int dest_rank, uint64_t remote_addr, uint32_t remote_key);
+    void send(
+        connection_t *connection,
+        tag_t tag, int dest_rank,
+        uint64_t remote_addr, uint32_t remote_key);
 
     std::future<bool> get_future(){ return pr.get_future(); }
 
@@ -121,6 +132,11 @@ private:
   void post_close(int dest_rank, tag_t tag);
   void poll();
 
+  // find out what queue pair was responsible for this work request
+  int get_recv_rank(ibv_wc const& wc);
+
+  void handle_message(int recv_rank, bbts_message_t const& msg);
+
 private:
   int rank;
   std::thread poll_thread;
@@ -132,10 +148,10 @@ private:
   std::vector<std::pair<tag_rank_t, send_item_ptr_t> > send_init_queue;
   std::vector<std::pair<tag_t,      recv_item_ptr_t> > recv_init_queue;
 
-  std::map<tag_rank_t, bbts_message_t> pending_sends;
+  std::map<tag_rank_t, bbts_message_t, tag_rank_less_t> pending_sends;
 
-  std::map<tag_rank_t, send_item_ptr_t> send_items;
-  std::map<tag_rank_t, recv_item_ptr_t> recv_items;
+  std::map<tag_rank_t, send_item_ptr_t, tag_rank_less_t> send_items;
+  std::map<tag_t,      recv_item_ptr_t                 > recv_items;
 
   std::mutex send_m, recv_m;
 
@@ -157,3 +173,5 @@ private:
 
 } // namespace ib
 } // namespace bbts
+
+

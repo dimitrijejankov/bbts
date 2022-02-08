@@ -426,7 +426,7 @@ int bbts_connect_context(
       continue;
 
     bool success_exch =
-      (i < rank)
+      (i >= rank)
       ? bbts_server_exch_dest_and_connect(ctx, i,         ib_port, port, rem_dests[i])
       : bbts_client_exch_dest_and_connect(ctx, i, ips[i], ib_port, port, rem_dests[i]);
     if(!success_exch){
@@ -437,10 +437,12 @@ int bbts_connect_context(
   // PRINT DEST INFO HERE
   for(int i = 0; i != ctx->num_qp; ++i) {
     if(i == rank) {
-      continue;
+      printf("local LID: 0x%04x\n",
+             ctx->portinfo.lid);
+    } else {
+      printf("remote address:  LID 0x%04x, QPN 0x%06x, PSN 0x%06x\n",
+             rem_dests[i].lid, rem_dests[i].qpn, rem_dests[i].psn);
     }
-    printf("remote address:  LID 0x%04x, QPN 0x%06x, PSN 0x%06x\n",
-           rem_dests[i].lid, rem_dests[i].qpn, rem_dests[i].psn);
   }
 
   return 0;
@@ -527,7 +529,7 @@ std::future<bool> connection_t::send_bytes(int dest_rank, tag_t send_tag, bytes_
   }
   std::lock_guard<std::mutex> lk(send_m);
   send_init_queue.push_back({
-    tag_rank_t(send_tag, dest_rank),
+    tag_rank_t{send_tag, dest_rank},
     std::unique_ptr<send_item_t>(new send_item_t(this, bytes))
   });
   return send_init_queue.back().second->get_future();
@@ -610,179 +612,141 @@ void connection_t::post_close(int dest_rank, tag_t tag){
   });
 }
 
-void connection_t::poll(){
-  while(!destruct){}
+int connection_t::get_recv_rank(ibv_wc const& wc)
+{
+  for(int i = 0; i != opens.size(); ++i) {
+    if(i == rank)
+      continue;
+    if(queue_pairs[i]->qp_num == wc.qp_num) {
+      return i;
+    }
+  }
+  throw std::runtime_error("could not get rank from work completion");
+}
 
-// TODO
-//  ibv_wc work_completion;
-//  while(!destruct) {
-//    // It's not important that the thread catches the destruct exactly.
-//    for(int i = 0; i != 1000000; ++i) {
-//      // Empty the initialize queues
-//      {
-//        std::lock_guard<std::mutex> lk(send_m);
-//        for(auto && item: send_init_queue) {
-//          // does an rdma write already have to happen?
-//          auto iter = pending_sends.find(item.first);
-//          if(iter == pending_sends.end()) {
-//            // no? send an open send so you can get the remote info
-//            this->post_open_send(item.first, item.second->bytes.size);
-//            send_items.insert(std::move(item));
-//          } else {
-//            // yes? the remote info is already available, so do a remote write
-//            bbts_message_t& msg = iter->second;
-//            send_item_t& send_item = *(item.second);
-//            send_item.send(this, msg.tag, msg.addr, msg.key);
-//            pending_sends.erase(iter);
-//            // still add it to send items so it can inform the peer when a
-//            // write has happened
-//            send_items.insert(std::move(item));
-//          }
-//        }
-//        send_init_queue.resize(0);
-//      }
-//
-//      {
-//        std::lock_guard<std::mutex> lk(recv_m);
-//        for(auto && item: recv_init_queue) {
-//          auto iter = recv_items.find(item.first);
-//          if(iter == recv_items.end()) {
-//            recv_items.insert(std::move(item));
-//          } else {
-//            // There are currently two recv items, but since
-//            // send_bytes and recv_bytes are only called once for each tag,
-//            // this means that the only relevant promise is the one from
-//            // the recv_bytes call in item--the one in recv_items is because
-//            // an OpenRecv command has already been sent.
-//
-//            // If the bytes are alredy set,
-//            //   (1) set the promsie and
-//            //   (2) remove the entry in recv_items.
-//            // Otherwise the bytes are not set,
-//            //   move the relevant promise into recv_items
-//            if(iter->second->is_set) {
-//              item.second->pr.set_value(iter->second->bytes);
-//              recv_items.erase(iter);
-//            } else {
-//              iter->second->pr = std::move(item.second->pr);
-//            }
-//          }
-//        }
-//        recv_init_queue.resize(0);
-//      }
-//
-//      // Take something off of the message queue if open
-//      if(open && !send_message_queue.empty()) {
-//        *msg_send = send_message_queue.front();
-//        send_message_queue.pop();
-//        bbts_post_send(
-//          queue_pair, 0,
-//          (void*)msg_send, sizeof(bbts_message_t), msgs_mr->lkey,
-//          msg_remote_addr, msg_remote_key);
-//        open = false;
-//      }
-//
-//      // poll for any events
-//      int ne = ibv_poll_cq(completion_queue, 1, &work_completion);
-//      if(!ne) {
-//        continue;
-//      }
-//      if(work_completion.status) {
-//        std::cout << "WORK COMPLETION STATUS " << work_completion.status << std::endl;
-//        throw std::runtime_error("work completion error");
-//      }
-//
-//      bool is_send = work_completion.opcode == 0;
-//      bool is_rdma_write = work_completion.opcode == 1;
-//      bool is_message = work_completion.wr_id == 0;
-//      if(!is_message) {
-//        if(!is_rdma_write) {
-//          throw std::runtime_error("shouldn't happen");
-//        }
-//
-//        // an rdma write occured
-//        tag_t tag = work_completion.wr_id;
-//        post_close(tag); // tell the peer we are done writing
-//
-//        auto iter = send_items.find(tag);
-//        if(iter == send_items.end()) {
-//          throw std::runtime_error("this send item does not exist");
-//        }
-//        send_item_t& item = *(iter->second);
-//        item.pr.set_value(true);
-//        send_items.erase(iter);
-//      //} else if(!is_send && !is_message) {
-//      //  throw std::runtime_error("how can you recv an rdma write?");
-//      } else if(is_send && is_message) {
-//        // a send item is completed and the message is available again
-//        open = true;
-//      } else if(!is_send && is_message) {
-//        // a message has been recvd
-//        // so post a recv back and handle the message
-//
-//        // copy the message here
-//        bbts_message_t msg = *msg_recv;
-//
-//        bbts_post_recv(
-//          queue_pair, 0,
-//          (void*)msg_recv, sizeof(bbts_message_t),
-//          msgs_mr->lkey, msgs_mr->rkey);
-//
-//        // now handle the message
-//        if(msg.type == bbts_message_t::message_type::open_send) {
-//          // send an open recv command. If the recv_item_t doesn't exist, create one.
-//          auto iter = recv_items.find(msg.tag);
-//          if(iter == recv_items.end()) {
-//            iter = recv_items.insert({
-//              msg.tag,
-//              std::unique_ptr<recv_item_t>(new recv_item_t(false))
-//            }).first;
-//          }
-//          // allocate and register memory
-//          recv_item_t& item = *(iter->second);
-//          item.init(this, msg.size);
-//
-//          post_open_recv(
-//            msg.tag,
-//            (uint64_t)item.bytes.data,
-//            item.bytes.size,
-//            item.bytes_mr->rkey);
-//        } else if(msg.type == bbts_message_t::message_type::open_recv) {
-//          // Do an rdma write if there is a send request available.
-//          // Otherwise, save the message for when send_bytes is called.
-//          auto iter = send_items.find(msg.tag);
-//          if(iter == send_items.end()) {
-//            pending_sends.insert({
-//              msg.tag,
-//              msg
-//            });
-//          } else {
-//            send_item_t& item = *(iter->second);
-//            item.send(this, msg.tag, msg.addr, msg.key);
-//          }
-//        } else if(msg.type == bbts_message_t::message_type::close_send) {
-//          // the recv item knows it has been written to so set the future
-//          // and delete it UNLESS the promise is invalid
-//          auto iter = recv_items.find(msg.tag);
-//          if(iter == recv_items.end()) {
-//            throw std::runtime_error("invalid tag in close message");
-//          }
-//          recv_item_t& item = *(iter->second);
-//          if(item.valid_promise) {
-//            if(item.is_set) {
-//              throw std::runtime_error("invalid promise state");
-//            }
-//            item.pr.set_value(item.bytes);
-//            recv_items.erase(iter);
-//          } else {
-//            item.is_set = true;
-//          }
-//        } else {
-//          throw std::runtime_error("invalid message type");
-//        }
-//      }
-//    }
-//  }
+void connection_t::handle_message(int recv_rank, bbts_message_t const& msg) {
+
+}
+
+void connection_t::poll(){
+  ibv_wc work_completion;
+  while(!destruct){
+    // It's not important that the thread catches the destruct exactly.
+    for(int i = 0; i != 1000000; ++i) {
+      // 1. empty send_init_queue
+      // 2. empty recv_init_queue
+      // 3. attend to message queues
+      // 4. receive a work request
+
+      // 1. empty send_init_queue
+      {
+        std::lock_guard<std::mutex> lk(send_m);
+        for(auto && item: send_init_queue) {
+          // does an rdma write already have to happen?
+          auto iter = pending_sends.find(item.first);
+          if(iter == pending_sends.end()) {
+            // no? send an open send so you can get the remote info
+            this->post_open_send(item.first.rank, item.first.tag, item.second->bytes.size);
+            send_items.insert(std::move(item));
+          } else {
+            // yes? the remote info is already available, so do a remote write
+            bbts_message_t& msg = iter->second;
+            send_item_t& send_item = *(item.second);
+            send_item.send(this, msg.tag, msg.rank, msg.addr, msg.key);
+            pending_sends.erase(iter);
+            // still add it to send items so it can inform the peer when a
+            // write has happened
+            send_items.insert(std::move(item));
+          }
+        }
+        send_init_queue.resize(0);
+      }
+
+      // 2. empty recv_init_queue
+      {
+        std::lock_guard<std::mutex> lk(recv_m);
+        for(auto && item: recv_init_queue) {
+          auto iter = recv_items.find(item.first);
+          if(iter == recv_items.end()) {
+            recv_items.insert(std::move(item));
+          } else {
+            // There are currently two recv items, but since
+            // send_bytes and recv_bytes are only called once for each tag,
+            // this means that the only relevant promise is the one from
+            // the recv_bytes call in item--the one in recv_items is because
+            // an OpenRecv command has already been sent.
+
+            // If the bytes are alredy set,
+            //   (1) set the promsie and
+            //   (2) remove the entry in recv_items.
+            // Otherwise the bytes are not set,
+            //   move the relevant promise into recv_items
+            if(iter->second->is_set) {
+              item.second->pr.set_value(iter->second->bytes);
+              recv_items.erase(iter);
+            } else {
+              iter->second->pr = std::move(item.second->pr);
+            }
+          }
+        }
+        recv_init_queue.resize(0);
+      }
+
+      // 3. actually send out messages
+      for(int i = 0; i != opens.size(); ++i) {
+        if(i == rank) {
+          // there should never be anything here
+          continue;
+        }
+        if(opens[i] && !send_message_queue[i].empty()) {
+          msgs_send[i] = send_message_queue[i].front();
+          send_message_queue[i].pop();
+          bbts_post_send(
+            queue_pairs[i], 0,
+            (void*)(&msgs_send[i]), sizeof(bbts_message_t), msgs_mr->lkey,
+            msgs_remote_addr[i], msgs_remote_key[i]);
+          opens[i] = false;
+        }
+      }
+
+      // 4. is there anything in the receive queue? If so, handle it
+      int ne = ibv_poll_cq(completion_queue, 1, &work_completion);
+      if(!ne) {
+        continue;
+      }
+      if(work_completion.status) {
+        throw std::runtime_error("work completion error");
+      }
+      bool is_send = work_completion.opcode == 0;
+      bool is_rdma_write = work_completion.opcode == 1;
+      bool is_message = work_completion.wr_id == 0;
+      int wc_rank = get_recv_rank(work_completion);
+      if(is_rdma_write && !is_message) {
+        // an rdma write occured, inform destianation we are done
+        tag_t tag = work_completion.wr_id;
+        post_close(wc_rank, tag);
+      } else if(is_send && is_message) {
+        // a send item is completed and the message is available again
+        opens[wc_rank] = true;
+      } else if(!is_send && is_message) {
+        // a message has been recvd
+        // so post a recv back and handle the message
+
+        // copy the message here so msg_recv can be used again
+        // in the post recv
+        bbts_message_t msg = msgs_recv[wc_rank];
+
+        bbts_post_recv(
+          shared_recv_queue, 0,
+          (void*)(&msgs_recv[wc_rank]), sizeof(bbts_message_t),
+          msgs_mr->lkey, msgs_mr->rkey);
+
+        this->handle_message(wc_rank, msg);
+      } else {
+        throw std::runtime_error("unhandled item from recv queue");
+      }
+    }
+  }
 }
 
 } // namespace ib
