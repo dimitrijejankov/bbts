@@ -142,12 +142,19 @@ private:
   std::thread poll_thread;
   std::atomic<bool> destruct;
 
+  // The polling queue will take from this and post a send message to the
+  // appropriate queue.
   std::vector<std::queue<bbts_message_t> > send_message_queue;
+  // Whenever an open[rank] flag is set, an item from send_message_queue[rank]
+  // can be posted.
   std::vector<char> opens;
 
+  // Things not yet moved to the send_message_queue.
   std::vector<std::pair<tag_rank_t, send_item_ptr_t> > send_init_queue;
   std::vector<std::pair<tag_t,      recv_item_ptr_t> > recv_init_queue;
 
+  // Locations to write to but send bytes hasn't been called, so the
+  // source data is not available.
   std::map<tag_rank_t, bbts_message_t, tag_rank_less_t> pending_sends;
 
   std::map<tag_rank_t, send_item_ptr_t, tag_rank_less_t> send_items;

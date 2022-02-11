@@ -625,7 +625,57 @@ int connection_t::get_recv_rank(ibv_wc const& wc)
 }
 
 void connection_t::handle_message(int recv_rank, bbts_message_t const& msg) {
+  if(msg.type == bbts_message_t::message_type::open_send) {
+    // send an open recv command. If the recv_item_t doesn't exist, create one.
+    auto iter = recv_items.find(msg.tag);
+    if(iter == recv_items.end()) {
+      iter = recv_items.insert({
+        msg.tag,
+        std::unique_ptr<recv_item_t>(new recv_item_t(false))
+      }).first;
+    }
+    // allocate and register memory
+    recv_item_t& item = *(iter->second);
+    item.init(this, msg.size);
 
+    this->post_open_recv(
+      msg.rank, msg.tag,
+      (uint64_t)item.bytes.data,
+      item.bytes.size,
+      item.bytes_mr->rkey);
+  } else if(msg.type == bbts_message_t::message_type::open_recv) {
+    // Do an rdma write if there is a send request available.
+    // Otherwise, save the message for when send_bytes is called.
+    auto iter = send_items.find({msg.tag, msg.rank});
+    if(iter == send_items.end()) {
+      pending_sends.insert({
+        {msg.tag, msg.rank},
+        msg
+      });
+    } else {
+      send_item_t& item = *(iter->second);
+      item.send(this, msg.tag, msg.rank, msg.addr, msg.key);
+    }
+  } else if(msg.type == bbts_message_t::message_type::close_send) {
+    // the recv item knows it has been written to so set the future
+    // on the recv_item delete it UNLESS the promise is invalid
+    auto iter = recv_items.find(msg.tag);
+    if(iter == recv_items.end()) {
+      throw std::runtime_error("invalid tag in close message");
+    }
+    recv_item_t& item = *(iter->second);
+    if(item.valid_promise) {
+      if(item.is_set) {
+        throw std::runtime_error("invalid promise state");
+      }
+      item.pr.set_value(item.bytes);
+      recv_items.erase(iter);
+    } else {
+      item.is_set = true;
+    }
+  } else {
+    throw std::runtime_error("invalid message type");
+  }
 }
 
 void connection_t::poll(){
@@ -728,7 +778,7 @@ void connection_t::poll(){
       } else if(is_send && is_message) {
         // a send item is completed and the message is available again
         opens[wc_rank] = true;
-      } else if(!is_send && is_message) {
+      } else if(!is_send && !is_rdma_write && is_message) {
         // a message has been recvd
         // so post a recv back and handle the message
 
