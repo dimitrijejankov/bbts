@@ -167,7 +167,8 @@ bbts_context_t* bbts_init_context(
     goto clean_pd;
   }
 
-  ctx->cq = ibv_create_cq(ctx->context, 2*num_qp, NULL, NULL, 0);
+  ctx->cq = ibv_create_cq(ctx->context, 1000, NULL, NULL, 0);
+  //ctx->cq = ibv_create_cq(ctx->context, 2*num_qp, NULL, NULL, 0);
   if (!ctx->cq) {
     goto clean_mr;
   }
@@ -175,7 +176,7 @@ bbts_context_t* bbts_init_context(
   {
 		ibv_srq_init_attr attr = {
 			.attr = {
-				.max_wr  = 2*num_qp,
+				.max_wr  = 1000, //2*num_qp,
 				.max_sge = 1
 			}
 		};
@@ -191,8 +192,8 @@ bbts_context_t* bbts_init_context(
       .recv_cq = ctx->cq,
       .srq     = ctx->srq,
       .cap     = {
-        .max_send_wr  = 1,
-        .max_recv_wr  = 1,
+        .max_send_wr  = 1000,
+        .max_recv_wr  = 1000,
         .max_send_sge = 1,
         .max_recv_sge = 1
       },
@@ -547,7 +548,9 @@ std::future<bytes_t> connection_t::recv_bytes(tag_t recv_tag){
   return recv_init_queue.back().second->get_future();
 }
 
-connection_t::send_item_t::send_item_t(connection_t *connection, bytes_t b){
+connection_t::send_item_t::send_item_t(connection_t *connection, bytes_t b):
+  bytes(b)
+{
   bytes_mr = ibv_reg_mr(
       connection->protection_domain,
       bytes.data, bytes.size,
@@ -638,23 +641,24 @@ void connection_t::handle_message(int recv_rank, bbts_message_t const& msg) {
     recv_item_t& item = *(iter->second);
     item.init(this, msg.size);
 
+    // sending a message back to the location that sent this message
     this->post_open_recv(
-      msg.rank, msg.tag,
+      recv_rank, msg.tag,
       (uint64_t)item.bytes.data,
       item.bytes.size,
       item.bytes_mr->rkey);
   } else if(msg.type == bbts_message_t::message_type::open_recv) {
     // Do an rdma write if there is a send request available.
     // Otherwise, save the message for when send_bytes is called.
-    auto iter = send_items.find({msg.tag, msg.rank});
+    auto iter = send_items.find({msg.tag, recv_rank});
     if(iter == send_items.end()) {
       pending_sends.insert({
-        {msg.tag, msg.rank},
+        {msg.tag, recv_rank},
         msg
       });
     } else {
       send_item_t& item = *(iter->second);
-      item.send(this, msg.tag, msg.rank, msg.addr, msg.key);
+      item.send(this, msg.tag, recv_rank, msg.addr, msg.key);
     }
   } else if(msg.type == bbts_message_t::message_type::close_send) {
     // the recv item knows it has been written to so set the future
@@ -768,17 +772,32 @@ void connection_t::poll(){
         throw std::runtime_error("work completion error");
       }
       bool is_send = work_completion.opcode == 0;
+      bool is_recv = work_completion.opcode == 128;
       bool is_rdma_write = work_completion.opcode == 1;
       bool is_message = work_completion.wr_id == 0;
       int wc_rank = get_recv_rank(work_completion);
       if(is_rdma_write && !is_message) {
-        // an rdma write occured, inform destianation we are done
+        // an rdma write occured, inform destination we are done
         tag_t tag = work_completion.wr_id;
         post_close(wc_rank, tag);
       } else if(is_send && is_message) {
         // a send item is completed and the message is available again
+
+        // But first, what is the message that is completed?
+        // If our send_close made it, we are done with the send item.
+        bbts_message_t const& msg = msgs_send[wc_rank];
+        if(msg.type == bbts_message_t::message_type::close_send) {
+          auto iter = send_items.find({msg.tag, wc_rank});
+          if(iter == send_items.end()) {
+            throw std::runtime_error("can't close send item, how can it not be here");
+          }
+          send_item_t& item = *(iter->second);
+          item.pr.set_value(true);
+          send_items.erase(iter);
+        }
+
         opens[wc_rank] = true;
-      } else if(!is_send && !is_rdma_write && is_message) {
+      } else if(is_recv && is_message) {
         // a message has been recvd
         // so post a recv back and handle the message
 
