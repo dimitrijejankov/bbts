@@ -125,7 +125,7 @@ void bbts_post_recv(
 
 bbts_context_t* bbts_init_context(
     std::string dev_name,
-    int rank,
+    int32_t rank,
     unsigned int num_qp,
     uint8_t ib_port = 1)
 {
@@ -405,7 +405,7 @@ bool bbts_server_exch_dest_and_connect(
 
 int bbts_connect_context(
     bbts_context_t *ctx,
-    int rank,
+    int32_t rank,
     std::vector<std::string> ips,
     uint8_t ib_port = 1, int port = 18515)
 {
@@ -451,7 +451,7 @@ int bbts_connect_context(
 
 connection_t::connection_t(
   std::string dev_name,
-  int rank,
+  int32_t rank,
   std::vector<std::string> ips):
     rank(rank), opens(ips.size()), send_message_queue(ips.size()),
     current_recv_msg(0)
@@ -524,7 +524,7 @@ connection_t::~connection_t() {
   ibv_close_device(this->context);
 }
 
-std::future<bool> connection_t::send_bytes(int dest_rank, tag_t send_tag, bytes_t bytes){
+std::future<bool> connection_t::send_bytes(int32_t dest_rank, tag_t send_tag, bytes_t bytes){
   if(dest_rank == rank) {
     throw std::invalid_argument("destination rank is same as current rank");
   }
@@ -539,7 +539,7 @@ std::future<bool> connection_t::send_bytes(int dest_rank, tag_t send_tag, bytes_
   return send_init_queue.back().second->get_future();
 }
 
-std::future<bytes_t> connection_t::recv_bytes(tag_t recv_tag){
+std::future<recv_bytes_t> connection_t::recv_bytes(tag_t recv_tag){
   if(recv_tag == 0) {
     throw std::invalid_argument("tag cannot be zero");
   }
@@ -564,7 +564,7 @@ connection_t::send_item_t::send_item_t(connection_t *connection, bytes_t b):
 }
 
 void connection_t::send_item_t::send(
-  connection_t *connection, tag_t tag, int dest_rank, uint64_t remote_addr, uint32_t remote_key)
+  connection_t *connection, tag_t tag, int32_t dest_rank, uint64_t remote_addr, uint32_t remote_key)
 {
   // TODO: what happens when size bigger than 2^31...
   // TODO: what wrid?
@@ -588,7 +588,7 @@ bytes_t connection_t::recv_item_t::init(connection_t *connection, uint64_t size)
   return bytes;
 }
 
-void connection_t::post_open_send(int dest_rank, tag_t tag, uint64_t size){
+void connection_t::post_open_send(int32_t dest_rank, tag_t tag, uint64_t size){
   send_message_queue[dest_rank].push({
     .type = bbts_message_t::message_type::open_send,
     .rank = dest_rank,
@@ -598,7 +598,7 @@ void connection_t::post_open_send(int dest_rank, tag_t tag, uint64_t size){
 }
 
 void connection_t::post_open_recv(
-  int dest_rank, tag_t tag, uint64_t addr, uint64_t size, uint32_t key)
+  int32_t dest_rank, tag_t tag, uint64_t addr, uint64_t size, uint32_t key)
 {
   send_message_queue[dest_rank].push({
     .type = bbts_message_t::message_type::open_recv,
@@ -610,7 +610,7 @@ void connection_t::post_open_recv(
   });
 }
 
-void connection_t::post_close(int dest_rank, tag_t tag){
+void connection_t::post_close(int32_t dest_rank, tag_t tag){
   send_message_queue[dest_rank].push({
     .type = bbts_message_t::message_type::close_send,
     .rank = dest_rank,
@@ -630,7 +630,7 @@ int connection_t::get_recv_rank(ibv_wc const& wc)
   throw std::runtime_error("could not get rank from work completion");
 }
 
-void connection_t::handle_message(int recv_rank, bbts_message_t const& msg) {
+void connection_t::handle_message(int32_t recv_rank, bbts_message_t const& msg) {
   if(msg.type == bbts_message_t::message_type::open_send) {
     // send an open recv command. If the recv_item_t doesn't exist, create one.
     auto iter = recv_items.find(msg.tag);
@@ -778,7 +778,7 @@ void connection_t::poll(){
       bool is_recv = work_completion.opcode == 128;
       bool is_rdma_write = work_completion.opcode == 1;
       bool is_message = work_completion.wr_id == 0;
-      int wc_rank = get_recv_rank(work_completion);
+      int32_t wc_rank = get_recv_rank(work_completion);
       if(is_rdma_write && !is_message) {
         // an rdma write occured, inform destination we are done
         tag_t tag = work_completion.wr_id;

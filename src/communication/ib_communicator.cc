@@ -2,19 +2,50 @@
 
 namespace bbts {
 
-ib_communicator_t::ib_communicator_t(const node_config_ptr_t &_cfg) {
-}
+using ib::bytes_t;
+using ib::to_bytes_t;
+using ib::recv_bytes_t;
+
+enum com_tag {
+  response_string // TODO: when adding tags, leave space after response string
+};
+
+ib_communicator_t::ib_communicator_t(
+  node_config_ptr_t const& _cfg,
+  std::string const& dev_name,
+  int rank,
+  std::vector<std::string> const& ips): connection(dev_name, rank, ips)
+{}
 
 ib_communicator_t::~ib_communicator_t() {}
 
 // send a response string
 bool ib_communicator_t::send_response_string(const std::string &val) {
-  return true;
+  if(get_rank() == 0) {
+    throw std::runtime_error("node 0 should not send response string");
+  }
+
+  auto fut = connection.send_bytes(
+    0,
+    com_tag::response_string + get_rank(),
+    to_bytes_t(val.c_str(), val.size()));
+
+  return fut.get();
 }
 
 // expect a response string
-std::tuple<bool, std::string> ib_communicator_t::expect_response_string(node_id_t _node) {
-  return {true, ""};
+std::tuple<bool, std::string> ib_communicator_t::expect_response_string(int32_t _node) {
+  if(get_rank() != 0) {
+    throw std::runtime_error("only node 0 should recv response string");
+  }
+  if(_node == 0) {
+    throw std::runtime_error("cannot expect message from self");
+  }
+
+  recv_bytes_t bytes = connection.recv_bytes(com_tag::response_string + _node).get();
+
+  std::string ret(bytes.ptr.get(), bytes.size);
+  return {true, ret};
 }
 
 bool ib_communicator_t::recv_sync(void *_bytes, size_t num_bytes, node_id_t _node, int32_t _tag) {
@@ -94,12 +125,12 @@ bool ib_communicator_t::expect_bytes(size_t num_bytes, std::vector<char> &out) {
 
 // return the rank
 int32_t ib_communicator_t::get_rank() const {
-  return 0;
+  return connection.get_rank();
 }
 
 // return the number of nodes
 int32_t ib_communicator_t::get_num_nodes() const {
-  return 0;
+  return connection.get_num_nodes();
 }
 
 }

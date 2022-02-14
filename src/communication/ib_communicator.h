@@ -8,10 +8,16 @@
 #include "../commands/command.h"
 #include "../server/coordinator_ops.h"
 
+#include "infiniband/connection.h"
+
 namespace bbts {
 
 struct ib_communicator_t {
-  explicit ib_communicator_t(const node_config_ptr_t& _cfg);
+  explicit ib_communicator_t(
+    node_config_ptr_t const& _cfg,
+    std::string const& dev_name,
+    int rank,
+    std::vector<std::string> const& ips);
 
   ~ib_communicator_t();
 
@@ -31,19 +37,14 @@ struct ib_communicator_t {
   //bool wait_async(async_request_t &_request);
 
   // notify a node that tensors were created
-  bool tensors_created_notification(node_id_t out_node, const std::vector<bbts::tid_t> &tensor);
+  bool tensors_created_notification(
+    node_id_t out_node, const std::vector<bbts::tid_t> &tensor);
 
   // wait to receive a notification
   std::tuple<node_id_t, std::vector<bbts::tid_t>> receive_tensor_created_notification();
 
   // shutdown the notification handler
   bool shutdown_notification_handler();
-
-  // send async
-  //async_request_t send_async(const void *_bytes, size_t num_bytes, node_id_t _node, com_tags _tag);
-
-  // waits for a request to be available from a particular node
-  //sync_request_t expect_request_sync(node_id_t _node, com_tags _tag);
 
   // recieves the request that we got from expect_request_sync
   bool receive_request_sync(node_id_t node, int32_t tag, void *bytes, size_t num_bytes);
@@ -73,15 +74,16 @@ struct ib_communicator_t {
   bool expect_coord_cmds(size_t num_cmds, std::vector<command_ptr_t> &out);
 
   // sync the resource aquisition
-  bool sync_resource_aquisition(command_id_t cmd, const bbts::command_t::node_list_t &nodes, bool my_val);
+  bool sync_resource_aquisition(
+    command_id_t cmd,
+    const bbts::command_t::node_list_t &nodes,
+    bool my_val);
 
   // sync the resource aquisition between two nodes
   bool sync_resource_aquisition_p2p(command_id_t cmd, node_id_t &node, bool my_val);
 
   // recieved the tensors size
   std::tuple<uint64_t, bool> recv_tensor_size(node_id_t node, int32_t tag);
-
-  //async_request_t send_tensor_size_async(node_id_t _node, com_tags _tag, uint64_t val);
 
   // send the tensor size
   bool send_tensor_size(node_id_t node, int32_t tag, uint64_t val);
@@ -92,10 +94,12 @@ struct ib_communicator_t {
   void barrier();
 
   // return the rank
-  [[nodiscard]] int32_t get_rank() const;
+  int32_t get_rank() const;
 
   // return the number of nodes
-  [[nodiscard]] int32_t get_num_nodes() const;
+  int32_t get_num_nodes() const;
+private:
+  ib::connection_t connection;
 };
 
 } // bbts

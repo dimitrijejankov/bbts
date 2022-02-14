@@ -19,13 +19,30 @@ struct bytes_t {
   uint64_t size;
 };
 
+struct recv_bytes_t {
+  recv_bytes_t(bytes_t b):
+    ptr((char*)b.data), size(b.size)
+  {}
+
+  std::unique_ptr<char[]> ptr;
+  uint64_t size;
+};
+
+template <typename T>
+bytes_t to_bytes_t(T* ptr, size_t num_t_elems) {
+  return {
+    .data = (void*)ptr,
+    .size = sizeof(T)*num_t_elems
+  };
+}
+
 using tag_t = uint64_t;
 using ibv_qp_ptr = decltype(ibv_create_qp(NULL, NULL));
 
 struct tag_rank_t {
   //tag_rank_t(tag_t tag, int rank): tag(tag), rank(rank) {}
   tag_t tag;
-  int rank;
+  int32_t rank;
 };
 
 struct tag_rank_less_t {
@@ -48,7 +65,7 @@ struct tag_rank_less_t {
 struct bbts_message_t {
   enum message_type { open_send, open_recv, close_send };
   message_type type;
-  int rank;
+  int32_t rank;
   tag_t tag;
   uint64_t addr;
   uint64_t size;
@@ -58,21 +75,27 @@ struct bbts_message_t {
 struct connection_t {
   connection_t(
     std::string dev_name,
-    int rank,
+    int32_t rank,
     std::vector<std::string> ips);
 
   ~connection_t();
 
   // ASSUMPTION: send_bytes and recv_bytes will be called at
   // most once for each tag value.
+  // LOOSER ASSUMPTION: a tag can be used again when both sides
+  //                    have completed the communication
 
   // Send these bytes. The memory can be released once the
   // returned future is ready. If the future returns a false,
   // the data was not recieved by the peer connection_t object.
   // This does not guarantee that recieve_bytes was called
   // by the peer connection, though.
-  std::future<bool> send_bytes(int dest_rank, tag_t send_tag, bytes_t bytes);
-  std::future<bytes_t> recv_bytes(tag_t recv_tag);
+  std::future<bool> send_bytes(int32_t dest_rank, tag_t send_tag, bytes_t bytes);
+  std::future<recv_bytes_t> recv_bytes(tag_t recv_tag);
+
+  int32_t get_rank() const { return rank; }
+  int32_t get_num_nodes() const { return opens.size(); }
+
 private:
   struct send_item_t {
     send_item_t(connection_t *connection, bytes_t b);
@@ -85,7 +108,7 @@ private:
 
     void send(
         connection_t *connection,
-        tag_t tag, int dest_rank,
+        tag_t tag, int32_t dest_rank,
         uint64_t remote_addr, uint32_t remote_key);
 
     std::future<bool> get_future(){ return pr.get_future(); }
@@ -106,7 +129,7 @@ private:
 
     bytes_t init(connection_t *connection, uint64_t size);
 
-    std::future<bytes_t> get_future(){
+    std::future<recv_bytes_t> get_future(){
       if(valid_promise) {
         return pr.get_future();
       } else {
@@ -118,27 +141,27 @@ private:
     bool is_set;
     bytes_t bytes;
     ibv_mr *bytes_mr;
-    std::promise<bytes_t> pr;
+    std::promise<recv_bytes_t> pr;
   };
 
   using send_item_ptr_t = std::unique_ptr<send_item_t>;
   using recv_item_ptr_t = std::unique_ptr<recv_item_t>;
 
 private:
-  void post_open_send(int dest_rank, tag_t tag, uint64_t size);
+  void post_open_send(int32_t dest_rank, tag_t tag, uint64_t size);
   void post_open_recv(
-    int dest_rank, tag_t tag,
+    int32_t dest_rank, tag_t tag,
     uint64_t addr, uint64_t size, uint32_t key);
-  void post_close(int dest_rank, tag_t tag);
+  void post_close(int32_t dest_rank, tag_t tag);
   void poll();
 
   // find out what queue pair was responsible for this work request
-  int get_recv_rank(ibv_wc const& wc);
+  int32_t get_recv_rank(ibv_wc const& wc);
 
-  void handle_message(int recv_rank, bbts_message_t const& msg);
+  void handle_message(int32_t recv_rank, bbts_message_t const& msg);
 
 private:
-  int rank;
+  int32_t rank;
   std::thread poll_thread;
   std::atomic<bool> destruct;
 

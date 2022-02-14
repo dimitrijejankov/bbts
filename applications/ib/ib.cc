@@ -52,7 +52,7 @@ int main(int argc, char **argv) {
 
   auto start = std::chrono::high_resolution_clock::now();
   std::vector<std::future<bool>> sends;
-  std::vector<std::future<bytes_t>> recvs;
+  std::vector<std::future<recv_bytes_t>> recvs;
   if(rank == 0) {
     // send tag [100, 100+num)
     // recv tag [100+num,100+2*num)
@@ -78,7 +78,11 @@ int main(int argc, char **argv) {
   }
 
   for(auto& fut: recvs) {
-    bs.push_back(fut.get());
+    recv_bytes_t r = fut.get();
+    bs.push_back({
+      .data = r.ptr.release(),
+      .size = r.size
+    });
   }
   for(auto& fut: sends) {
     fut.get();
