@@ -105,7 +105,6 @@ void bbts_post_recv(
   uint32_t expected_remote_key)
 {
   // expected_remote_key is only for debugging purposes
-  //std::cout << "POSTING RECV[" << wr_id << "]: " << expected_remote_key << std::endl;
 
   ibv_sge list = {
     .addr  = (uint64_t)local_addr,
@@ -454,7 +453,8 @@ connection_t::connection_t(
   std::string dev_name,
   int rank,
   std::vector<std::string> ips):
-    rank(rank), opens(ips.size()), send_message_queue(ips.size())
+    rank(rank), opens(ips.size()), send_message_queue(ips.size()),
+    current_recv_msg(0)
 {
   int num_qp = ips.size();
 
@@ -469,12 +469,15 @@ connection_t::connection_t(
 
   // post a receive before setting up a connection so that
   // when the connection is started, the receiving can occur
-  for(int i = 0; i != num_qp; ++i) {
-    if(i == rank)
-      continue;
+  int num_recvs = num_qp; // THE NUMBER OF RECVS == THE NUMBER OF RECV MESSAGES.
+                          // THE which_recv INDEX HAS NOTHING TO DO WITH RANK, EVEN
+                          // THOUGH IN THIS CASE
+                          //   num_qp == NUMBER OF RANKS == NUMBER OF RECV MESSAGES
+  // The number of recvs needs not be the number of queue pairs.
+  for(int which_recv = 0; which_recv != num_recvs; ++which_recv) {
     bbts_post_recv(
       context->srq, 0,
-      (void*)(context->msgs + i),
+      (void*)(context->msgs + which_recv),
       sizeof(bbts_message_t),
       context->msgs_mr->lkey,
       context->msgs_mr->rkey);
@@ -803,12 +806,17 @@ void connection_t::poll(){
 
         // copy the message here so msg_recv can be used again
         // in the post recv
-        bbts_message_t msg = msgs_recv[wc_rank];
+        bbts_message_t msg = msgs_recv[current_recv_msg];
 
         bbts_post_recv(
           shared_recv_queue, 0,
-          (void*)(&msgs_recv[wc_rank]), sizeof(bbts_message_t),
+          (void*)(&msgs_recv[current_recv_msg]), sizeof(bbts_message_t),
           msgs_mr->lkey, msgs_mr->rkey);
+
+        current_recv_msg++;
+        if(current_recv_msg == opens.size()) {
+          current_recv_msg = 0;
+        }
 
         this->handle_message(wc_rank, msg);
       } else {

@@ -175,6 +175,19 @@ private:
   ibv_pd *protection_domain;
   ibv_srq *shared_recv_queue;
   std::vector<ibv_qp_ptr> queue_pairs;
+
+  // For each msgs_recv, there should be a recv open. current_recv_msg refers to the
+  // msgs_recv index that has just been written to...
+  // For exmaple:
+  //   connection starts of mainting 1,...,n recv msgs.
+  //   the completion queue gets some recv items
+  //   the first recv item should be written at msgs_recv[current_recv_msg].
+  //   after processing that recv item and reposting msgs_recv[current_recv_msg], increment current_recv_msg.
+  //   the next recv item processed from the completion queue should be written at msgs_recv[current_recv_msg].
+  //   after processing that recv item and reposting it, increment current_recv_msg
+  //   and so on. except for the case where increment current_recv_msg will lead to n+1. In that case, it should
+  //   go back to zero.
+  int current_recv_msg;
 };
 
 

@@ -3,6 +3,10 @@
 #include <iostream>
 #include <fstream>
 
+// std::this_thread::sleep_for(std::chrono::seconds(1));
+#include <chrono>
+#include <thread>
+
 using namespace bbts::ib;
 
 int main(int argc, char **argv) {
@@ -27,20 +31,24 @@ int main(int argc, char **argv) {
       ips.push_back(l);
     }
     for(auto i: ips){
-      std::cout << i << std::endl;
+      std::cout << "IP: " << i << std::endl;
     }
   }
 
+  size_t size = 10; // 104857600;
+  size_t num = 100;
+
   std::vector<bytes_t> bs;
-  size_t size = 100000; //104857600;
-  size_t num = 12345;
-  for(int i = 0; i != num; ++i) {
-    float* data = new float[size];
-    std::fill(data, data + size, 1.0*i);
-    bs.push_back({ .data = (void*)data, .size = size});
+  if(rank != 2) {
+    for(int i = 0; i != num; ++i) {
+      float* data = new float[size];
+      std::fill(data, data + size, 1.0*i);
+      bs.push_back({ .data = (void*)data, .size = size});
+    }
   }
 
   connection_t c(argv[2], rank, ips);
+  std::cout << " CONNECTED " << std::endl;
 
   auto start = std::chrono::high_resolution_clock::now();
   std::vector<std::future<bool>> sends;
@@ -50,6 +58,7 @@ int main(int argc, char **argv) {
     // recv tag [100+num,100+2*num)
     for(int i = 0; i != num; ++i) {
       sends.push_back(c.send_bytes(1, 100 + i, bs[i]));
+      sends.push_back(c.send_bytes(2, 100 + i, bs[i]));
       recvs.push_back(c.recv_bytes(100 + num + i));
     }
   } else if(rank == 1) {
@@ -57,7 +66,14 @@ int main(int argc, char **argv) {
     // recv tag [100+num,100+2*num)
     for(int i = 0; i != num; ++i) {
       sends.push_back(c.send_bytes(0, 100 +num + i, bs[i]));
+      sends.push_back(c.send_bytes(2, 100 +num + i, bs[i]));
       recvs.push_back(c.recv_bytes(100 + i));
+    }
+  } else if(rank == 2) {
+    // everything sends here
+    for(int i = 0; i != num; ++i) {
+      recvs.push_back(c.recv_bytes(100 + i));
+      recvs.push_back(c.recv_bytes(100 + num + i));
     }
   }
 
@@ -67,16 +83,16 @@ int main(int argc, char **argv) {
   for(auto& fut: sends) {
     fut.get();
   }
-  auto stop = std::chrono::high_resolution_clock::now();
-  size_t total = size*num*32*2;
-  auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
-  double gbs = (1.0e6*total)/(1.0e9*duration.count());
-  std::cout << std::endl << gbs << " GBs" << std::endl;
+  //auto stop = std::chrono::high_resolution_clock::now();
+  //size_t total = size*num*32*2;
+  //auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+  //double gbs = (1.0e6*total)/(1.0e9*duration.count());
+  //std::cout << std::endl << gbs << " GBs" << std::endl;
 
   for(bytes_t b: bs) {
     float* data = (float*)b.data;
-    //std::cout << " @ " << data[0];
+    std::cout << " @ " << data[0];
     delete[] data;
   }
-  //std::cout << std::endl;
+  std::cout << std::endl;
 }
