@@ -598,8 +598,8 @@ void connection_t::send_item_t::send(
 }
 
 std::future<recv_bytes_t> connection_t::recv_item_t::get_future_bytes() {
-  if(own) {
-    throw std::runtime_error("cannot call get_future_bytes when recv owns bytes");
+  if(!own) {
+    throw std::runtime_error("cannot call get_future_bytes when recv does not own bytes");
   }
   if(!valid_promise) {
     throw std::runtime_error("invalid promise in recv item");
@@ -608,8 +608,8 @@ std::future<recv_bytes_t> connection_t::recv_item_t::get_future_bytes() {
 }
 
 std::future<bool> connection_t::recv_item_t::get_future_complete() {
-  if(!own) {
-    throw std::runtime_error("cannot call get_future_complete when recv does not own bytes");
+  if(own) {
+    throw std::runtime_error("cannot call get_future_complete when recv owns bytes");
   }
   if(!valid_promise) {
     throw std::runtime_error("invalid promise in recv item");
@@ -618,7 +618,7 @@ std::future<bool> connection_t::recv_item_t::get_future_complete() {
 }
 
 void connection_t::recv_item_t::init(connection_t *connection, uint64_t size){
-  if(!own) {
+  if(own) {
     bytes.data = (void*)(new char[size]);
     bytes.size = size;
   }
@@ -749,9 +749,9 @@ void connection_t::handle_message(int32_t recv_rank, bbts_message_t const& msg) 
         throw std::runtime_error("invalid promise state");
       }
       if(item.own) {
-        item.pr_complete.set_value(true);
-      } else {
         item.pr_bytes.set_value(item.bytes);
+      } else {
+        item.pr_complete.set_value(true);
       }
       recv_items.erase(iter);
     } else {
@@ -815,13 +815,15 @@ void connection_t::poll(){
         for(auto && item: recv_init_queue) {
           tag_t tag = item.first;
 
+          // We consider the 4 cases where the
+          //   corresponding open send may or may not have been provided and
+          //   a corresponding recv was or was not already posted
           auto iter_recv = recv_items.find(tag);
           auto iter_pend = pending_recvs.find(tag);
-          // Case 1: should never occur
           if(iter_recv != recv_items.end() && iter_pend != pending_recvs.end()) {
+            // This should never occur
             throw std::runtime_error("don't mix and match send and recv with wait variant");
-          }
-          if(iter_recv != recv_items.end()) {
+          } else if(iter_recv != recv_items.end()) {
             // There are currently two recv items, but since (assumption)
             // send_bytes and recv_bytes are only available once for each tag,
             // this means that the only relevant promise is the one from
@@ -843,8 +845,7 @@ void connection_t::poll(){
             } else {
               iter_recv->second->pr_bytes = std::move(item.second->pr_bytes);
             }
-          }
-          if(iter_pend != pending_recvs.end()) {
+          } else if(iter_pend != pending_recvs.end()) {
             // An open recv command hasn't been sent but we have the available information to
             // send it.
             // This also means that item must own it's bytes and have been created from
@@ -876,11 +877,13 @@ void connection_t::poll(){
                 r.bytes_mr->rkey);
 
               // now wait for the write to be finished in here
-              recv_items.insert({tag, std::move(item.second)});
+              recv_items.insert(std::move(item));
             }
 
             // pending recvs has been handled
             pending_recvs.erase(iter_pend);
+          } else {
+            recv_items.insert(std::move(item));
           }
         }
         recv_init_queue.resize(0);
