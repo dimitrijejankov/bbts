@@ -524,7 +524,9 @@ connection_t::~connection_t() {
   ibv_close_device(this->context);
 }
 
-std::future<bool> connection_t::send_bytes(int32_t dest_rank, tag_t send_tag, bytes_t bytes){
+std::future<bool> connection_t::send_bytes_(
+  int32_t dest_rank, tag_t send_tag, bytes_t bytes, bool imm)
+{
   if(dest_rank == rank) {
     throw std::invalid_argument("destination rank is same as current rank");
   }
@@ -534,9 +536,14 @@ std::future<bool> connection_t::send_bytes(int32_t dest_rank, tag_t send_tag, by
   std::lock_guard<std::mutex> lk(send_m);
   send_init_queue.push_back({
     tag_rank_t{send_tag, dest_rank},
-    std::unique_ptr<send_item_t>(new send_item_t(this, bytes, true))
+    std::unique_ptr<send_item_t>(new send_item_t(this, bytes, imm))
   });
   return send_init_queue.back().second->get_future();
+}
+
+
+std::future<bool> connection_t::send_bytes(int32_t dest_rank, tag_t send_tag, bytes_t bytes){
+  return send_bytes_(dest_rank, send_tag, bytes, true);
 }
 
 std::future<recv_bytes_t> connection_t::recv_bytes(tag_t recv_tag){
@@ -548,7 +555,23 @@ std::future<recv_bytes_t> connection_t::recv_bytes(tag_t recv_tag){
     recv_tag,
     std::unique_ptr<recv_item_t>(new recv_item_t(true))
   });
-  return recv_init_queue.back().second->get_future();
+  return recv_init_queue.back().second->get_future_bytes();
+}
+
+std::future<bool> connection_t::send_bytes_wait(int32_t dest_rank, tag_t send_tag, bytes_t bytes){
+  return send_bytes_(dest_rank, send_tag, bytes, true);
+}
+
+std::future<bool> connection_t::recv_bytes_wait(tag_t recv_tag, bytes_t bytes) {
+  if(recv_tag == 0) {
+    throw std::invalid_argument("tag cannot be zero");
+  }
+  std::lock_guard<std::mutex> lk(recv_m);
+  recv_init_queue.push_back({
+    recv_tag,
+    std::unique_ptr<recv_item_t>(new recv_item_t(bytes))
+  });
+  return recv_init_queue.back().second->get_future_complete();
 }
 
 connection_t::send_item_t::send_item_t(connection_t *connection, bytes_t b, bool imm):
@@ -574,9 +597,31 @@ void connection_t::send_item_t::send(
     remote_addr, remote_key);
 }
 
-bytes_t connection_t::recv_item_t::init(connection_t *connection, uint64_t size){
-  bytes.data = (void*)(new char[size]);
-  bytes.size = size;
+std::future<recv_bytes_t> connection_t::recv_item_t::get_future_bytes() {
+  if(own) {
+    throw std::runtime_error("cannot call get_future_bytes when recv owns bytes");
+  }
+  if(!valid_promise) {
+    throw std::runtime_error("invalid promise in recv item");
+  }
+  return pr_bytes.get_future();
+}
+
+std::future<bool> connection_t::recv_item_t::get_future_complete() {
+  if(!own) {
+    throw std::runtime_error("cannot call get_future_complete when recv does not own bytes");
+  }
+  if(!valid_promise) {
+    throw std::runtime_error("invalid promise in recv item");
+  }
+  return pr_complete.get_future();
+}
+
+void connection_t::recv_item_t::init(connection_t *connection, uint64_t size){
+  if(!own) {
+    bytes.data = (void*)(new char[size]);
+    bytes.size = size;
+  }
 
   bytes_mr = ibv_reg_mr(
       connection->protection_domain,
@@ -585,7 +630,6 @@ bytes_t connection_t::recv_item_t::init(connection_t *connection, uint64_t size)
   if(!bytes_mr) {
     throw std::runtime_error("couldn't register mr for recv bytes");
   }
-  return bytes;
 }
 
 void connection_t::post_open_send(int32_t dest_rank, tag_t tag, uint64_t size, bool imm){
@@ -596,7 +640,10 @@ void connection_t::post_open_send(int32_t dest_rank, tag_t tag, uint64_t size, b
     .m = {
       .open_send {
         .immediate = imm,
-        .size = size
+        .size = size,
+        .rank = rank // This information is redundant in the sense that the work completion
+                     // on the other side can figure out what the rank is. However, it is
+                     // easier if it is also stored here.
       }
     }
   });
@@ -627,6 +674,14 @@ void connection_t::post_close(int32_t dest_rank, tag_t tag){
   });
 }
 
+void connection_t::post_fail_send(int32_t dest_rank, tag_t tag) {
+  send_message_queue[dest_rank].push({
+    .type = bbts_message_t::message_type::fail_send,
+    .rank = dest_rank,
+    .tag = tag
+  });
+}
+
 int connection_t::get_recv_rank(ibv_wc const& wc)
 {
   for(int i = 0; i != opens.size(); ++i) {
@@ -641,15 +696,24 @@ int connection_t::get_recv_rank(ibv_wc const& wc)
 
 void connection_t::handle_message(int32_t recv_rank, bbts_message_t const& msg) {
   if(msg.type == bbts_message_t::message_type::open_send) {
-    // send an open recv command. If the recv_item_t doesn't exist, create one.
+    // There are two cases: this send needs a recv now or later.
+    // If now and the the recv_item_t doesn't exist, create one.
     auto iter = recv_items.find(msg.tag);
     if(iter == recv_items.end()) {
-      iter = recv_items.insert({
-        msg.tag,
-        std::unique_ptr<recv_item_t>(new recv_item_t(false))
-      }).first;
+      if(msg.m.open_send.immediate) {
+        iter = recv_items.insert({
+          msg.tag,
+          std::unique_ptr<recv_item_t>(new recv_item_t(false))
+        }).first;
+      } else {
+        // save the message for when recv_items is called.
+        pending_recvs.insert({
+          msg.tag,
+          msg});
+        return;
+      }
     }
-    // allocate and register memory
+    // Register memory and maybe also allocate memory.
     recv_item_t& item = *(iter->second);
     item.init(this, msg.m.open_recv.size);
 
@@ -684,11 +748,24 @@ void connection_t::handle_message(int32_t recv_rank, bbts_message_t const& msg) 
       if(item.is_set) {
         throw std::runtime_error("invalid promise state");
       }
-      item.pr.set_value(item.bytes);
+      if(item.own) {
+        item.pr_complete.set_value(true);
+      } else {
+        item.pr_bytes.set_value(item.bytes);
+      }
       recv_items.erase(iter);
     } else {
       item.is_set = true;
     }
+  } else if(msg.type == bbts_message_t::message_type::fail_send) {
+    // set the future item to false and delete it
+    auto iter = send_items.find({msg.tag, recv_rank});
+    if(iter == send_items.end()) {
+      throw std::runtime_error("there should be a send item here");
+    }
+    send_item_t& item = *(iter->second);
+    item.pr.set_value(false);
+    send_items.erase(iter);
   } else {
     throw std::runtime_error("invalid message type");
   }
@@ -736,27 +813,74 @@ void connection_t::poll(){
       {
         std::lock_guard<std::mutex> lk(recv_m);
         for(auto && item: recv_init_queue) {
-          auto iter = recv_items.find(item.first);
-          if(iter == recv_items.end()) {
-            recv_items.insert(std::move(item));
-          } else {
-            // There are currently two recv items, but since
-            // send_bytes and recv_bytes are only called once for each tag,
+          tag_t tag = item.first;
+
+          auto iter_recv = recv_items.find(tag);
+          auto iter_pend = pending_recvs.find(tag);
+          // Case 1: should never occur
+          if(iter_recv != recv_items.end() && iter_pend != pending_recvs.end()) {
+            throw std::runtime_error("don't mix and match send and recv with wait variant");
+          }
+          if(iter_recv != recv_items.end()) {
+            // There are currently two recv items, but since (assumption)
+            // send_bytes and recv_bytes are only available once for each tag,
             // this means that the only relevant promise is the one from
             // the recv_bytes call in item--the one in recv_items is because
             // an OpenRecv command has already been sent.
 
+            // If an OpenRecv command has been sent, then the recv_item must own the bytes
+            if(!iter_recv->second->own) {
+              throw std::runtime_error("shouldn't own the bytes");
+            }
             // If the bytes are alredy set,
             //   (1) set the promsie and
             //   (2) remove the entry in recv_items.
             // Otherwise the bytes are not set,
             //   move the relevant promise into recv_items
-            if(iter->second->is_set) {
-              item.second->pr.set_value(iter->second->bytes);
-              recv_items.erase(iter);
+            if(iter_recv->second->is_set) {
+              item.second->pr_bytes.set_value(iter_recv->second->bytes);
+              recv_items.erase(iter_recv);
             } else {
-              iter->second->pr = std::move(item.second->pr);
+              iter_recv->second->pr_bytes = std::move(item.second->pr_bytes);
             }
+          }
+          if(iter_pend != pending_recvs.end()) {
+            // An open recv command hasn't been sent but we have the available information to
+            // send it.
+            // This also means that item must own it's bytes and have been created from
+            // recv_bytes_wait, not recv_bytes.
+            recv_item_t& r = *item.second;
+            if(r.own) {
+              throw std::runtime_error("this recv item was not called with wait variant");
+            }
+
+            bbts_message_t const& msg = iter_pend->second;
+
+            // Are there enough bytes available?
+            if(r.bytes.size < msg.m.open_recv.size) {
+              // uh-oh. This can't be done.
+              // On this side, we tell the recv item we failed
+              r.pr_complete.set_value(false);
+              // On that side, we tell the waiting send that this isn't gonna happen
+              this->post_fail_send(msg.m.open_send.rank, tag);
+            } else {
+              // init the item (this won't allocate anything since it doesn't own bytes)
+              r.init(this, msg.m.open_recv.size);
+
+              // sending a message back to the location that sent this message
+              this->post_open_recv(
+                msg.m.open_send.rank,
+                tag,
+                (uint64_t)r.bytes.data,
+                r.bytes.size,
+                r.bytes_mr->rkey);
+
+              // now wait for the write to be finished in here
+              recv_items.insert({tag, std::move(item.second)});
+            }
+
+            // pending recvs has been handled
+            pending_recvs.erase(iter_pend);
           }
         }
         recv_init_queue.resize(0);

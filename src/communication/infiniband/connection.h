@@ -59,11 +59,13 @@ struct tag_rank_less_t {
 //       OpenSend  Rank Tag Immediate Size
 //     | OpenRecv  Rank Tag Addr Size Key
 //     | CloseSend Rank Tag
+//     | FailSend  Rank Tag
 // Once an OpenRecv is obtained, write the data into it.
 // If an OpenRecv is not available, send an OpenSend command.
 // Send CloseSend to remote data  holder whenever a write has finished
+// FailSend tells send item it isn't gonna get recv data
 struct bbts_message_t {
-  enum message_type { open_send, open_recv, close_send };
+  enum message_type { open_send, open_recv, close_send, fail_send };
   message_type type;
   int32_t rank;
   tag_t tag;
@@ -71,6 +73,7 @@ struct bbts_message_t {
     struct {
       bool immediate;
       uint64_t size;
+      int32_t rank;
     } open_send;
     struct {
       uint64_t addr;
@@ -127,6 +130,9 @@ struct connection_t {
   int32_t get_num_nodes() const { return opens.size(); }
 
 private:
+  std::future<bool> send_bytes_(
+    int32_t dest_rank, tag_t send_tag, bytes_t bytes, bool imm);
+private:
   struct send_item_t {
     send_item_t(connection_t *connection, bytes_t b, bool imm);
 
@@ -150,7 +156,18 @@ private:
   };
 
   struct recv_item_t {
-    recv_item_t(bool valid_promise): is_set(false), valid_promise(valid_promise){}
+    recv_item_t(bool valid_promise):
+      valid_promise(valid_promise),
+      is_set(false),
+      own(true)
+    {}
+
+    recv_item_t(bytes_t b):
+      valid_promise(true),
+      is_set(false),
+      own(false),
+      bytes(b)
+    {}
 
     ~recv_item_t() {
       if(bytes_mr) {
@@ -158,21 +175,18 @@ private:
       }
     }
 
-    bytes_t init(connection_t *connection, uint64_t size);
+    void init(connection_t *connection, uint64_t size);
 
-    std::future<recv_bytes_t> get_future(){
-      if(valid_promise) {
-        return pr.get_future();
-      } else {
-        throw std::runtime_error("invalid promise in recv item");
-      }
-    }
+    std::future<recv_bytes_t> get_future_bytes();
+    std::future<bool> get_future_complete();
 
     bool valid_promise;
     bool is_set;
+    bool own;
     bytes_t bytes;
     ibv_mr *bytes_mr;
-    std::promise<recv_bytes_t> pr;
+    std::promise<recv_bytes_t> pr_bytes;
+    std::promise<bool> pr_complete;
   };
 
   using send_item_ptr_t = std::unique_ptr<send_item_t>;
@@ -184,6 +198,7 @@ private:
     int32_t dest_rank, tag_t tag,
     uint64_t addr, uint64_t size, uint32_t key);
   void post_close(int32_t dest_rank, tag_t tag);
+  void post_fail_send(int32_t dest_rank, tag_t tag);
   void poll();
 
   // find out what queue pair was responsible for this work request
@@ -210,6 +225,7 @@ private:
   // Locations to write to but send bytes hasn't been called, so the
   // source data is not available.
   std::map<tag_rank_t, bbts_message_t, tag_rank_less_t> pending_sends;
+  std::map<tag_t,      bbts_message_t                 > pending_recvs;
 
   std::map<tag_rank_t, send_item_ptr_t, tag_rank_less_t> send_items;
   std::map<tag_t,      recv_item_ptr_t                 > recv_items;
