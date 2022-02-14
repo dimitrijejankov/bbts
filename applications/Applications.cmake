@@ -19,4 +19,4 @@ add_aplication("cpmm")
 #add_aplication("ffnn-gpu")
 add_aplication("node")
 #add_aplication("multiplication_chain")
-
+add_aplication("ib")

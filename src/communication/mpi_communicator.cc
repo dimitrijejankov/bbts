@@ -1,5 +1,5 @@
-#include "communicator.h"
 #include <bits/stdint-intn.h>
+#include "mpi_communicator.h"
 #include <cstddef>
 #include <mpi.h>
 #include <unistd.h>
@@ -43,7 +43,7 @@ std::tuple<bool, std::string> mpi_communicator_t::expect_response_string(node_id
   auto mpi_errno = MPI_Mprobe(_node, RESPONSE_STRING_TAG, MPI_COMM_WORLD, &_req.message, &_req.status);
 
   // check for errors
-  if (mpi_errno != MPI_SUCCESS) {        
+  if (mpi_errno != MPI_SUCCESS) {
       return {false, ""};
   }
 
@@ -133,7 +133,7 @@ mpi_communicator_t::sync_request_t mpi_communicator_t::expect_request_sync(node_
   auto mpi_errno = MPI_Mprobe(_node, _tag + FREE_TAG, MPI_COMM_WORLD, &_req.message, &_req.status);
 
   // check for errors
-  if (mpi_errno != MPI_SUCCESS) {        
+  if (mpi_errno != MPI_SUCCESS) {
       _req.success = false;
       return _req;
   }
@@ -248,7 +248,7 @@ bool mpi_communicator_t::sync_resource_aquisition(command_id_t cmd, const bbts::
   // the resource group
   MPI_Comm resource_comm;
   MPI_Comm_create_group(MPI_COMM_WORLD, resource_group, cmd + FREE_TAG, &resource_comm);
-  
+
   // get the result
   bool out;
   MPI_Allreduce(&my_val, &out, 1, MPI_C_BOOL, MPI_LAND, resource_comm);
@@ -377,7 +377,7 @@ bool mpi_communicator_t::send_bytes(char* file, size_t file_size) {
     success = r.success && MPI_Wait(&r.request, MPI_STATUSES_IGNORE) == MPI_SUCCESS && success;
   }
 
-  return success;  
+  return success;
 }
 
 // send a bunch of bytes to all nodes
@@ -447,7 +447,7 @@ bool mpi_communicator_t::expect_coord_cmds(size_t num_cmds, std::vector<command_
 }
 
 bool mpi_communicator_t::expect_bytes(size_t num_bytes, std::vector<char> &out) {
-  
+
   // recive the stuff
   out.resize(num_bytes);
   return MPI_Recv(out.data(), num_bytes, MPI_CHAR, ANY_NODE, COORDINATOR_BCAST_BYTES, MPI_COMM_WORLD, MPI_STATUS_IGNORE) == MPI_SUCCESS;

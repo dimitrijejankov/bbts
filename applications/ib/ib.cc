@@ -1,4 +1,4 @@
-#include "../src/communication/infiniband/connection.h"
+#include "../../src/communication/infiniband/connection.h"
 
 #include <iostream>
 #include <fstream>
