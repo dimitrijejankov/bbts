@@ -56,7 +56,7 @@ struct tag_rank_less_t {
 
 // As an algebraic data type, bbts_message_t looks something like this:
 //   data BbtsMessage =
-//       OpenSend  Rank Tag Size
+//       OpenSend  Rank Tag Immediate Size
 //     | OpenRecv  Rank Tag Addr Size Key
 //     | CloseSend Rank Tag
 // Once an OpenRecv is obtained, write the data into it.
@@ -67,9 +67,17 @@ struct bbts_message_t {
   message_type type;
   int32_t rank;
   tag_t tag;
-  uint64_t addr;
-  uint64_t size;
-  uint32_t key;
+  union {
+    struct {
+      bool immediate;
+      uint64_t size;
+    } open_send;
+    struct {
+      uint64_t addr;
+      uint64_t size;
+      uint32_t key;
+    } open_recv;
+  } m;
 };
 
 struct connection_t {
@@ -93,12 +101,34 @@ struct connection_t {
   std::future<bool> send_bytes(int32_t dest_rank, tag_t send_tag, bytes_t bytes);
   std::future<recv_bytes_t> recv_bytes(tag_t recv_tag);
 
+  // These functions are effectively the same as send_ and recv_ bytes except
+  // the recving end will not allocate memory and will instead write into the provided
+  // memory.
+  // Case send_bytes, recv_bytes:
+  //   S. tell R open send
+  //   R. allocates memory, tells S.
+  //   S. rdma writes to S.
+  //   S. tell R close
+  //   R. on close, bytes are written to, release memory in recv_bytes_t
+  // Case send_bytes_wait, recv_bytes_wait:
+  //   S. tell R open send with wait
+  //   R. once user has called recv_bytes_wait, tell S
+  //   S. rdma writes to S.
+  //   S. tell R close
+  //   R. on close, note success
+  // (The ordering as shown is not necessarily what must happen)
+  //
+  // send_bytes/recv_bytes_wait and send_bytes_wait/recv_bytes pairs
+  // are intended to be UNDEFINED.
+  std::future<bool> send_bytes_wait(int32_t dest_rank, tag_t send_tag, bytes_t bytes);
+  std::future<bool> recv_bytes_wait(tag_t recv_tag, bytes_t bytes);
+
   int32_t get_rank() const { return rank; }
   int32_t get_num_nodes() const { return opens.size(); }
 
 private:
   struct send_item_t {
-    send_item_t(connection_t *connection, bytes_t b);
+    send_item_t(connection_t *connection, bytes_t b, bool imm);
 
     ~send_item_t() {
       if(bytes_mr) {
@@ -116,6 +146,7 @@ private:
     bytes_t bytes;
     ibv_mr *bytes_mr;
     std::promise<bool> pr;
+    bool imm;
   };
 
   struct recv_item_t {
@@ -148,7 +179,7 @@ private:
   using recv_item_ptr_t = std::unique_ptr<recv_item_t>;
 
 private:
-  void post_open_send(int32_t dest_rank, tag_t tag, uint64_t size);
+  void post_open_send(int32_t dest_rank, tag_t tag, uint64_t size, bool imm);
   void post_open_recv(
     int32_t dest_rank, tag_t tag,
     uint64_t addr, uint64_t size, uint32_t key);
@@ -202,14 +233,16 @@ private:
   // For each msgs_recv, there should be a recv open. current_recv_msg refers to the
   // msgs_recv index that has just been written to...
   // For exmaple:
-  //   connection starts of mainting 1,...,n recv msgs.
-  //   the completion queue gets some recv items
-  //   the first recv item should be written at msgs_recv[current_recv_msg].
-  //   after processing that recv item and reposting msgs_recv[current_recv_msg], increment current_recv_msg.
-  //   the next recv item processed from the completion queue should be written at msgs_recv[current_recv_msg].
-  //   after processing that recv item and reposting it, increment current_recv_msg
-  //   and so on. except for the case where increment current_recv_msg will lead to n+1. In that case, it should
-  //   go back to zero.
+  // - connection starts of mainting 1,...,n recv msgs.
+  // - the completion queue gets some recv items
+  // - the first recv item should be written at msgs_recv[current_recv_msg].
+  // - after processing that recv item and reposting msgs_recv[current_recv_msg],
+  //   increment current_recv_msg.
+  // - the next recv item processed from the completion queue should be written
+  //   at msgs_recv[current_recv_msg].
+  // - after processing that recv item and reposting it, increment current_recv_msg
+  // And so on. except for the case where increment current_recv_msg will lead to
+  // n+1. In that case, it should go back to zero.
   int current_recv_msg;
 };
 

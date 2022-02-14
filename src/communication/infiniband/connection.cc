@@ -534,7 +534,7 @@ std::future<bool> connection_t::send_bytes(int32_t dest_rank, tag_t send_tag, by
   std::lock_guard<std::mutex> lk(send_m);
   send_init_queue.push_back({
     tag_rank_t{send_tag, dest_rank},
-    std::unique_ptr<send_item_t>(new send_item_t(this, bytes))
+    std::unique_ptr<send_item_t>(new send_item_t(this, bytes, true))
   });
   return send_init_queue.back().second->get_future();
 }
@@ -551,8 +551,8 @@ std::future<recv_bytes_t> connection_t::recv_bytes(tag_t recv_tag){
   return recv_init_queue.back().second->get_future();
 }
 
-connection_t::send_item_t::send_item_t(connection_t *connection, bytes_t b):
-  bytes(b)
+connection_t::send_item_t::send_item_t(connection_t *connection, bytes_t b, bool imm):
+  bytes(b), imm(imm)
 {
   bytes_mr = ibv_reg_mr(
       connection->protection_domain,
@@ -588,12 +588,17 @@ bytes_t connection_t::recv_item_t::init(connection_t *connection, uint64_t size)
   return bytes;
 }
 
-void connection_t::post_open_send(int32_t dest_rank, tag_t tag, uint64_t size){
+void connection_t::post_open_send(int32_t dest_rank, tag_t tag, uint64_t size, bool imm){
   send_message_queue[dest_rank].push({
     .type = bbts_message_t::message_type::open_send,
     .rank = dest_rank,
     .tag = tag,
-    .size = size
+    .m = {
+      .open_send {
+        .immediate = imm,
+        .size = size
+      }
+    }
   });
 }
 
@@ -604,9 +609,13 @@ void connection_t::post_open_recv(
     .type = bbts_message_t::message_type::open_recv,
     .rank = dest_rank,
     .tag = tag,
-    .addr = addr,
-    .size = size,
-    .key = key
+    .m = {
+      .open_recv {
+        .addr = addr,
+        .size = size,
+        .key = key
+      }
+    }
   });
 }
 
@@ -642,7 +651,7 @@ void connection_t::handle_message(int32_t recv_rank, bbts_message_t const& msg) 
     }
     // allocate and register memory
     recv_item_t& item = *(iter->second);
-    item.init(this, msg.size);
+    item.init(this, msg.m.open_recv.size);
 
     // sending a message back to the location that sent this message
     this->post_open_recv(
@@ -661,7 +670,7 @@ void connection_t::handle_message(int32_t recv_rank, bbts_message_t const& msg) 
       });
     } else {
       send_item_t& item = *(iter->second);
-      item.send(this, msg.tag, recv_rank, msg.addr, msg.key);
+      item.send(this, msg.tag, recv_rank, msg.m.open_recv.addr, msg.m.open_recv.key);
     }
   } else if(msg.type == bbts_message_t::message_type::close_send) {
     // the recv item knows it has been written to so set the future
@@ -703,13 +712,17 @@ void connection_t::poll(){
           auto iter = pending_sends.find(item.first);
           if(iter == pending_sends.end()) {
             // no? send an open send so you can get the remote info
-            this->post_open_send(item.first.rank, item.first.tag, item.second->bytes.size);
+            this->post_open_send(
+              item.first.rank,
+              item.first.tag,
+              item.second->bytes.size,
+              item.second->imm);
             send_items.insert(std::move(item));
           } else {
             // yes? the remote info is already available, so do a remote write
             bbts_message_t& msg = iter->second;
             send_item_t& send_item = *(item.second);
-            send_item.send(this, msg.tag, msg.rank, msg.addr, msg.key);
+            send_item.send(this, msg.tag, msg.rank, msg.m.open_recv.addr, msg.m.open_recv.key);
             pending_sends.erase(iter);
             // still add it to send items so it can inform the peer when a
             // write has happened

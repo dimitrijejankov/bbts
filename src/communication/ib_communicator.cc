@@ -48,12 +48,21 @@ std::tuple<bool, std::string> ib_communicator_t::expect_response_string(int32_t 
   return {true, ret};
 }
 
-bool ib_communicator_t::recv_sync(void *_bytes, size_t num_bytes, node_id_t _node, int32_t _tag) {
+bool ib_communicator_t::recv_sync(
+  void *_bytes, size_t num_bytes,
+  node_id_t _node,
+  int32_t _tag)
+{
   return true;
 }
 
 // does the send, method is blocking
-bool ib_communicator_t::send_sync(const void *_bytes, size_t num_bytes, node_id_t _node, int32_t _tag) {
+bool ib_communicator_t::send_sync(
+  const void *_bytes,
+  size_t num_bytes,
+  node_id_t _node,
+  int32_t _tag)
+{
   return true;
 }
 
