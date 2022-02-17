@@ -7,7 +7,8 @@ using ib::to_bytes_t;
 using ib::recv_bytes_t;
 
 enum com_tag {
-  response_string // TODO: when adding tags, leave space after response string
+  response_string = 1,// when adding tags, leave space after response string
+  free_tag = 2048
 };
 
 ib_communicator_t::ib_communicator_t(
@@ -49,21 +50,26 @@ std::tuple<bool, std::string> ib_communicator_t::expect_response_string(int32_t 
 }
 
 bool ib_communicator_t::recv_sync(
-  void *_bytes, size_t num_bytes,
-  node_id_t _node,
-  int32_t _tag)
+  void *bytes, size_t num_bytes,
+  node_id_t node,
+  int32_t tag)
 {
-  return true;
+  return connection.recv_bytes_wait(
+    com_tag::free_tag + get_num_nodes()*tag + node,
+    { bytes, num_bytes}).get();
 }
 
 // does the send, method is blocking
 bool ib_communicator_t::send_sync(
-  const void *_bytes,
+  const void *bytes,
   size_t num_bytes,
-  node_id_t _node,
-  int32_t _tag)
+  node_id_t node,
+  int32_t tag)
 {
-  return true;
+  return connection.send_bytes_wait(
+    node,
+    com_tag::free_tag + get_num_nodes()*tag + node,
+    bytes_t{ (void*)bytes, num_bytes }).get();
 }
 
 bool ib_communicator_t::tensors_created_notification(node_id_t out_node, const std::vector<bbts::tid_t> &tensor) {

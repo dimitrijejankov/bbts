@@ -127,7 +127,7 @@ struct connection_t {
   std::future<bool> recv_bytes_wait(tag_t recv_tag, bytes_t bytes);
 
   int32_t get_rank() const { return rank; }
-  int32_t get_num_nodes() const { return opens.size(); }
+  int32_t get_num_nodes() const { return num_qp; }
 
 private:
   std::future<bool> send_bytes_(
@@ -211,14 +211,7 @@ private:
   std::thread poll_thread;
   std::atomic<bool> destruct;
 
-  // The polling queue will take from this and post a send message to the
-  // appropriate queue.
-  std::vector<std::queue<bbts_message_t> > send_message_queue;
-  // Whenever an open[rank] flag is set, an item from send_message_queue[rank]
-  // can be posted.
-  std::vector<char> opens;
-
-  // Things not yet moved to the send_message_queue.
+  // Things not yet handled.
   std::vector<std::pair<tag_rank_t, send_item_ptr_t> > send_init_queue;
   std::vector<std::pair<tag_t,      recv_item_ptr_t> > recv_init_queue;
 
@@ -232,13 +225,8 @@ private:
 
   std::mutex send_m, recv_m;
 
-  // msgs_recv and msgs_send live in consecutive memory, both managed
-  // by msgs_mr
-  bbts_message_t* msgs_recv;
-  bbts_message_t* msgs_send;
+  bbts_message_t* msgs;
   ibv_mr* msgs_mr;
-  std::vector<uint64_t> msgs_remote_addr;
-  std::vector<uint32_t> msgs_remote_key;
 
   ibv_context *context;
   ibv_cq *completion_queue;
@@ -249,7 +237,7 @@ private:
   // For each msgs_recv, there should be a recv open. current_recv_msg refers to the
   // msgs_recv index that has just been written to...
   // For exmaple:
-  // - connection starts of mainting 1,...,n recv msgs.
+  // - connection starts of mainting 1,...,num_recv recv msgs.
   // - the completion queue gets some recv items
   // - the first recv item should be written at msgs_recv[current_recv_msg].
   // - after processing that recv item and reposting msgs_recv[current_recv_msg],
@@ -260,6 +248,9 @@ private:
   // And so on. except for the case where increment current_recv_msg will lead to
   // n+1. In that case, it should go back to zero.
   int current_recv_msg;
+
+  uint32_t num_recv;
+  int32_t num_qp;
 };
 
 

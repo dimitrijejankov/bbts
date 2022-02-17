@@ -4,6 +4,10 @@
 #include <random>
 #include <iostream>
 
+
+#include <errno.h>
+
+
 namespace bbts {
 namespace ib {
 
@@ -20,18 +24,10 @@ struct bbts_context_t {
   std::vector<ibv_qp_ptr> qps;
   ibv_srq   *srq;
   ibv_port_attr portinfo;
-  // the first num_qp are recv messages, then the nex num_qp are send messages
   bbts_message_t *msgs;
   ibv_mr *msgs_mr;
-  std::vector<uint64_t> msg_remote_addr;
-  std::vector<uint32_t> msg_remote_key;
   uint8_t num_qp;
-};
-
-struct bbts_exch_t {
-  bbts_dest_t dest;
-  uint64_t addr;
-  uint32_t rem_key;
+  uint32_t num_recv;
 };
 
 void bbts_post_rdma_write(
@@ -66,53 +62,42 @@ void bbts_post_rdma_write(
   }
 }
 
-void bbts_post_send(
+void bbts_post_send_message(
   ibv_qp *qp,
   uint64_t wr_id,
-  void* local_addr, uint32_t local_size, uint32_t local_key,
-  uint64_t remote_addr, uint32_t remote_key)
+  bbts_message_t const& msg)
 {
   ibv_sge list = {
-    .addr  = (uint64_t)local_addr,
-    .length = local_size,
-    .lkey  = local_key
+    .addr  = (uint64_t)(&msg),
+    .length = sizeof(bbts_message_t)
   };
   ibv_send_wr wr = {
     .wr_id      = wr_id,
     .sg_list    = &list,
     .num_sge    = 1,
     .opcode     = IBV_WR_SEND,
-    .send_flags = IBV_SEND_SIGNALED,
-    .wr = {
-      .rdma = {
-        .remote_addr = remote_addr,
-        .rkey        = remote_key
-      }
-    }
+    .send_flags = IBV_SEND_INLINE | IBV_SEND_SIGNALED
   };
+  // INLINE:   copy the buffer, making the buffer immediately available
+  // SIGNALED: make sure a work completion gets added to the completion queue
 
   ibv_send_wr *bad_wr;
 
-  if(ibv_post_send(qp, &wr, &bad_wr)) {
+  if(errno = ibv_post_send(qp, &wr, &bad_wr)) {
+    perror("FAILED TO POST SEND ");
     throw std::runtime_error("ibv_post_send");
   }
 }
 
-void bbts_post_recv(
-  ibv_srq *srq,
-  uint64_t wr_id,
-  void* local_addr, uint32_t local_size, uint32_t local_key,
-  uint32_t expected_remote_key)
+void bbts_post_recv_message(ibv_srq *srq, uint32_t local_key, bbts_message_t& msg)
 {
-  // expected_remote_key is only for debugging purposes
-
   ibv_sge list = {
-    .addr  = (uint64_t)local_addr,
-    .length = local_size,
+    .addr  = (uint64_t)(&msg),
+    .length = sizeof(bbts_message_t),
     .lkey  = local_key
   };
   ibv_recv_wr wr = {
-    .wr_id      = wr_id,
+    .wr_id      = 0,
     .sg_list    = &list,
     .num_sge    = 1,
   };
@@ -127,13 +112,13 @@ bbts_context_t* bbts_init_context(
     std::string dev_name,
     int32_t rank,
     unsigned int num_qp,
-    uint8_t ib_port = 1)
+    uint8_t ib_port = 1,
+    uint32_t num_recv = 1024)
 {
   bbts_context_t *ctx = new bbts_context_t;
-  ctx->num_qp = num_qp;
+  ctx->num_qp          = num_qp;
+  ctx->num_recv        = num_recv;
   ctx->qps             = std::vector<ibv_qp_ptr>(num_qp);
-  ctx->msg_remote_addr = std::vector<uint64_t>(num_qp);
-  ctx->msg_remote_key  = std::vector<uint32_t>(num_qp);
 
   ibv_device  *ib_dev = NULL;
   ibv_device **dev_list = ibv_get_device_list(NULL);
@@ -157,17 +142,17 @@ bbts_context_t* bbts_init_context(
     goto clean_device;
   }
 
-  ctx->msgs = new bbts_message_t[2*num_qp];
+  ctx->msgs = new bbts_message_t[num_recv];
   ctx->msgs_mr = ibv_reg_mr(
       ctx->pd,
-      ctx->msgs, 2*num_qp*sizeof(bbts_message_t),
+      ctx->msgs, num_recv*sizeof(bbts_message_t),
       IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE);
   if(!ctx->msgs_mr) {
     goto clean_pd;
   }
 
-  ctx->cq = ibv_create_cq(ctx->context, 1000, NULL, NULL, 0);
-  //ctx->cq = ibv_create_cq(ctx->context, 2*num_qp, NULL, NULL, 0);
+
+  ctx->cq = ibv_create_cq(ctx->context, num_qp*num_recv, NULL, NULL, 0);
   if (!ctx->cq) {
     goto clean_mr;
   }
@@ -175,7 +160,7 @@ bbts_context_t* bbts_init_context(
   {
 		ibv_srq_init_attr attr = {
 			.attr = {
-				.max_wr  = 1000, //2*num_qp,
+				.max_wr  = num_qp*num_recv,
 				.max_sge = 1
 			}
 		};
@@ -191,8 +176,8 @@ bbts_context_t* bbts_init_context(
       .recv_cq = ctx->cq,
       .srq     = ctx->srq,
       .cap     = {
-        .max_send_wr  = 1000,
-        .max_recv_wr  = 1000,
+        .max_send_wr  = (num_qp-1)*num_recv,
+        .max_recv_wr  = num_recv,
         .max_send_sge = 1,
         .max_recv_sge = 1
       },
@@ -347,19 +332,10 @@ bool bbts_client_exch_dest_and_connect(
     .qpn = ctx->qps[qp_index]->qp_num,
     .psn = random_psn()
   };
-  bbts_exch_t my_stuff = {
-    .dest = my_dest,
-    .addr = (uint64_t)(ctx->msgs + ctx->num_qp + qp_index),
-    .rem_key = ctx->msgs_mr->rkey
-  };
-  bbts_exch_t rem_stuff;
-  bool success = client_exch(servername, port, my_stuff, rem_stuff);
+  bool success = client_exch(servername, port, my_dest, rem_dest);
   if(!success) {
     return false;
   }
-  rem_dest = rem_stuff.dest;
-  ctx->msg_remote_addr[qp_index] = rem_stuff.addr;
-  ctx->msg_remote_key[qp_index]  = rem_stuff.rem_key;
 
   if(!bbts_connect_context_helper(ctx->qps[qp_index], ib_port, my_dest.psn, rem_dest)) {
     return false;
@@ -379,26 +355,17 @@ bool bbts_server_exch_dest_and_connect(
     .qpn = ctx->qps[qp_index]->qp_num,
     .psn = random_psn()
   };
-  bbts_exch_t my_stuff = {
-    .dest = my_dest,
-    .addr = (uint64_t)(ctx->msgs + ctx->num_qp + qp_index),
-    .rem_key = ctx->msgs_mr->rkey
-  };
-  bbts_exch_t rem_stuff;
   bool success = server_exch(
         port,
         [&]()
         {
           return bbts_connect_context_helper(
-                  ctx->qps[qp_index], ib_port, my_dest.psn, rem_stuff.dest);
+                  ctx->qps[qp_index], ib_port, my_dest.psn, rem_dest);
         },
-        my_stuff, rem_stuff);
+        my_dest, rem_dest);
   if(!success) {
     return false;
   }
-  rem_dest = rem_stuff.dest;
-  ctx->msg_remote_addr[qp_index] = rem_stuff.addr;
-  ctx->msg_remote_key[qp_index]  = rem_stuff.rem_key;
 
   return true;
 }
@@ -453,7 +420,7 @@ connection_t::connection_t(
   std::string dev_name,
   int32_t rank,
   std::vector<std::string> ips):
-    rank(rank), opens(ips.size()), send_message_queue(ips.size()),
+    rank(rank),
     current_recv_msg(0)
 {
   int num_qp = ips.size();
@@ -469,18 +436,8 @@ connection_t::connection_t(
 
   // post a receive before setting up a connection so that
   // when the connection is started, the receiving can occur
-  int num_recvs = num_qp; // THE NUMBER OF RECVS == THE NUMBER OF RECV MESSAGES.
-                          // THE which_recv INDEX HAS NOTHING TO DO WITH RANK, EVEN
-                          // THOUGH IN THIS CASE
-                          //   num_qp == NUMBER OF RANKS == NUMBER OF RECV MESSAGES
-  // The number of recvs needs not be the number of queue pairs.
-  for(int which_recv = 0; which_recv != num_recvs; ++which_recv) {
-    bbts_post_recv(
-      context->srq, 0,
-      (void*)(context->msgs + which_recv),
-      sizeof(bbts_message_t),
-      context->msgs_mr->lkey,
-      context->msgs_mr->rkey);
+  for(int which_recv = 0; which_recv != context->num_recv; ++which_recv) {
+    bbts_post_recv_message(context->srq, context->msgs_mr->lkey, context->msgs[which_recv]);
   }
 
   if(bbts_connect_context(context, rank, ips)) {
@@ -488,13 +445,11 @@ connection_t::connection_t(
   }
 
   destruct = false;
-  std::fill(opens.begin(), opens.end(), 1);
 
-  this->msgs_recv         = context->msgs;
-  this->msgs_send         = context->msgs + num_qp;
-  this->msgs_mr           = context->msgs_mr;
-  this->msgs_remote_addr  = context->msg_remote_addr;
-  this->msgs_remote_key   = context->msg_remote_key;
+  this->num_qp    = context->num_qp;
+  this->num_recv  = context->num_recv;
+  this->msgs      = context->msgs;
+  this->msgs_mr   = context->msgs_mr;
 
   this->context               = context->context;
   this->completion_queue      = context->cq;
@@ -519,7 +474,7 @@ connection_t::~connection_t() {
   ibv_destroy_srq(this->shared_recv_queue);
   ibv_destroy_cq(this->completion_queue);
   ibv_dereg_mr(this->msgs_mr);
-  delete[] msgs_recv;
+  delete[] msgs;
   ibv_dealloc_pd(this->protection_domain);
   ibv_close_device(this->context);
 }
@@ -589,6 +544,7 @@ connection_t::send_item_t::send_item_t(connection_t *connection, bytes_t b, bool
 void connection_t::send_item_t::send(
   connection_t *connection, tag_t tag, int32_t dest_rank, uint64_t remote_addr, uint32_t remote_key)
 {
+  std::cout << "post rdma write to dest " << dest_rank << ", tag " << tag << std::endl;
   // TODO: what happens when size bigger than 2^31...
   // TODO: what wrid?
   bbts_post_rdma_write(
@@ -633,7 +589,8 @@ void connection_t::recv_item_t::init(connection_t *connection, uint64_t size){
 }
 
 void connection_t::post_open_send(int32_t dest_rank, tag_t tag, uint64_t size, bool imm){
-  send_message_queue[dest_rank].push({
+  std::cout << "post open send to dest " << dest_rank << ", tag " << tag << std::endl;
+  bbts_post_send_message(queue_pairs[dest_rank], 0, {
     .type = bbts_message_t::message_type::open_send,
     .rank = dest_rank,
     .tag = tag,
@@ -652,7 +609,8 @@ void connection_t::post_open_send(int32_t dest_rank, tag_t tag, uint64_t size, b
 void connection_t::post_open_recv(
   int32_t dest_rank, tag_t tag, uint64_t addr, uint64_t size, uint32_t key)
 {
-  send_message_queue[dest_rank].push({
+  std::cout << "post open recv to dest " << dest_rank << ", tag " << tag << std::endl;
+  bbts_post_send_message(queue_pairs[dest_rank], 0, {
     .type = bbts_message_t::message_type::open_recv,
     .rank = dest_rank,
     .tag = tag,
@@ -667,7 +625,8 @@ void connection_t::post_open_recv(
 }
 
 void connection_t::post_close(int32_t dest_rank, tag_t tag){
-  send_message_queue[dest_rank].push({
+  std::cout << "post close to dest " << dest_rank << ", tag " << tag << std::endl;
+  bbts_post_send_message(queue_pairs[dest_rank], tag, {
     .type = bbts_message_t::message_type::close_send,
     .rank = dest_rank,
     .tag = tag
@@ -675,7 +634,8 @@ void connection_t::post_close(int32_t dest_rank, tag_t tag){
 }
 
 void connection_t::post_fail_send(int32_t dest_rank, tag_t tag) {
-  send_message_queue[dest_rank].push({
+  std::cout << "post fail send, to dest  " << dest_rank << ", tag " << tag << std::endl;
+  bbts_post_send_message(queue_pairs[dest_rank], 0, {
     .type = bbts_message_t::message_type::fail_send,
     .rank = dest_rank,
     .tag = tag
@@ -684,7 +644,7 @@ void connection_t::post_fail_send(int32_t dest_rank, tag_t tag) {
 
 int connection_t::get_recv_rank(ibv_wc const& wc)
 {
-  for(int i = 0; i != opens.size(); ++i) {
+  for(int i = 0; i != num_qp; ++i) {
     if(i == rank)
       continue;
     if(queue_pairs[i]->qp_num == wc.qp_num) {
@@ -696,6 +656,7 @@ int connection_t::get_recv_rank(ibv_wc const& wc)
 
 void connection_t::handle_message(int32_t recv_rank, bbts_message_t const& msg) {
   if(msg.type == bbts_message_t::message_type::open_send) {
+    std::cout << "recvd open send from " << recv_rank << std::endl;
     // There are two cases: this send needs a recv now or later.
     // If now and the the recv_item_t doesn't exist, create one.
     auto iter = recv_items.find(msg.tag);
@@ -724,6 +685,7 @@ void connection_t::handle_message(int32_t recv_rank, bbts_message_t const& msg) 
       item.bytes.size,
       item.bytes_mr->rkey);
   } else if(msg.type == bbts_message_t::message_type::open_recv) {
+    std::cout << "recvd open recv from " << recv_rank << std::endl;
     // Do an rdma write if there is a send request available.
     // Otherwise, save the message for when send_bytes is called.
     auto iter = send_items.find({msg.tag, recv_rank});
@@ -737,6 +699,7 @@ void connection_t::handle_message(int32_t recv_rank, bbts_message_t const& msg) 
       item.send(this, msg.tag, recv_rank, msg.m.open_recv.addr, msg.m.open_recv.key);
     }
   } else if(msg.type == bbts_message_t::message_type::close_send) {
+    std::cout << "recvd close send from " << recv_rank << std::endl;
     // the recv item knows it has been written to so set the future
     // on the recv_item delete it UNLESS the promise is invalid
     auto iter = recv_items.find(msg.tag);
@@ -758,6 +721,7 @@ void connection_t::handle_message(int32_t recv_rank, bbts_message_t const& msg) 
       item.is_set = true;
     }
   } else if(msg.type == bbts_message_t::message_type::fail_send) {
+    std::cout << "recvd fail send from " << recv_rank << std::endl;
     // set the future item to false and delete it
     auto iter = send_items.find({msg.tag, recv_rank});
     if(iter == send_items.end()) {
@@ -889,23 +853,6 @@ void connection_t::poll(){
         recv_init_queue.resize(0);
       }
 
-      // 3. actually send out messages
-      for(int i = 0; i != opens.size(); ++i) {
-        if(i == rank) {
-          // there should never be anything here
-          continue;
-        }
-        if(opens[i] && !send_message_queue[i].empty()) {
-          msgs_send[i] = send_message_queue[i].front();
-          send_message_queue[i].pop();
-          bbts_post_send(
-            queue_pairs[i], 0,
-            (void*)(&msgs_send[i]), sizeof(bbts_message_t), msgs_mr->lkey,
-            msgs_remote_addr[i], msgs_remote_key[i]);
-          opens[i] = false;
-        }
-      }
-
       // 4. is there anything in the receive queue? If so, handle it
       int ne = ibv_poll_cq(completion_queue, 1, &work_completion);
       if(!ne) {
@@ -914,47 +861,45 @@ void connection_t::poll(){
       if(work_completion.status) {
         throw std::runtime_error("work completion error");
       }
+
       bool is_send = work_completion.opcode == 0;
       bool is_recv = work_completion.opcode == 128;
       bool is_rdma_write = work_completion.opcode == 1;
-      bool is_message = work_completion.wr_id == 0;
+      auto wr_id = work_completion.wr_id;
       int32_t wc_rank = get_recv_rank(work_completion);
-      if(is_rdma_write && !is_message) {
+      if(is_rdma_write && wr_id > 0) {
+        std::cout << "finished an rdma write" << std::endl;
         // an rdma write occured, inform destination we are done
-        tag_t tag = work_completion.wr_id;
+        auto tag = wr_id;
         post_close(wc_rank, tag);
-      } else if(is_send && is_message) {
-        // a send item is completed and the message is available again
-
-        // But first, what is the message that is completed?
-        // If our send_close made it, we are done with the send item.
-        bbts_message_t const& msg = msgs_send[wc_rank];
-        if(msg.type == bbts_message_t::message_type::close_send) {
-          auto iter = send_items.find({msg.tag, wc_rank});
-          if(iter == send_items.end()) {
-            throw std::runtime_error("can't close send item, how can it not be here");
-          }
-          send_item_t& item = *(iter->second);
-          item.pr.set_value(true);
-          send_items.erase(iter);
+      } else if(is_send && wr_id > 0) {
+        std::cout << "finished send close tag " << wr_id << std::endl;
+        auto tag = wr_id;
+        // The only time the tag > 0 and it isn't an rdma write, we
+        // know that a send_close message has been completed
+        auto iter = send_items.find({tag, wc_rank});
+        if(iter == send_items.end()) {
+          throw std::runtime_error("can't close send item, how can it not be here");
         }
-
-        opens[wc_rank] = true;
-      } else if(is_recv && is_message) {
+        send_item_t& item = *(iter->second);
+        item.pr.set_value(true);
+        send_items.erase(iter);
+      } else if(is_send && wr_id == 0) {
+        std::cout << "finished some send" << std::endl;
+        // nothing to do
+      } else if(is_recv) {
         // a message has been recvd
         // so post a recv back and handle the message
 
         // copy the message here so msg_recv can be used again
         // in the post recv
-        bbts_message_t msg = msgs_recv[current_recv_msg];
+        bbts_message_t msg = msgs[current_recv_msg];
 
-        bbts_post_recv(
-          shared_recv_queue, 0,
-          (void*)(&msgs_recv[current_recv_msg]), sizeof(bbts_message_t),
-          msgs_mr->lkey, msgs_mr->rkey);
+        bbts_post_recv_message(
+          shared_recv_queue, msgs_mr->lkey, msgs[current_recv_msg]);
 
         current_recv_msg++;
-        if(current_recv_msg == opens.size()) {
+        if(current_recv_msg == num_recv) {
           current_recv_msg = 0;
         }
 
