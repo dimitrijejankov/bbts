@@ -225,8 +225,13 @@ private:
 
   std::mutex send_m, recv_m;
 
-  bbts_message_t* msgs;
-  ibv_mr* msgs_mr;
+  std::queue<int> available_send_msgs;
+
+  bbts_message_t* send_msgs;
+  ibv_mr* send_msgs_mr;
+
+  bbts_message_t* recv_msgs;
+  ibv_mr* recv_msgs_mr;
 
   ibv_context *context;
   ibv_cq *completion_queue;
@@ -250,6 +255,7 @@ private:
   int current_recv_msg;
 
   uint32_t num_recv;
+  uint32_t num_send;
   int32_t num_qp;
 };
 
