@@ -204,6 +204,7 @@ private:
   using recv_item_ptr_t = std::unique_ptr<recv_item_t>;
 
 private:
+  void post_send(int32_t dest_rank, bbts_message_t const& msg);
   void post_open_send(int32_t dest_rank, tag_t tag, uint64_t size, bool imm);
   void post_open_recv(
     int32_t dest_rank, tag_t tag,
@@ -237,6 +238,7 @@ private:
   std::mutex send_m, recv_m;
 
   std::queue<int> available_send_msgs;
+  std::vector<std::queue<bbts_message_t> > pending_msgs;
 
   bbts_message_t* send_msgs;
   ibv_mr* send_msgs_mr;

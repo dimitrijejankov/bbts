@@ -78,7 +78,8 @@ void bbts_post_rdma_write(
 
   ibv_send_wr *bad_wr;
 
-  if(ibv_post_send(qp, &wr, &bad_wr)) {
+  if(errno = ibv_post_send(qp, &wr, &bad_wr)) {
+    perror("ibv_post_send for rdma write ");
     throw std::runtime_error("ibv_post_send");
   }
 }
@@ -107,7 +108,7 @@ void bbts_post_send_message(
   ibv_send_wr *bad_wr;
 
   if(errno = ibv_post_send(qp, &wr, &bad_wr)) {
-    perror("FAILED TO POST SEND ");
+    perror("FAILED TO POST SEND MESSAGE ");
     throw std::runtime_error("ibv_post_send");
   }
 }
@@ -466,6 +467,7 @@ connection_t::connection_t(
   std::string dev_name,
   int32_t rank,
   std::vector<std::string> ips):
+    pending_msgs(ips.size()),
     rank(rank),
     current_recv_msg(0),
     send_wr_cnts(ips.size())
@@ -658,13 +660,24 @@ void connection_t::recv_item_t::init(connection_t *connection, uint64_t size){
   }
 }
 
+void connection_t::post_send(int32_t dest_rank, bbts_message_t const& msg) {
+  if(send_wr_cnts[dest_rank] == 0) {
+    pending_msgs[dest_rank].push(msg);
+  } else {
+    send_wr_cnts[dest_rank] -= 1;
+
+    int i = available_send_msgs.front();
+    available_send_msgs.pop();
+
+    send_msgs[i] = msg;
+    bbts_post_send_message(queue_pairs[dest_rank], i, send_msgs_mr->lkey, send_msgs[i]);
+  }
+}
+
 void connection_t::post_open_send(int32_t dest_rank, tag_t tag, uint64_t size, bool imm){
   _DCB_COUT_("post open send to dest " << dest_rank << ", tag " << tag << std::endl);
-
-  int i = available_send_msgs.front();
-  available_send_msgs.pop();
-
-  send_msgs[i] = {
+  this->post_send(dest_rank,
+  {
     .type = bbts_message_t::message_type::open_send,
     .rank      = dest_rank,
     .from_rank = rank,
@@ -675,20 +688,15 @@ void connection_t::post_open_send(int32_t dest_rank, tag_t tag, uint64_t size, b
         .size = size,
       }
     }
-  };
-
-  bbts_post_send_message(queue_pairs[dest_rank], i, send_msgs_mr->lkey, send_msgs[i]);
+  });
 }
 
 void connection_t::post_open_recv(
   int32_t dest_rank, tag_t tag, uint64_t addr, uint64_t size, uint32_t key)
 {
   _DCB_COUT_("post open recv to dest " << dest_rank << ", tag " << tag << ", key " << key << ", address " << addr << std::endl);
-
-  int i = available_send_msgs.front();
-  available_send_msgs.pop();
-
-  send_msgs[i] = {
+  this->post_send(dest_rank,
+  {
     .type = bbts_message_t::message_type::open_recv,
     .rank      = dest_rank,
     .from_rank = rank,
@@ -700,42 +708,30 @@ void connection_t::post_open_recv(
         .key = key
       }
     }
-  };
-
-  bbts_post_send_message(queue_pairs[dest_rank], i, send_msgs_mr->lkey, send_msgs[i]);
+  });
 }
 
 void connection_t::post_close(int32_t dest_rank, tag_t tag){
   _DCB_COUT_("post close to dest " << dest_rank << ", tag " << tag << std::endl);
-
-  int i = available_send_msgs.front();
-  available_send_msgs.pop();
-
-  send_msgs[i] = {
+  this->post_send(dest_rank,
+  {
     .type = bbts_message_t::message_type::close_send,
     .rank      = dest_rank,
     .from_rank = rank,
     .tag = tag
-  };
-
-  bbts_post_send_message(queue_pairs[dest_rank], i, send_msgs_mr->lkey, send_msgs[i]);
+  });
 }
 
 
 void connection_t::post_fail_send(int32_t dest_rank, tag_t tag) {
   _DCB_COUT_("post fail send, to dest  " << dest_rank << ", tag " << tag << std::endl);
-
-  int i = available_send_msgs.front();
-  available_send_msgs.pop();
-
-  send_msgs[i] = {
+  this->post_send(dest_rank,
+  {
     .type = bbts_message_t::message_type::fail_send,
     .rank      = dest_rank,
     .from_rank = rank,
     .tag = tag
-  };
-
-  bbts_post_send_message(queue_pairs[dest_rank], i, send_msgs_mr->lkey, send_msgs[i]);
+  });
 }
 
 int connection_t::get_recv_rank(ibv_wc const& wc)
@@ -843,8 +839,7 @@ void connection_t::poll(){
     for(int i = 0; i != 1000000; ++i) {
       // 1. empty send_init_queue
       // 2. empty recv_init_queue
-      // 3. attend to message queues
-      // 4. receive a work request
+      // 3. receive a work request
 
       // 1. empty send_init_queue
       {
@@ -955,7 +950,7 @@ void connection_t::poll(){
         recv_init_queue.resize(0);
       }
 
-      // 4. is there anything in the receive queue? If so, handle it
+      // 3. is there anything in the receive queue? If so, handle it
       //    TODO: tidy this up; create a parse work_completion function..
       int ne = ibv_poll_cq(completion_queue, 1, &work_completion);
       while(ne != 0) {
@@ -989,8 +984,36 @@ void connection_t::poll(){
             item.pr.set_value(true);
             send_items.erase(iter);
           }
+
+          int32_t dest_rank = send_msgs[i].rank;
+
           // add the index to the send msg now that this send_msg is available
           available_send_msgs.push(i);
+
+          // update the send_wr_cnt
+          send_wr_cnts[dest_rank] += 1;
+
+          // check the queue
+          if(!pending_msgs[dest_rank].empty()) {
+            // making another send, decrement the send_wr_cnt
+            send_wr_cnts[dest_rank] -= 1;
+
+            // get an open send_msg object
+            // (which is why it was important to add to available_send_msgs
+            //  above before getting here)
+            int which = available_send_msgs.front();
+            available_send_msgs.pop();
+
+            // write the message to be sent to the avilable send_msgs memory
+            send_msgs[which] = pending_msgs[dest_rank].front();
+            pending_msgs[dest_rank].pop();
+
+            bbts_post_send_message(
+              queue_pairs[dest_rank],
+              which,
+              send_msgs_mr->lkey,
+              send_msgs[which]);
+          }
         } else if(is_recv) {
           // a message has been recvd
           // so post a recv back and handle the message
