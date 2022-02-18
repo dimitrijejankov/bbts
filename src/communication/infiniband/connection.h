@@ -137,7 +137,7 @@ struct connection_t {
   std::future<bool> recv_bytes_wait(tag_t recv_tag, bytes_t bytes);
 
   int32_t get_rank() const { return rank; }
-  int32_t get_num_nodes() const { return num_qp; }
+  int32_t get_num_nodes() const { return num_rank; }
 
 private:
   std::future<bool> send_bytes_(
@@ -265,9 +265,13 @@ private:
   // n+1. In that case, it should go back to zero.
   int current_recv_msg;
 
+  int32_t num_rank;
   uint32_t num_recv;
-  uint32_t num_send;
-  int32_t num_qp;
+  uint32_t num_send_per_qp;
+
+  // for each rank except self, contain the number of send wrs left.
+  // if this hits zero, you can't post a send to the given location
+  std::vector<uint32_t> send_wr_cnts;
 };
 
 

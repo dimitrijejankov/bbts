@@ -171,7 +171,7 @@ int main(int argc, char **argv) {
   }
 
   size_t size = 1024;
-  size_t num = 1000;
+  size_t num = 100; // 1000; // 10000;
 
   //size_t size = 1024; //10240*10240*4;
   //size_t num = 1000;

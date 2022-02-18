@@ -32,9 +32,23 @@ struct bbts_context_t {
   bbts_message_t *send_msgs;
   ibv_mr *send_msgs_mr;
 
-  uint8_t num_qp;
-  uint32_t num_recv;
-  uint32_t num_send;
+  uint8_t num_rank;
+  uint32_t num_send_per_qp;
+
+  uint32_t get_num_recv() const {
+    // If every other node sends as many messages as they can here,
+    // that is how many num_recv there must be
+    return get_num_qp()*num_send_per_qp;
+  }
+  uint32_t get_num_total_send() const {
+    // This is the same as num_recv
+    return get_num_qp()*num_send_per_qp;
+  }
+  uint8_t get_num_qp() const {
+    // there is one qp for every rank except this rank
+    return num_rank - 1;
+  }
+
 };
 
 void bbts_post_rdma_write(
@@ -120,16 +134,24 @@ void bbts_post_recv_message(ibv_srq *srq, uint32_t local_key, bbts_message_t& ms
 bbts_context_t* bbts_init_context(
     std::string dev_name,
     int32_t rank,
-    unsigned int num_qp,
+    unsigned int num_rank,
     uint8_t ib_port = 1,
-    uint32_t num_recv = 1024,
-    uint32_t num_send = 1024)
+    uint32_t num_send_per_qp = 0)
 {
+  // Give default values for when num_send_per_qp is not specified
+  // or given an invalid zero value
+  if(num_send_per_qp == 0) {
+    // Max ability to send 128 messages to a node
+    num_send_per_qp = 128;
+  }
+
   bbts_context_t *ctx = new bbts_context_t;
-  ctx->num_qp          = num_qp;
-  ctx->num_recv        = num_recv;
-  ctx->num_send        = num_send;
-  ctx->qps             = std::vector<ibv_qp_ptr>(num_qp);
+  ctx->num_rank         = num_rank;
+  ctx->num_send_per_qp  = num_send_per_qp;
+  ctx->qps              = std::vector<ibv_qp_ptr>(num_rank);
+
+  uint32_t num_recv       = ctx->get_num_recv();
+  uint32_t num_total_send = ctx->get_num_total_send();
 
   ibv_device  *ib_dev = NULL;
   ibv_device **dev_list = ibv_get_device_list(NULL);
@@ -162,16 +184,16 @@ bbts_context_t* bbts_init_context(
     goto clean_pd;
   }
 
-  ctx->send_msgs = new bbts_message_t[num_send];
+  ctx->send_msgs = new bbts_message_t[num_total_send];
   ctx->send_msgs_mr = ibv_reg_mr(
       ctx->pd,
-      ctx->send_msgs, num_send*sizeof(bbts_message_t),
+      ctx->send_msgs, num_total_send*sizeof(bbts_message_t),
       IBV_ACCESS_LOCAL_WRITE);
   if(!ctx->send_msgs_mr) {
     goto clean_recv_mr;
   }
 
-  ctx->cq = ibv_create_cq(ctx->context, num_send + num_recv, NULL, NULL, 0);
+  ctx->cq = ibv_create_cq(ctx->context, num_total_send + num_recv, NULL, NULL, 0);
   if (!ctx->cq) {
     goto clean_send_mr;
   }
@@ -179,7 +201,7 @@ bbts_context_t* bbts_init_context(
   {
 		ibv_srq_init_attr attr = {
 			.attr = {
-				.max_wr  = num_qp*(num_send + num_recv),
+				.max_wr  = num_recv,
 				.max_sge = 1
 			}
 		};
@@ -195,8 +217,8 @@ bbts_context_t* bbts_init_context(
       .recv_cq = ctx->cq,
       .srq     = ctx->srq,
       .cap     = {
-        .max_send_wr  = 8*num_send,
-        .max_recv_wr  = 8*num_recv,
+        .max_send_wr  = num_send_per_qp,
+        .max_recv_wr  = 0,
         .max_send_sge = 1,
         .max_recv_sge = 1
       },
@@ -204,7 +226,7 @@ bbts_context_t* bbts_init_context(
     };
 
     int i;
-    for(i = 0; i != num_qp; ++i) {
+    for(i = 0; i != num_rank; ++i) {
       if(i == rank) {
         continue;
       }
@@ -230,7 +252,7 @@ bbts_context_t* bbts_init_context(
       .port_num        = ib_port,
     };
 
-    for(int i = 0; i != num_qp; ++i) {
+    for(int i = 0; i != num_rank; ++i) {
       if(i == rank) {
         continue;
       }
@@ -248,7 +270,7 @@ bbts_context_t* bbts_init_context(
   return ctx;
 
 clean_qps:
-  for(int i = 0; i != num_qp; ++i) {
+  for(int i = 0; i != num_rank; ++i) {
     if(i == rank)
       continue;
     ibv_destroy_qp(ctx->qps[i]);
@@ -400,7 +422,7 @@ int bbts_connect_context(
     std::vector<std::string> ips,
     uint8_t ib_port = 1, int port = 18515)
 {
-  std::vector<bbts_dest_t> rem_dests(ctx->num_qp);
+  std::vector<bbts_dest_t> rem_dests(ctx->num_rank);
 
   if (ibv_query_port(ctx->context, ib_port, &ctx->portinfo)) {
     return 1;
@@ -412,7 +434,7 @@ int bbts_connect_context(
   // pingpong example, and that is what they did.
   // It is unclear to me why that is the case.
   //
-  for(int i = 0; i != ctx->num_qp; ++i) {
+  for(int i = 0; i != ctx->num_rank; ++i) {
     if(i == rank)
       continue;
 
@@ -426,7 +448,7 @@ int bbts_connect_context(
   }
 
   // PRINT DEST INFO HERE
-  for(int i = 0; i != ctx->num_qp; ++i) {
+  for(int i = 0; i != ctx->num_rank; ++i) {
     if(i == rank) {
       printf("local LID: 0x%04x\n",
              ctx->portinfo.lid);
@@ -445,27 +467,31 @@ connection_t::connection_t(
   int32_t rank,
   std::vector<std::string> ips):
     rank(rank),
-    current_recv_msg(0)
+    current_recv_msg(0),
+    send_wr_cnts(ips.size())
 {
-  int num_qp = ips.size();
+  int num_rank = ips.size();
 
   bbts_context_t *context = bbts_init_context(
     dev_name,
     rank,
-    num_qp);
+    num_rank);
 
   if(!context) {
     throw std::runtime_error("make_connection: couldn't init context");
   }
 
   // add the available send messages
-  for(int i = 0; i != context->num_send; ++i) {
+  for(int i = 0; i != context->get_num_total_send(); ++i) {
     available_send_msgs.push(i);
   }
 
+  // we can send this many items
+  std::fill(send_wr_cnts.begin(), send_wr_cnts.end(), context->num_send_per_qp);
+
   // post a receive before setting up a connection so that
   // when the connection is started, the receiving can occur
-  for(int which_recv = 0; which_recv != context->num_recv; ++which_recv) {
+  for(int which_recv = 0; which_recv != context->get_num_recv(); ++which_recv) {
     bbts_post_recv_message(
       context->srq,
       context->recv_msgs_mr->lkey,
@@ -478,9 +504,10 @@ connection_t::connection_t(
 
   destruct = false;
 
-  this->num_qp         = context->num_qp;
-  this->num_recv       = context->num_recv;
-  this->num_send       = context->num_send;
+  this->num_rank        = context->num_rank;
+  this->num_recv        = context->get_num_recv();
+  this->num_send_per_qp = context->num_send_per_qp;
+
   this->recv_msgs      = context->recv_msgs;
   this->recv_msgs_mr   = context->recv_msgs_mr;
   this->send_msgs      = context->send_msgs;
@@ -713,7 +740,7 @@ void connection_t::post_fail_send(int32_t dest_rank, tag_t tag) {
 
 int connection_t::get_recv_rank(ibv_wc const& wc)
 {
-  for(int i = 0; i != num_qp; ++i) {
+  for(int i = 0; i != num_rank; ++i) {
     if(i == rank)
       continue;
     if(queue_pairs[i]->qp_num == wc.qp_num) {
