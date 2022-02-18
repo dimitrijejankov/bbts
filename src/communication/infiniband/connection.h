@@ -159,7 +159,8 @@ private:
     recv_item_t(bool valid_promise):
       valid_promise(valid_promise),
       is_set(false),
-      own(true)
+      own(true),
+      bytes_mr(nullptr)
     {}
 
     recv_item_t(bytes_t b):

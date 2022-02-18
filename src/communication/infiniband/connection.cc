@@ -7,6 +7,7 @@
 
 #include <errno.h>
 
+#define _DCB_COUT_(x)
 
 namespace bbts {
 namespace ib {
@@ -91,8 +92,6 @@ void bbts_post_send_message(
 
   ibv_send_wr *bad_wr;
 
-  std::cout << "post send" << std::endl;
-
   if(errno = ibv_post_send(qp, &wr, &bad_wr)) {
     perror("FAILED TO POST SEND ");
     throw std::runtime_error("ibv_post_send");
@@ -113,7 +112,6 @@ void bbts_post_recv_message(ibv_srq *srq, uint32_t local_key, bbts_message_t& ms
   };
   ibv_recv_wr *bad_wr;
 
-  std::cout << "post recv" << std::endl;
   if(ibv_post_srq_recv(srq, &wr, &bad_wr)) {
     throw std::runtime_error("Error in post recv");
   }
@@ -583,7 +581,7 @@ connection_t::send_item_t::send_item_t(connection_t *connection, bytes_t b, bool
 void connection_t::send_item_t::send(
   connection_t *connection, tag_t tag, int32_t dest_rank, uint64_t remote_addr, uint32_t remote_key)
 {
-  std::cout << "post rdma write to dest " << dest_rank << ", tag " << tag << std::endl;
+  _DCB_COUT_("post rdma write to dest " << dest_rank << ", tag " << tag << std::endl);
 
   // TODO: what happens when size bigger than 2^31...
   // TODO: what wrid?
@@ -629,7 +627,7 @@ void connection_t::recv_item_t::init(connection_t *connection, uint64_t size){
 }
 
 void connection_t::post_open_send(int32_t dest_rank, tag_t tag, uint64_t size, bool imm){
-  std::cout << "post open send to dest " << dest_rank << ", tag " << tag << std::endl;
+  _DCB_COUT_("post open send to dest " << dest_rank << ", tag " << tag << std::endl);
 
   int i = available_send_msgs.front();
   available_send_msgs.pop();
@@ -655,7 +653,7 @@ void connection_t::post_open_send(int32_t dest_rank, tag_t tag, uint64_t size, b
 void connection_t::post_open_recv(
   int32_t dest_rank, tag_t tag, uint64_t addr, uint64_t size, uint32_t key)
 {
-  std::cout << "post open recv to dest " << dest_rank << ", tag " << tag << std::endl;
+  _DCB_COUT_("post open recv to dest " << dest_rank << ", tag " << tag << std::endl);
 
   int i = available_send_msgs.front();
   available_send_msgs.pop();
@@ -677,7 +675,7 @@ void connection_t::post_open_recv(
 }
 
 void connection_t::post_close(int32_t dest_rank, tag_t tag){
-  std::cout << "post close to dest " << dest_rank << ", tag " << tag << std::endl;
+  _DCB_COUT_("post close to dest " << dest_rank << ", tag " << tag << std::endl);
 
   int i = available_send_msgs.front();
   available_send_msgs.pop();
@@ -693,7 +691,7 @@ void connection_t::post_close(int32_t dest_rank, tag_t tag){
 
 
 void connection_t::post_fail_send(int32_t dest_rank, tag_t tag) {
-  std::cout << "post fail send, to dest  " << dest_rank << ", tag " << tag << std::endl;
+  _DCB_COUT_("post fail send, to dest  " << dest_rank << ", tag " << tag << std::endl);
 
   int i = available_send_msgs.front();
   available_send_msgs.pop();
@@ -721,7 +719,7 @@ int connection_t::get_recv_rank(ibv_wc const& wc)
 
 void connection_t::handle_message(int32_t recv_rank, bbts_message_t const& msg) {
   if(msg.type == bbts_message_t::message_type::open_send) {
-    std::cout << "recvd open send from " << recv_rank << std::endl;
+    _DCB_COUT_("recvd open send from " << recv_rank << ", tag " << msg.tag << std::endl);
 
     // There are two cases: this send needs a recv now or later.
     // If now and the the recv_item_t doesn't exist, create one.
@@ -751,7 +749,7 @@ void connection_t::handle_message(int32_t recv_rank, bbts_message_t const& msg) 
       item.bytes.size,
       item.bytes_mr->rkey);
   } else if(msg.type == bbts_message_t::message_type::open_recv) {
-    std::cout << "recvd open recv from " << recv_rank << std::endl;
+    _DCB_COUT_("recvd open recv from " << recv_rank << ", tag " << msg.tag << std::endl);
 
     // Do an rdma write if there is a send request available.
     // Otherwise, save the message for when send_bytes is called.
@@ -766,7 +764,7 @@ void connection_t::handle_message(int32_t recv_rank, bbts_message_t const& msg) 
       item.send(this, msg.tag, recv_rank, msg.m.open_recv.addr, msg.m.open_recv.key);
     }
   } else if(msg.type == bbts_message_t::message_type::close_send) {
-    std::cout << "recvd close send from " << recv_rank << std::endl;
+    _DCB_COUT_("recvd close send from " << recv_rank << ", tag " << msg.tag << std::endl);
 
     // the recv item knows it has been written to so set the future
     // on the recv_item delete it UNLESS the promise is invalid
@@ -789,7 +787,7 @@ void connection_t::handle_message(int32_t recv_rank, bbts_message_t const& msg) 
       item.is_set = true;
     }
   } else if(msg.type == bbts_message_t::message_type::fail_send) {
-    std::cout << "recvd fail send from " << recv_rank << std::endl;
+    _DCB_COUT_("recvd fail send from " << recv_rank << ", tag " << msg.tag << std::endl);
 
     // set the future item to false and delete it
     auto iter = send_items.find({msg.tag, recv_rank});
@@ -877,6 +875,7 @@ void connection_t::poll(){
               recv_items.erase(iter_recv);
             } else {
               iter_recv->second->pr_bytes = std::move(item.second->pr_bytes);
+              iter_recv->second->valid_promise = true;
             }
           } else if(iter_pend != pending_recvs.end()) {
             // An open recv command hasn't been sent but we have the available information to
@@ -935,14 +934,14 @@ void connection_t::poll(){
         auto wr_id = work_completion.wr_id;
         int32_t wc_rank = get_recv_rank(work_completion);
         if(is_rdma_write && wr_id > 0) {
-          std::cout << "finished an rdma write" << std::endl;
+          _DCB_COUT_("finished an rdma write" << std::endl);
           // an rdma write occured, inform destination we are done
           auto tag = wr_id;
           post_close(wc_rank, tag);
         } else if(is_send) {
           int i = wr_id;
           if(send_msgs[i].type == bbts_message_t::message_type::close_send) {
-            std::cout << "finished send close tag " << send_msgs[i].tag << std::endl;
+            _DCB_COUT_("finished send close tag " << send_msgs[i].tag << std::endl);
             auto iter = send_items.find({send_msgs[i].tag, wc_rank});
             if(iter == send_items.end()) {
               throw std::runtime_error("can't close send item, how can it not be here");
