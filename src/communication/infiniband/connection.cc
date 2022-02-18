@@ -18,6 +18,8 @@ struct bbts_dest_t {
   uint32_t psn;
 };
 
+// TODO: it'd really be better to have a set of qps dedicated to just rdma writes.
+// Now rdma writes are shared with the qps that also send messages
 struct bbts_context_t {
   ibv_context  *context;
   ibv_pd    *pd;
@@ -33,7 +35,10 @@ struct bbts_context_t {
   ibv_mr *send_msgs_mr;
 
   uint8_t num_rank;
-  uint32_t num_send_per_qp;
+  uint32_t num_send_per_qp; // the number of send messages that can be added to each
+                            // queue pair
+  uint32_t num_write_per_qp; // the number of rmda writes that can be added to each
+                             // queue pair
 
   uint32_t get_num_recv() const {
     // If every other node sends as many messages as they can here,
@@ -48,7 +53,9 @@ struct bbts_context_t {
     // there is one qp for every rank except this rank
     return num_rank - 1;
   }
-
+  uint32_t get_num_total_write() const {
+    return get_num_qp()*num_write_per_qp;
+  }
 };
 
 void bbts_post_rdma_write(
@@ -82,6 +89,17 @@ void bbts_post_rdma_write(
     perror("ibv_post_send for rdma write ");
     throw std::runtime_error("ibv_post_send");
   }
+}
+
+void bbts_post_rdma_write(
+  ibv_qp *qp,
+  bbts_rdma_write_t const& r)
+{
+  bbts_post_rdma_write(
+    qp,
+    r.wr_id,
+    r.local_addr, r.local_size, r.local_key,
+    r.remote_addr, r.remote_key);
 }
 
 void bbts_post_send_message(
@@ -137,22 +155,29 @@ bbts_context_t* bbts_init_context(
     int32_t rank,
     unsigned int num_rank,
     uint8_t ib_port = 1,
-    uint32_t num_send_per_qp = 0)
+    uint32_t num_send_per_qp = 0,
+    uint32_t num_write_per_qp = 0)
 {
   // Give default values for when num_send_per_qp is not specified
   // or given an invalid zero value
   if(num_send_per_qp == 0) {
     // Max ability to send 128 messages to a node
-    num_send_per_qp = 128;
+    num_send_per_qp = 256;//128;
+  }
+  if(num_write_per_qp == 0) {
+    // Max ability to do this many rdma writes
+    num_write_per_qp = 64;//32;
   }
 
   bbts_context_t *ctx = new bbts_context_t;
   ctx->num_rank         = num_rank;
   ctx->num_send_per_qp  = num_send_per_qp;
+  ctx->num_write_per_qp = num_write_per_qp;
   ctx->qps              = std::vector<ibv_qp_ptr>(num_rank);
 
-  uint32_t num_recv       = ctx->get_num_recv();
-  uint32_t num_total_send = ctx->get_num_total_send();
+  uint32_t num_recv        = ctx->get_num_recv();
+  uint32_t num_total_send  = ctx->get_num_total_send();
+  uint32_t num_total_write = ctx->get_num_total_write();
 
   ibv_device  *ib_dev = NULL;
   ibv_device **dev_list = ibv_get_device_list(NULL);
@@ -194,7 +219,10 @@ bbts_context_t* bbts_init_context(
     goto clean_recv_mr;
   }
 
-  ctx->cq = ibv_create_cq(ctx->context, num_total_send + num_recv, NULL, NULL, 0);
+  ctx->cq = ibv_create_cq(
+    ctx->context,
+    num_total_write + num_total_send + num_recv,
+    NULL, NULL, 0);
   if (!ctx->cq) {
     goto clean_send_mr;
   }
@@ -218,7 +246,7 @@ bbts_context_t* bbts_init_context(
       .recv_cq = ctx->cq,
       .srq     = ctx->srq,
       .cap     = {
-        .max_send_wr  = num_send_per_qp,
+        .max_send_wr  = num_send_per_qp + num_write_per_qp,
         .max_recv_wr  = 0,
         .max_send_sge = 1,
         .max_recv_sge = 1
@@ -467,10 +495,12 @@ connection_t::connection_t(
   std::string dev_name,
   int32_t rank,
   std::vector<std::string> ips):
-    pending_msgs(ips.size()),
     rank(rank),
     current_recv_msg(0),
-    send_wr_cnts(ips.size())
+    send_wr_cnts(ips.size()),
+    pending_msgs(ips.size()),
+    write_wr_cnts(ips.size()),
+    pending_writes(ips.size())
 {
   int num_rank = ips.size();
 
@@ -490,6 +520,8 @@ connection_t::connection_t(
 
   // we can send this many items
   std::fill(send_wr_cnts.begin(), send_wr_cnts.end(), context->num_send_per_qp);
+  // we can do this many rdma writes
+  std::fill(write_wr_cnts.begin(), write_wr_cnts.end(), context->num_write_per_qp);
 
   // post a receive before setting up a connection so that
   // when the connection is started, the receiving can occur
@@ -506,9 +538,10 @@ connection_t::connection_t(
 
   destruct = false;
 
-  this->num_rank        = context->num_rank;
-  this->num_recv        = context->get_num_recv();
-  this->num_send_per_qp = context->num_send_per_qp;
+  this->num_rank         = context->num_rank;
+  this->num_recv         = context->get_num_recv();
+  this->num_send_per_qp  = context->num_send_per_qp;
+  this->num_write_per_qp = context->num_write_per_qp;
 
   this->recv_msgs      = context->recv_msgs;
   this->recv_msgs_mr   = context->recv_msgs_mr;
@@ -619,10 +652,15 @@ void connection_t::send_item_t::send(
 
   // TODO: what happens when size bigger than 2^31...
   // TODO: what wrid?
-  bbts_post_rdma_write(
-    connection->queue_pairs[dest_rank], tag,
-    bytes.data, bytes.size, bytes_mr->lkey,
-    remote_addr, remote_key);
+  connection->post_rdma_write(dest_rank,
+  {
+    .wr_id       = tag,
+    .local_addr  = bytes.data,
+    .local_size  = bytes.size,
+    .local_key   = bytes_mr->lkey,
+    .remote_addr = remote_addr,
+    .remote_key  = remote_key
+  });
 }
 
 std::future<recv_bytes_t> connection_t::recv_item_t::get_future_bytes() {
@@ -671,6 +709,16 @@ void connection_t::post_send(int32_t dest_rank, bbts_message_t const& msg) {
 
     send_msgs[i] = msg;
     bbts_post_send_message(queue_pairs[dest_rank], i, send_msgs_mr->lkey, send_msgs[i]);
+  }
+}
+
+void connection_t::post_rdma_write(int32_t dest_rank, bbts_rdma_write_t const& r) {
+  if(write_wr_cnts[dest_rank] == 0) {
+    pending_writes[dest_rank].push(r);
+  } else {
+    write_wr_cnts[dest_rank] -= 1;
+
+    bbts_post_rdma_write(queue_pairs[dest_rank], r);
   }
 }
 
@@ -969,9 +1017,24 @@ void connection_t::poll(){
         int32_t wc_rank = get_recv_rank(work_completion);
         if(is_rdma_write && wr_id > 0) {
           _DCB_COUT_("finished an rdma write" << std::endl);
-          // an rdma write occured, inform destination we are done
+          // an rdma write occured
           auto tag = wr_id;
-          post_close(wc_rank, tag);
+          auto dest_rank = wc_rank;
+
+          // inform the destination we are done
+          post_close(dest_rank, tag);
+
+          // update the write_wr_cnt
+          write_wr_cnts[dest_rank] += 1;
+
+          if(!pending_writes[dest_rank].empty()) {
+            // making an rdma write, decement it back
+            write_wr_cnts[dest_rank] -= 1;
+            // get the meta data and do the write
+            post_rdma_write(dest_rank, pending_writes[dest_rank].front());
+            // and remove the item from the queue
+            pending_writes[dest_rank].pop();
+          }
         } else if(is_send) {
           int i = wr_id;
           if(send_msgs[i].type == bbts_message_t::message_type::close_send) {

@@ -93,6 +93,15 @@ struct bbts_message_t {
   } m;
 };
 
+struct bbts_rdma_write_t {
+  uint64_t wr_id;
+  void* local_addr;
+  uint32_t local_size;
+  uint32_t local_key;
+  uint64_t remote_addr;
+  uint32_t remote_key;
+};
+
 struct connection_t {
   connection_t(
     std::string dev_name,
@@ -205,6 +214,7 @@ private:
 
 private:
   void post_send(int32_t dest_rank, bbts_message_t const& msg);
+  void post_rdma_write(int32_t dest_rank, bbts_rdma_write_t const& r);
   void post_open_send(int32_t dest_rank, tag_t tag, uint64_t size, bool imm);
   void post_open_recv(
     int32_t dest_rank, tag_t tag,
@@ -238,8 +248,6 @@ private:
   std::mutex send_m, recv_m;
 
   std::queue<int> available_send_msgs;
-  std::vector<std::queue<bbts_message_t> > pending_msgs;
-
   bbts_message_t* send_msgs;
   ibv_mr* send_msgs_mr;
 
@@ -270,10 +278,16 @@ private:
   int32_t num_rank;
   uint32_t num_recv;
   uint32_t num_send_per_qp;
+  uint32_t num_write_per_qp;
 
   // for each rank except self, contain the number of send wrs left.
   // if this hits zero, you can't post a send to the given location
   std::vector<uint32_t> send_wr_cnts;
+  std::vector<std::queue<bbts_message_t> > pending_msgs;
+
+  // same same but for rdma writes
+  std::vector<uint32_t> write_wr_cnts;
+  std::vector<std::queue<bbts_rdma_write_t> > pending_writes;
 };
 
 
