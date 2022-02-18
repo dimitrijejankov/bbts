@@ -32,22 +32,34 @@ void three_node(int rank, size_t size, size_t num, GenConnection g) {
     for(int i = 0; i != num; ++i) {
       futs.push_back(c.send_bytes_wait(1, 100+i, bs[i]));
       futs.push_back(c.send_bytes_wait(2, 100+i, bs[i]));
+      auto idx = futs.size();
+      futs[idx-1].wait();
+      futs[idx-2].wait();
     }
     for(int i = num; i != 2*num; ++i) {
       futs.push_back(c.recv_bytes_wait(100+i, bs[i]));
+      auto idx = futs.size();
+      futs[idx-1].wait();
     }
   } else if(rank == 1) {
     for(int i = 0; i != num; ++i) {
       futs.push_back(c.recv_bytes_wait(100+i, bs[i]));
+      auto idx = futs.size();
+      futs[idx-1].wait();
     }
     for(int i = num; i != 2*num; ++i) {
       futs.push_back(c.send_bytes_wait(0, 100+i, bs[i]));
       futs.push_back(c.send_bytes_wait(2, 100+i, bs[i]));
+      auto idx = futs.size();
+      futs[idx-1].wait();
+      futs[idx-2].wait();
     }
   } else if(rank == 2) {
     // everything sends here
     for(int i = 0; i != 2*num; ++i) {
       futs.push_back(c.recv_bytes_wait(100 + i, bs[i]));
+      auto idx = futs.size();
+      futs[idx-1].wait();
     }
   }
 
@@ -55,12 +67,12 @@ void three_node(int rank, size_t size, size_t num, GenConnection g) {
     fut.get();
   }
 
-  for(bytes_t b: bs) {
-    float* data = (float*)b.data;
-    std::cout << " @ " << data[0];
-    delete[] data;
-  }
-  std::cout << std::endl;
+  //for(bytes_t b: bs) {
+  //  float* data = (float*)b.data;
+  //  std::cout << " @ " << data[0];
+  //  delete[] data;
+  //}
+  //std::cout << std::endl;
 
 }
 
@@ -86,8 +98,8 @@ void two_node(int rank, size_t size, size_t num, GenConnection g) {
     for(int i = 0; i != num; ++i) {
       sends.push_back(c.send_bytes(1, 100 + i, bs[i]));
       recvs.push_back(c.recv_bytes(100 + num + i));
-      sends.back().wait();
-      recvs.back().wait();
+      //sends.back().wait();
+      //recvs.back().wait();
     }
   } else if(rank == 1) {
     // send tag [100, 100+num)
@@ -95,8 +107,8 @@ void two_node(int rank, size_t size, size_t num, GenConnection g) {
     for(int i = 0; i != num; ++i) {
       sends.push_back(c.send_bytes(0, 100 +num + i, bs[i]));
       recvs.push_back(c.recv_bytes(100 + i));
-      sends.back().wait();
-      recvs.back().wait();
+      //sends.back().wait();
+      //recvs.back().wait();
     }
   }
 
@@ -160,6 +172,7 @@ int main(int argc, char **argv) {
 
   size_t size = 1024;
   size_t num = 1000;
+
   //size_t size = 1024; //10240*10240*4;
   //size_t num = 1000;
 

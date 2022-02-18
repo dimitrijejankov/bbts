@@ -68,12 +68,22 @@ struct bbts_message_t {
   enum message_type { open_send, open_recv, close_send, fail_send };
   message_type type;
   int32_t rank;
+  int32_t from_rank;
+  // ^ TODO: It'd be better to not also send from_rank, since in theory,
+  // any work completion will know the qp_num, which means the from_rank can
+  // be determined. Yet for some unknown reason, rank-from-qp_num is not
+  // equalling from_rank in the some three-node experiment...
+  // In the experiment, node 0 was getting a message from node 1 and ndoe 2,
+  // and thinking msg from node 1 came from node 2 and msg from node 2 came
+  // from node 1.
+  //
+  // TLDR: Including from_rank and using that when deciphering where a message
+  // comes from prevents a bug...
   tag_t tag;
   union {
     struct {
       bool immediate;
       uint64_t size;
-      int32_t rank;
     } open_send;
     struct {
       uint64_t addr;
@@ -205,7 +215,7 @@ private:
   // find out what queue pair was responsible for this work request
   int32_t get_recv_rank(ibv_wc const& wc);
 
-  void handle_message(int32_t recv_rank, bbts_message_t const& msg);
+  void handle_message(bbts_message_t const& msg);
 
 private:
   int32_t rank;

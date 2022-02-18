@@ -7,7 +7,7 @@
 
 #include <errno.h>
 
-#define _DCB_COUT_(x)
+#define _DCB_COUT_(x) // std::cout << x
 
 namespace bbts {
 namespace ib {
@@ -551,7 +551,7 @@ std::future<recv_bytes_t> connection_t::recv_bytes(tag_t recv_tag){
 }
 
 std::future<bool> connection_t::send_bytes_wait(int32_t dest_rank, tag_t send_tag, bytes_t bytes){
-  return send_bytes_(dest_rank, send_tag, bytes, true);
+  return send_bytes_(dest_rank, send_tag, bytes, false);
 }
 
 std::future<bool> connection_t::recv_bytes_wait(tag_t recv_tag, bytes_t bytes) {
@@ -579,9 +579,14 @@ connection_t::send_item_t::send_item_t(connection_t *connection, bytes_t b, bool
 }
 
 void connection_t::send_item_t::send(
-  connection_t *connection, tag_t tag, int32_t dest_rank, uint64_t remote_addr, uint32_t remote_key)
+  connection_t *connection,
+  tag_t tag,
+  int32_t dest_rank,
+  uint64_t remote_addr,
+  uint32_t remote_key)
 {
-  _DCB_COUT_("post rdma write to dest " << dest_rank << ", tag " << tag << std::endl);
+  _DCB_COUT_("post rdma write to dest " << dest_rank << ", tag " << tag << ", key " <<
+      remote_key << ", address " << remote_addr << std::endl);
 
   // TODO: what happens when size bigger than 2^31...
   // TODO: what wrid?
@@ -634,15 +639,13 @@ void connection_t::post_open_send(int32_t dest_rank, tag_t tag, uint64_t size, b
 
   send_msgs[i] = {
     .type = bbts_message_t::message_type::open_send,
-    .rank = dest_rank,
+    .rank      = dest_rank,
+    .from_rank = rank,
     .tag = tag,
     .m = {
       .open_send {
         .immediate = imm,
         .size = size,
-        .rank = rank // This information is redundant in the sense that the work completion
-                     // on the other side can figure out what the rank is. However, it is
-                     // easier if it is also stored here.
       }
     }
   };
@@ -653,14 +656,15 @@ void connection_t::post_open_send(int32_t dest_rank, tag_t tag, uint64_t size, b
 void connection_t::post_open_recv(
   int32_t dest_rank, tag_t tag, uint64_t addr, uint64_t size, uint32_t key)
 {
-  _DCB_COUT_("post open recv to dest " << dest_rank << ", tag " << tag << std::endl);
+  _DCB_COUT_("post open recv to dest " << dest_rank << ", tag " << tag << ", key " << key << ", address " << addr << std::endl);
 
   int i = available_send_msgs.front();
   available_send_msgs.pop();
 
   send_msgs[i] = {
     .type = bbts_message_t::message_type::open_recv,
-    .rank = dest_rank,
+    .rank      = dest_rank,
+    .from_rank = rank,
     .tag = tag,
     .m = {
       .open_recv {
@@ -682,7 +686,8 @@ void connection_t::post_close(int32_t dest_rank, tag_t tag){
 
   send_msgs[i] = {
     .type = bbts_message_t::message_type::close_send,
-    .rank = dest_rank,
+    .rank      = dest_rank,
+    .from_rank = rank,
     .tag = tag
   };
 
@@ -698,7 +703,8 @@ void connection_t::post_fail_send(int32_t dest_rank, tag_t tag) {
 
   send_msgs[i] = {
     .type = bbts_message_t::message_type::fail_send,
-    .rank = dest_rank,
+    .rank      = dest_rank,
+    .from_rank = rank,
     .tag = tag
   };
 
@@ -717,7 +723,8 @@ int connection_t::get_recv_rank(ibv_wc const& wc)
   throw std::runtime_error("could not get rank from work completion");
 }
 
-void connection_t::handle_message(int32_t recv_rank, bbts_message_t const& msg) {
+void connection_t::handle_message(bbts_message_t const& msg) {
+  int32_t const& recv_rank = msg.from_rank;
   if(msg.type == bbts_message_t::message_type::open_send) {
     _DCB_COUT_("recvd open send from " << recv_rank << ", tag " << msg.tag << std::endl);
 
@@ -895,14 +902,14 @@ void connection_t::poll(){
               // On this side, we tell the recv item we failed
               r.pr_complete.set_value(false);
               // On that side, we tell the waiting send that this isn't gonna happen
-              this->post_fail_send(msg.m.open_send.rank, tag);
+              this->post_fail_send(msg.from_rank, tag);
             } else {
               // init the item (this won't allocate anything since it doesn't own bytes)
               r.init(this, msg.m.open_recv.size);
 
               // sending a message back to the location that sent this message
               this->post_open_recv(
-                msg.m.open_send.rank,
+                msg.from_rank,
                 tag,
                 (uint64_t)r.bytes.data,
                 r.bytes.size,
@@ -922,9 +929,14 @@ void connection_t::poll(){
       }
 
       // 4. is there anything in the receive queue? If so, handle it
+      //    TODO: tidy this up; create a parse work_completion function..
       int ne = ibv_poll_cq(completion_queue, 1, &work_completion);
-      while(ne) {
-        if(work_completion.status) {
+      while(ne != 0) {
+        if(ne < 0) {
+          throw std::runtime_error("ibv_poll_cq error");
+        }
+        if(int err = work_completion.status) {
+          _DCB_COUT_("work completion status " << err << std::endl);
           throw std::runtime_error("work completion error");
         }
 
@@ -968,11 +980,10 @@ void connection_t::poll(){
             current_recv_msg = 0;
           }
 
-          this->handle_message(wc_rank, msg);
+          this->handle_message(msg);
         } else {
           throw std::runtime_error("unhandled item from recv queue");
         }
-
         ne = ibv_poll_cq(completion_queue, 1, &work_completion);
       }
     }
