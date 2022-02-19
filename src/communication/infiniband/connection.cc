@@ -162,11 +162,11 @@ bbts_context_t* bbts_init_context(
   // or given an invalid zero value
   if(num_send_per_qp == 0) {
     // Max ability to send 128 messages to a node
-    num_send_per_qp = 256;//128;
+    num_send_per_qp = 128;
   }
   if(num_write_per_qp == 0) {
     // Max ability to do this many rdma writes
-    num_write_per_qp = 64;//32;
+    num_write_per_qp = 32;
   }
 
   bbts_context_t *ctx = new bbts_context_t;
@@ -694,6 +694,7 @@ void connection_t::recv_item_t::init(connection_t *connection, uint64_t size){
       bytes.data, bytes.size,
       IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE);
   if(!bytes_mr) {
+    perror("register mr fail recv bytes ");
     throw std::runtime_error("couldn't register mr for recv bytes");
   }
 }
@@ -714,8 +715,10 @@ void connection_t::post_send(int32_t dest_rank, bbts_message_t const& msg) {
 
 void connection_t::post_rdma_write(int32_t dest_rank, bbts_rdma_write_t const& r) {
   if(write_wr_cnts[dest_rank] == 0) {
+    _DCB_COUT_("rdma write to pending writes" << std::endl);
     pending_writes[dest_rank].push(r);
   } else {
+    _DCB_COUT_("rdma write direct" << std::endl);
     write_wr_cnts[dest_rank] -= 1;
 
     bbts_post_rdma_write(queue_pairs[dest_rank], r);
@@ -1016,7 +1019,7 @@ void connection_t::poll(){
         auto wr_id = work_completion.wr_id;
         int32_t wc_rank = get_recv_rank(work_completion);
         if(is_rdma_write && wr_id > 0) {
-          _DCB_COUT_("finished an rdma write" << std::endl);
+          _DCB_COUT_("finished rdma write " << wr_id << std::endl);
           // an rdma write occured
           auto tag = wr_id;
           auto dest_rank = wc_rank;
@@ -1028,10 +1031,13 @@ void connection_t::poll(){
           write_wr_cnts[dest_rank] += 1;
 
           if(!pending_writes[dest_rank].empty()) {
+            _DCB_COUT_("rdma write from queue" << std::endl);
             // making an rdma write, decement it back
             write_wr_cnts[dest_rank] -= 1;
             // get the meta data and do the write
-            post_rdma_write(dest_rank, pending_writes[dest_rank].front());
+            bbts_post_rdma_write(
+              queue_pairs[dest_rank],
+              pending_writes[dest_rank].front());
             // and remove the item from the queue
             pending_writes[dest_rank].pop();
           }

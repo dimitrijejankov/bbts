@@ -98,8 +98,8 @@ void two_node(int rank, size_t size, size_t num, GenConnection g) {
     for(int i = 0; i != num; ++i) {
       sends.push_back(c.send_bytes(1, 100 + i, bs[i]));
       recvs.push_back(c.recv_bytes(100 + num + i));
-      sends.back().wait();
-      recvs.back().wait();
+      //sends.back().wait();
+      //recvs.back().wait();
     }
   } else if(rank == 1) {
     // send tag [100, 100+num)
@@ -107,8 +107,8 @@ void two_node(int rank, size_t size, size_t num, GenConnection g) {
     for(int i = 0; i != num; ++i) {
       sends.push_back(c.send_bytes(0, 100 +num + i, bs[i]));
       recvs.push_back(c.recv_bytes(100 + i));
-      sends.back().wait();
-      recvs.back().wait();
+      //sends.back().wait();
+      //recvs.back().wait();
     }
   }
 
