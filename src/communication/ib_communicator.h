@@ -12,6 +12,8 @@
 
 namespace bbts {
 
+using ib::tag_t;
+
 struct ib_communicator_t {
   explicit ib_communicator_t(
     node_config_ptr_t const& _cfg,
@@ -21,20 +23,13 @@ struct ib_communicator_t {
 
   ~ib_communicator_t();
 
-  // send a response string
+  // send a response string to node 0
   bool send_response_string(const std::string &val);
-
-  // expect a response string
   std::tuple<bool, std::string> expect_response_string(node_id_t _node);
 
-  // recives a blob with the matching tag from a given node, method blocks
-  bool recv_sync(void *_bytes, size_t num_bytes, node_id_t _node, int32_t _tag);
-
-  // does the send, method is blocking
+  // sends, recives a blob with the matching tag from a given node, blocking
   bool send_sync(const void *_bytes, size_t num_bytes, node_id_t _node, int32_t _tag);
-
-  // wait for async request
-  //bool wait_async(async_request_t &_request);
+  bool recv_sync(void *_bytes, size_t num_bytes, node_id_t _node, int32_t _tag);
 
   // notify a node that tensors were created
   bool tensors_created_notification(
@@ -98,6 +93,25 @@ struct ib_communicator_t {
 
   // return the number of nodes
   int32_t get_num_nodes() const;
+private:
+//  enum com_tag {
+//    response_string_tag = 1,
+//    notify_tensor_tag,
+//    free_tag
+//  };
+//  tag_t get_tag(com_tag t, int32_t rank) const {
+//    return t*get_num_nodes() + rank;
+//  }
+//  tag_t get_response_string_tag(int32_t rank) const {
+//    return get_tag(com_tag::response_str_tag, rank);
+//  }
+//  tag_t get_free_tag(int32_t rank, int t) const {
+//    return get_tag(com_tag::free_tag + t, rank);
+//  }
+//  //tag_t get_notify_tensor_tag() const {
+//  //  return get_tag(com_tag::notify_tensor_tag, 0);
+//  //}
+
 private:
   ib::connection_t connection;
 };

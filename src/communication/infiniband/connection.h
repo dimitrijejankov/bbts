@@ -8,25 +8,38 @@
 #include <map>
 #include <vector>
 #include <queue>
+#include <memory>
 
 #include <infiniband/verbs.h>
 
 namespace bbts {
 namespace ib {
 
+using std::future;
+using std::promise;
+using std::tuple;
+
+using tag_t = uint64_t;
+using ibv_qp_ptr = decltype(ibv_create_qp(NULL, NULL));
+
 struct bytes_t {
   void* data;
   uint64_t size;
 };
 
-struct recv_bytes_t {
-  recv_bytes_t(bytes_t b):
+struct own_bytes_t {
+  own_bytes_t():
+    ptr(nullptr), size(0)
+  {}
+
+  own_bytes_t(bytes_t b):
     ptr((char*)b.data), size(b.size)
   {}
 
   std::unique_ptr<char[]> ptr;
   uint64_t size;
 };
+
 
 template <typename T>
 bytes_t to_bytes_t(T* ptr, size_t num_t_elems) {
@@ -36,53 +49,50 @@ bytes_t to_bytes_t(T* ptr, size_t num_t_elems) {
   };
 }
 
-using tag_t = uint64_t;
-using ibv_qp_ptr = decltype(ibv_create_qp(NULL, NULL));
+using tag_rank_t = tuple<tag_t, int32_t>;
 
-struct tag_rank_t {
-  //tag_rank_t(tag_t tag, int rank): tag(tag), rank(rank) {}
-  tag_t tag;
-  int32_t rank;
-};
-
-struct tag_rank_less_t {
-  bool operator()(tag_rank_t const& lhs, tag_rank_t const& rhs) const {
-    if(lhs.tag == rhs.tag) {
-      return lhs.rank < rhs.rank;
-    }
-    return lhs.tag < rhs.tag;
-  }
-};
+//struct tag_rank_t {
+//  //tag_rank_t(tag_t tag, int rank): tag(tag), rank(rank) {}
+//  tag_t tag;
+//  int32_t rank;
+//};
+//
+//struct tag_rank_less_t {
+//  bool operator()(tag_rank_t const& lhs, tag_rank_t const& rhs) const {
+//    if(lhs.tag == rhs.tag) {
+//      return lhs.rank < rhs.rank;
+//    }
+//    return lhs.tag < rhs.tag;
+//  }
+//};
 
 // As an algebraic data type, bbts_message_t looks something like this:
-//   data BbtsMessage =
-//       OpenSend  Rank Tag Immediate Size
-//     | OpenRecv  Rank Tag Addr Size Key
-//     | CloseSend Rank Tag
-//     | FailSend  Rank Tag
-// Once an OpenRecv is obtained, write the data into it.
-// If an OpenRecv is not available, send an OpenSend command.
-// Send CloseSend to remote data  holder whenever a write has finished
-// FailSend tells send item it isn't gonna get recv data
+//  type BbtsMessage = (Rank, Tag, Info)
+//  data Info =
+//       OpenFromSend  Size
+//       -- ^ tell the recv node how much memory it needs to recv the message
+//     | OpenFromRecv  Addr Size Key
+//       -- ^ tell the sending node where it can write to
+//     | CloseFromSend
+//       -- ^ tell the recv node the data has been written to
+//     | FailFromSend
+//       -- ^ tell the recv side data will not be written to
+//     | FailFromRecv
+//       -- ^ tell the send side there is no data to write to
 struct bbts_message_t {
-  enum message_type { open_send, open_recv, close_send, fail_send };
+  enum message_type { open_send, open_recv, close_send, fail_send, fail_recv };
+
   message_type type;
   int32_t rank;
   int32_t from_rank;
-  // ^ TODO: It'd be better to not also send from_rank, since in theory,
-  // any work completion will know the qp_num, which means the from_rank can
-  // be determined. Yet for some unknown reason, rank-from-qp_num is not
-  // equalling from_rank in the some three-node experiment...
-  // In the experiment, node 0 was getting a message from node 1 and ndoe 2,
-  // and thinking msg from node 1 came from node 2 and msg from node 2 came
-  // from node 1.
-  //
-  // TLDR: Including from_rank and using that when deciphering where a message
-  // comes from prevents a bug...
+  // ^ In theory, for any work completion, it's easy to get the from_rank.
+  //   However, there was a bug where the from rank computed in this way was incorrect
+  //   and it couldn't be determiend why.
+  //   Instead, the from rank is also part of the message.
+  //   TODO: remove from_rank.
   tag_t tag;
   union {
     struct {
-      bool immediate;
       uint64_t size;
     } open_send;
     struct {
@@ -102,6 +112,17 @@ struct bbts_rdma_write_t {
   uint32_t remote_key;
 };
 
+struct virtual_send_queue_t;
+struct virtual_recv_queue_t;
+
+struct send_item_t;
+struct recv_item_t;
+
+using recv_item_ptr_t = std::shared_ptr<recv_item_t>;
+
+// The connection_t object holds an "infinite" set of queues, each queue
+// specified by a tag. The idea is that each queue must only be processing one
+// item at a time.
 struct connection_t {
   connection_t(
     std::string dev_name,
@@ -110,123 +131,74 @@ struct connection_t {
 
   ~connection_t();
 
-  // ASSUMPTION: send_bytes and recv_bytes will be called at
-  // most once for each tag value.
-  // LOOSER ASSUMPTION: a tag can be used again when both sides
-  //                    have completed the communication
+  future<bool> send(int32_t dest_rank, tag_t tag, bytes_t bytes);
+  future<bool> send(int32_t dest_rank, tag_t tag, bytes_t bytes, ibv_mr* bytes_mr);
 
-  // Send these bytes. The memory can be released once the
-  // returned future is ready. If the future returns a false,
-  // the data was not recieved by the peer connection_t object.
-  // This does not guarantee that recieve_bytes was called
-  // by the peer connection, though.
-  std::future<bool> send_bytes(int32_t dest_rank, tag_t send_tag, bytes_t bytes);
-  std::future<recv_bytes_t> recv_bytes(tag_t recv_tag);
+  future<tuple<bool, int32_t, own_bytes_t> > recv(tag_t tag);
 
-  // These functions are effectively the same as send_ and recv_ bytes except
-  // the recving end will not allocate memory and will instead write into the provided
-  // memory.
-  // Case send_bytes, recv_bytes:
-  //   S. tell R open send
-  //   R. allocates memory, tells S.
-  //   S. rdma writes to S.
-  //   S. tell R close
-  //   R. on close, bytes are written to, release memory in recv_bytes_t
-  // Case send_bytes_wait, recv_bytes_wait:
-  //   S. tell R open send with wait
-  //   R. once user has called recv_bytes_wait, tell S
-  //   S. rdma writes to S.
-  //   S. tell R close
-  //   R. on close, note success
-  // (The ordering as shown is not necessarily what must happen)
-  //
-  // send_bytes/recv_bytes_wait and send_bytes_wait/recv_bytes pairs
-  // are intended to be UNDEFINED.
-  std::future<bool> send_bytes_wait(int32_t dest_rank, tag_t send_tag, bytes_t bytes);
-  std::future<bool> recv_bytes_wait(tag_t recv_tag, bytes_t bytes);
+  future<tuple<bool, int32_t> > recv_with_bytes(
+    tag_t tag, bytes_t bytes);
+  future<tuple<bool, int32_t > > recv_with_bytes(
+    tag_t tag, bytes_t bytes, ibv_mr* bytes_mr);
+
+  future<tuple<bool, own_bytes_t>> recv_from(int32_t from_rank, tag_t tag);
+  future<bool> recv_from_with_bytes(
+    int32_t from_rank, tag_t tag, bytes_t bytes);
+  future<bool> recv_from_with_bytes(
+    int32_t from_rank, tag_t tag, bytes_t bytes, ibv_mr* bytes_mr);
 
   int32_t get_rank() const { return rank; }
   int32_t get_num_nodes() const { return num_rank; }
 
+  ibv_pd* get_protection_domain() { return protection_domain; }
+
 private:
-  std::future<bool> send_bytes_(
-    int32_t dest_rank, tag_t send_tag, bytes_t bytes, bool imm);
-private:
-  struct send_item_t {
-    send_item_t(connection_t *connection, bytes_t b, bool imm);
-
-    ~send_item_t() {
-      if(bytes_mr) {
-        ibv_dereg_mr(bytes_mr);
-      }
+  void check_tag(tag_t tag) const {
+    if(tag == 0) {
+      throw std::invalid_argument("zero tag is invalid");
     }
-
-    void send(
-        connection_t *connection,
-        tag_t tag, int32_t dest_rank,
-        uint64_t remote_addr, uint32_t remote_key);
-
-    std::future<bool> get_future(){ return pr.get_future(); }
-
-    bytes_t bytes;
-    ibv_mr *bytes_mr;
-    std::promise<bool> pr;
-    bool imm;
-  };
-
-  struct recv_item_t {
-    recv_item_t(bool valid_promise):
-      valid_promise(valid_promise),
-      is_set(false),
-      own(true),
-      bytes_mr(nullptr)
-    {}
-
-    recv_item_t(bytes_t b):
-      valid_promise(true),
-      is_set(false),
-      own(false),
-      bytes(b)
-    {}
-
-    ~recv_item_t() {
-      if(bytes_mr) {
-        ibv_dereg_mr(bytes_mr);
-      }
+  }
+  void check_rank(int32_t other_rank) const {
+    if(get_rank() == other_rank) {
+      throw std::invalid_argument("cannot send and recv from self");
     }
-
-    void init(connection_t *connection, uint64_t size);
-
-    std::future<recv_bytes_t> get_future_bytes();
-    std::future<bool> get_future_complete();
-
-    bool valid_promise;
-    bool is_set;
-    bool own;
-    bytes_t bytes;
-    ibv_mr *bytes_mr;
-    std::promise<recv_bytes_t> pr_bytes;
-    std::promise<bool> pr_complete;
-  };
-
-  using send_item_ptr_t = std::unique_ptr<send_item_t>;
-  using recv_item_ptr_t = std::unique_ptr<recv_item_t>;
-
+  }
 private:
   void post_send(int32_t dest_rank, bbts_message_t const& msg);
+
+  // "post <do this> <from this>"
+  //   post_fail_send comes from a send rank telling a recv rank a fail occured
+  //   post_open_recv comes from a recv rank telling a send that a recv object is available
+  //   and so on
+  void post_open_send(int32_t dest_rank, tag_t tag, uint64_t size);
+  void post_close_send(int32_t dest_rank, tag_t tag);
+  void post_fail_send(int32_t dest_rank, tag_t tag);
+  // only send side does this, recv side is not aware
   void post_rdma_write(int32_t dest_rank, bbts_rdma_write_t const& r);
-  void post_open_send(int32_t dest_rank, tag_t tag, uint64_t size, bool imm);
+  // the above post_x_send and post_rdma write are called inside this guy
+  friend class virtual_send_queue_t;
+
   void post_open_recv(
     int32_t dest_rank, tag_t tag,
     uint64_t addr, uint64_t size, uint32_t key);
-  void post_close(int32_t dest_rank, tag_t tag);
-  void post_fail_send(int32_t dest_rank, tag_t tag);
+  void post_fail_recv(int32_t dest_rank, tag_t tag);
+  // the boave post_x_recv are called inside this guy
+  friend class virtual_recv_queue_t;
+
+private:
   void poll();
 
-  // find out what queue pair was responsible for this work request
-  int32_t get_recv_rank(ibv_wc const& wc);
+  // these will make a virtual queue if there isn't already one at that tag, rank
+  virtual_send_queue_t& get_send_queue(tag_t tag, int32_t dest_rank);
+  virtual_recv_queue_t& get_recv_queue(tag_t tag, int32_t from_rank);
 
-  void handle_message(bbts_message_t const& msg);
+  void empty_send_init_queue();
+  void empty_recv_init_queue();
+  void empty_recv_anywhere_queue();
+  void handle_work_completion(ibv_wc const& work_completion);
+
+  // find out what queue pair was responsible for this work request
+  int32_t get_recv_rank(ibv_wc const& wc) const;
 
 private:
   int32_t rank;
@@ -234,18 +206,16 @@ private:
   std::atomic<bool> destruct;
 
   // Things not yet handled.
-  std::vector<std::pair<tag_rank_t, send_item_ptr_t> > send_init_queue;
-  std::vector<std::pair<tag_t,      recv_item_ptr_t> > recv_init_queue;
+  std::vector<tuple<tag_t, int32_t, send_item_t    > > send_init_queue;
+  std::vector<tuple<tag_t, int32_t, recv_item_ptr_t> > recv_init_queue;
+  std::vector<tuple<tag_t,          recv_item_ptr_t> > recv_anywhere_init_queue;
+  // A mutext for each of the init queues
+  std::mutex send_m, recv_m, recv_anywhere_m;
 
-  // Locations to write to but send bytes hasn't been called, so the
-  // source data is not available.
-  std::map<tag_rank_t, bbts_message_t, tag_rank_less_t> pending_sends;
-  std::map<tag_t,      bbts_message_t                 > pending_recvs;
-
-  std::map<tag_rank_t, send_item_ptr_t, tag_rank_less_t> send_items;
-  std::map<tag_t,      recv_item_ptr_t                 > recv_items;
-
-  std::mutex send_m, recv_m;
+  // virtual send and recv queues
+  // TODO: how do you go about deleting unusued queues?
+  std::map<tag_rank_t, virtual_send_queue_t> virtual_send_queues;
+  std::map<tag_rank_t, virtual_recv_queue_t> virtual_recv_queues;
 
   std::queue<int> available_send_msgs;
   bbts_message_t* send_msgs;
@@ -289,7 +259,6 @@ private:
   std::vector<uint32_t> write_wr_cnts;
   std::vector<std::queue<bbts_rdma_write_t> > pending_writes;
 };
-
 
 } // namespace ib
 } // namespace bbts
