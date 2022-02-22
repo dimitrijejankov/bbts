@@ -76,7 +76,6 @@ struct recv_item_t {
     wait_open_send,
     wait_post,
     post_recv,
-    fini_recv,
     post_fail
   } which_state;
 

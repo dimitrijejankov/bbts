@@ -5,18 +5,19 @@ namespace ib {
 
 void virtual_send_queue_t::insert_item(send_item_t && item) {
   items.push(std::move(item));
-  if(items.empty()) {
+  if(items.size() == 1) {
     post_open_send();
   }
 }
 
 void virtual_send_queue_t::completed_open_send() {
-  check_state(state::post_send);
-  which_state = state::fini_send;
+  // NOTE: It is possible to recv_open_recv or recv_fail_recv
+  //       before completed_open_send, so there is no use having
+  //       a transition from post_send to fini_send.
 }
 
 void virtual_send_queue_t::recv_open_recv(uint64_t addr, uint64_t size, uint32_t key) {
-  send_item_t* item = get_head(state::fini_send);
+  send_item_t* item = get_head(state::post_send);
 
   // allocate memory region if necessary... if that doesn't work,
   // tell the remote recv that the send isn't gonna happen
@@ -42,7 +43,7 @@ void virtual_send_queue_t::recv_open_recv(uint64_t addr, uint64_t size, uint32_t
 }
 
 void virtual_send_queue_t::recv_fail_recv() {
-  send_item_t* item = get_head(state::fini_send);
+  send_item_t* item = get_head(state::post_send);
   item->pr.set_value(false);
   items.pop();
   which_state = state::wait;
@@ -90,6 +91,7 @@ send_item_t* virtual_send_queue_t::get_head(state correct_state) {
 
 void virtual_send_queue_t::check_state(state correct_state) const {
   if(which_state != correct_state) {
+    _DCB_COUT_("expected state " << correct_state << " | which state " << which_state << std::endl);
     throw std::runtime_error("virtual send queue incorrect head state");
   }
 }

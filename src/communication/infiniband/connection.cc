@@ -10,8 +10,6 @@
 
 #include <errno.h>
 
-#define _DCB_COUT_(x) std::cout << x
-
 namespace bbts {
 namespace ib {
 
@@ -254,7 +252,9 @@ bbts_context_t* bbts_init_context(
         .max_send_sge = 1,
         .max_recv_sge = 1
       },
-      .qp_type = IBV_QPT_RC
+      .qp_type = IBV_QPT_RC,
+      .sq_sig_all = 0 // only generate a work request from send item when
+                      // IBV_SEND_SIGNALED send flag is set
     };
 
     int i;
@@ -770,11 +770,10 @@ void connection_t::post_fail_send(int32_t dest_rank, tag_t tag){
 }
 
 void connection_t::post_rdma_write(int32_t dest_rank, bbts_rdma_write_t const& r) {
+  _DCB_COUT_("connection_t::post_rdma_write" << std::endl);
   if(write_wr_cnts[dest_rank] == 0) {
-    _DCB_COUT_("rdma write to pending writes" << std::endl);
     pending_writes[dest_rank].push(r);
   } else {
-    _DCB_COUT_("rdma write direct" << std::endl);
     write_wr_cnts[dest_rank] -= 1;
 
     bbts_post_rdma_write(queue_pairs[dest_rank], r);
@@ -889,6 +888,7 @@ void connection_t::empty_recv_init_queue() {
 void connection_t::empty_recv_anywhere_queue() {
   std::lock_guard<std::mutex> lk(recv_anywhere_m);
   for(auto& [tag, recv_ptr]: recv_anywhere_init_queue) {
+    _DCB_COUT_("a" << std::endl);
     for(int from_rank = 0; from_rank != num_rank; ++from_rank) {
       if(from_rank == rank) {
         continue;
@@ -948,14 +948,19 @@ void connection_t::handle_work_completion(ibv_wc const& work_completion) {
     auto& dest_rank = std::get<1>(tag_rank);
 
     if(msg.type == bbts_message_t::message_type::open_send) {
+      _DCB_COUT_("handle: sent open send" << std::endl);
       virtual_send_queues.at(tag_rank).completed_open_send();
     } else if(msg.type == bbts_message_t::message_type::open_recv) {
+      _DCB_COUT_("handle: sent open recv" << std::endl);
       virtual_recv_queues.at(tag_rank).completed_open_recv();
     } else if(msg.type == bbts_message_t::message_type::close_send) {
+      _DCB_COUT_("handle: sent close send" << std::endl);
       virtual_send_queues.at(tag_rank).completed_close_send();
     } else if(msg.type == bbts_message_t::message_type::fail_send) {
+      _DCB_COUT_("handle: sent fail send" << std::endl);
       virtual_send_queues.at(tag_rank).completed_fail_send();
     } else if(msg.type == bbts_message_t::message_type::fail_recv) {
+      _DCB_COUT_("handle: sent fail recv" << std::endl);
       virtual_recv_queues.at(tag_rank).completed_fail_recv();
     } else {
       throw std::runtime_error("invalid message type");
@@ -1008,17 +1013,24 @@ void connection_t::handle_work_completion(ibv_wc const& work_completion) {
     tag_rank_t tag_rank = {msg.tag, msg.from_rank};
     auto& from_rank = std::get<1>(tag_rank);
     if(msg.type == bbts_message_t::message_type::open_send) {
-      virtual_recv_queues.at(tag_rank).recv_open_send(msg.m.open_send.size);
+      _DCB_COUT_("handle: recv open send" << std::endl);
+      // Note: this can recv an open send without there being an open channel
+      virtual_recv_queue_t& recv_queue = get_recv_queue(msg.tag, msg.from_rank);
+      recv_queue.recv_open_send(msg.m.open_send.size);
     } else if(msg.type == bbts_message_t::message_type::open_recv) {
+      _DCB_COUT_("handle: recv open recv" << std::endl);
       virtual_send_queues.at(tag_rank).recv_open_recv(
         msg.m.open_recv.addr,
         msg.m.open_recv.size,
         msg.m.open_recv.key);
     } else if(msg.type == bbts_message_t::message_type::close_send) {
+      _DCB_COUT_("handle: recv close send" << std::endl);
       virtual_recv_queues.at(tag_rank).recv_close_send();
     } else if(msg.type == bbts_message_t::message_type::fail_send) {
+      _DCB_COUT_("handle: recv fail send" << std::endl);
       virtual_recv_queues.at(tag_rank).recv_fail_send();
     } else if(msg.type == bbts_message_t::message_type::fail_recv) {
+      _DCB_COUT_("handle: recv fail recv" << std::endl);
       virtual_send_queues.at(tag_rank).recv_fail_recv();
     } else {
       throw std::runtime_error("invalid message type");

@@ -128,19 +128,20 @@ void virtual_recv_queue_t::recv_open_send(int64_t size) {
 }
 
 void virtual_recv_queue_t::completed_open_recv() {
-  recv_item_t* item = get_head(recv_item_t::state::post_recv);
-  item->which_state = recv_item_t::state::fini_recv;
+  // NOTE: It is possible to recv_close_send or recv_fail_send
+  //       before being notified that the open recv was completed.
+  //       As a result, the fini_recv state is unused.
 }
 
 void virtual_recv_queue_t::recv_close_send() {
-  recv_item_t* item = get_head(recv_item_t::state::fini_recv);
+  recv_item_t* item = get_head(recv_item_t::state::post_recv);
   item->set_success(rank);
   in_process_items.pop();
   process_next();
 }
 
 void virtual_recv_queue_t::recv_fail_send() {
-  recv_item_t* item = get_head(recv_item_t::state::fini_recv);
+  recv_item_t* item = get_head(recv_item_t::state::post_recv);
   item->set_fail(rank);
   in_process_items.pop();
   process_next();
@@ -190,6 +191,8 @@ recv_item_t* virtual_recv_queue_t::get_head(recv_item_t::state correct_state) {
   }
   recv_item_t* item = in_process_items.front().get();
   if(item->which_state != correct_state) {
+    _DCB_COUT_("expected state " << correct_state << " | which state " << (item->which_state) << std::endl);
+
     throw std::runtime_error("verify head: invalid head state");
   }
   return item;

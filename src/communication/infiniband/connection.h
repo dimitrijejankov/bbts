@@ -9,8 +9,11 @@
 #include <vector>
 #include <queue>
 #include <memory>
+#include <iostream>
 
 #include <infiniband/verbs.h>
+
+#define _DCB_COUT_(x) // std::cout << x
 
 namespace bbts {
 namespace ib {

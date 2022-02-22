@@ -13,7 +13,7 @@ struct send_item_t {
 
 struct virtual_send_queue_t {
   virtual_send_queue_t(connection_t* connection, int32_t rank, tag_t tag):
-    connection(connection), rank(rank), tag(tag)
+    which_state(state::wait), connection(connection), rank(rank), tag(tag)
   {}
 
   void insert_item(send_item_t && item);
@@ -36,9 +36,7 @@ private:
   enum state {
     wait,
     post_send,
-    fini_send,
     post_rdma,
-    fini_rdma,
     post_close,
     post_fail
   } which_state;
