@@ -323,7 +323,7 @@ int main(int argc, char **argv) {
   //size_t num = 1000;
 
 
-  auto g = [&](){ return connection_t(argv[2], rank, 0, ips); };
+  auto g = [&](){ return connection_t(argv[2], rank, ips, 0); };
   //three_node(rank, size, num, g);
   //two_node(rank, size, num, g);
 

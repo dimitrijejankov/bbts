@@ -496,8 +496,8 @@ int bbts_connect_context(
 connection_t::connection_t(
   std::string dev_name,
   int32_t rank,
-  uint64_t num_pinned_tags,
-  std::vector<std::string> ips):
+  std::vector<std::string> ips,
+  uint64_t num_pinned_tags):
     rank(rank),
     current_recv_msg(0),
     num_pinned_tags(num_pinned_tags),

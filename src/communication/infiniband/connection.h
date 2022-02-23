@@ -120,10 +120,20 @@ using recv_item_ptr_t = std::shared_ptr<recv_item_t>;
 // virtual_recv_queues when they are unused.
 struct connection_t {
   connection_t(
+    std::tuple<std::string, int32_t, std::vector<std::string>> items,
+    uint64_t num_pinned_tags):
+      connection_t(
+        std::get<0>(items),
+        std::get<1>(items),
+        std::get<2>(items),
+        num_pinned_tags)
+  {}
+
+  connection_t(
     std::string dev_name,
     int32_t rank,
-    uint64_t num_pinned_tags,
-    std::vector<std::string> ips);
+    std::vector<std::string> ips,
+    uint64_t num_pinned_tags);
 
   connection_t(connection_t const&) = delete;
   connection_t& operator=(connection_t const&) = delete;

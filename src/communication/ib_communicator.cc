@@ -1,5 +1,8 @@
 #include "ib_communicator.h"
 
+#include <iostream>
+#include <fstream>
+
 namespace bbts {
 
 using namespace ib;
@@ -12,12 +15,44 @@ bool wait_all_bools(std::vector<std::future<bool>>& futs) {
   return success;
 }
 
-ib_communicator_t::ib_communicator_t(
-  node_config_ptr_t const& _cfg,
-  std::string const& dev_name,
-  int rank,
-  std::vector<std::string> const& ips):
-    connection(dev_name, rank, com_tag::free_tag, ips)
+std::tuple<std::string, int32_t, std::vector<std::string>>
+parse_connection_args(node_config_ptr_t const& cfg) {
+  auto argc = cfg->argc;
+  auto argv = cfg->argv;
+
+  std::string usage = "usage: " + std::string(argv[0]) + " <rank> <device name> <hosts file>";
+  if(argc != 4) {
+    throw std::runtime_error(usage);
+  }
+
+  int rank = std::stoi(argv[1]);
+
+  std::vector<std::string> ips;
+  {
+    std::ifstream s = std::ifstream(argv[3]);
+    if(!s.is_open()) {
+      usage = "Coud not open '" + std::string(argv[3]) + "'\n" + usage;
+      throw std::runtime_error(usage);
+    }
+
+    std::string l;
+    while(std::getline(s, l)) {
+      if(l.size() < 7) {
+        usage = "Invalid hosts file\n" + usage;
+        throw std::runtime_error(usage);
+      }
+      ips.push_back(l);
+    }
+    for(auto i: ips){
+      std::cout << "IP: " << i << std::endl;
+    }
+  }
+
+  return {argv[2], rank, ips};
+}
+
+ib_communicator_t::ib_communicator_t(node_config_ptr_t const& _cfg):
+    connection(parse_connection_args(_cfg), com_tag::free_tag)
     // ^ pin all tags before the free tag
 {}
 
@@ -172,7 +207,8 @@ bool ib_communicator_t::sync_resource_aquisition(
   const bbts::command_t::node_list_t &nodes,
   bool my_val)
 {
-  return true;
+  throw std::runtime_error("resource acquisition methods not implemented");
+  return false;
 }
 
 bool ib_communicator_t::sync_resource_aquisition_p2p(
@@ -180,7 +216,8 @@ bool ib_communicator_t::sync_resource_aquisition_p2p(
   node_id_t &node,
   bool my_val)
 {
-  return true;
+  throw std::runtime_error("resource acquisition methods not implemented");
+  return false;
 }
 
 // waits for all the nodes to hit this, should only be used for initialization

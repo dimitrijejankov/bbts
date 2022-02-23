@@ -15,11 +15,7 @@ namespace bbts {
 using ib::tag_t;
 
 struct ib_communicator_t {
-  explicit ib_communicator_t(
-    node_config_ptr_t const& _cfg,
-    std::string const& dev_name,
-    int rank,
-    std::vector<std::string> const& ips);
+  explicit ib_communicator_t(node_config_ptr_t const& _cfg);
 
   ~ib_communicator_t();
 
