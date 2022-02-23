@@ -581,7 +581,6 @@ connection_t::~connection_t() {
 }
 
 future<bool> connection_t::send(int32_t dest_rank, tag_t tag, bytes_t bytes) {
-  check_rank(dest_rank);
   std::lock_guard<std::mutex> lk(send_m);
   send_init_queue.push_back({
     tag,
@@ -594,7 +593,6 @@ future<bool> connection_t::send(int32_t dest_rank, tag_t tag, bytes_t bytes) {
 future<bool> connection_t::send(
   int32_t dest_rank, tag_t tag, bytes_t bytes, ibv_mr* bytes_mr)
 {
-  check_rank(dest_rank);
   std::lock_guard<std::mutex> lk(send_m);
   send_init_queue.push_back({
     tag,
@@ -656,7 +654,6 @@ future<tuple<bool, int32_t > >
 future<tuple<bool, own_bytes_t>>
   connection_t::recv_from(int32_t from_rank, tag_t tag)
 {
-  check_rank(from_rank);
   std::lock_guard<std::mutex> lk(recv_m);
   recv_init_queue.push_back({
     tag,
@@ -675,7 +672,6 @@ future<bool>
   connection_t::recv_from_with_bytes(
     int32_t from_rank, tag_t tag, bytes_t bytes)
 {
-  check_rank(from_rank);
   std::lock_guard<std::mutex> lk(recv_m);
   recv_init_queue.push_back({
     tag,
@@ -694,7 +690,6 @@ future<bool>
   connection_t::recv_from_with_bytes(
     int32_t from_rank, tag_t tag, bytes_t bytes, ibv_mr* bytes_mr)
 {
-  check_rank(from_rank);
   std::lock_guard<std::mutex> lk(recv_m);
   recv_init_queue.push_back({
     tag,
@@ -862,8 +857,12 @@ virtual_recv_queue_t& connection_t::get_recv_queue(tag_t tag, int32_t from_rank)
 void connection_t::empty_send_init_queue() {
   std::lock_guard<std::mutex> lk(send_m);
   for(auto && [tag,dest_rank,item]: send_init_queue) {
-    auto& v_send_queue = get_send_queue(tag, dest_rank);
-    v_send_queue.insert_item(std::move(item));
+    if(dest_rank == get_rank()) {
+      send_to_self(tag, std::move(item));
+    } else {
+      auto& v_send_queue = get_send_queue(tag, dest_rank);
+      v_send_queue.insert_item(std::move(item));
+    }
   }
   send_init_queue.resize(0);
 }
@@ -871,8 +870,12 @@ void connection_t::empty_send_init_queue() {
 void connection_t::empty_recv_init_queue() {
   std::lock_guard<std::mutex> lk(recv_m);
   for(auto& [tag, from_rank, recv_ptr]: recv_init_queue) {
-    auto& v_recv_queue = get_recv_queue(tag, from_rank);
-    v_recv_queue.insert_item(recv_ptr);
+    if(from_rank == get_rank()) {
+      recv_from_self(tag, recv_ptr);
+    } else {
+      auto& v_recv_queue = get_recv_queue(tag, from_rank);
+      v_recv_queue.insert_item(recv_ptr);
+    }
   }
   recv_init_queue.resize(0);
 }
@@ -883,13 +886,121 @@ void connection_t::empty_recv_anywhere_queue() {
     _DCB_COUT_("a" << std::endl);
     for(int from_rank = 0; from_rank != num_rank; ++from_rank) {
       if(from_rank == rank) {
-        continue;
+        recv_from_self(tag, recv_ptr);
+      } else {
+        auto& v_recv_queue = get_recv_queue(tag, from_rank);
+        v_recv_queue.insert_item(recv_ptr);
       }
-      auto& v_recv_queue = get_recv_queue(tag, from_rank);
-      v_recv_queue.insert_item(recv_ptr);
     }
   }
   recv_anywhere_init_queue.resize(0);
+}
+
+// TODO: send_to_self and recv_from_self could be optimized to
+//       make less queries to self_sends and self_recvs
+//       (but that sounds tedious and prone to error)
+
+void connection_t::send_to_self(tag_t tag, send_item_t&& send_item) {
+  // This will create the queue at tag if one doesn't exist
+  std::queue<send_item_t>&     sends = self_sends[tag];
+  std::queue<recv_item_ptr_t>& recvs = self_recvs[tag];
+
+  if(!sends.empty()) {
+    // There is already something in the send queue, so we must be
+    // waiting for recvs. Add to the queue and be done
+    sends.push(std::move(send_item));
+    return;
+  }
+
+  // sends empty, see if we can acquire a recv
+  while(!recvs.empty()) {
+    recv_item_ptr_t recv_item = recvs.front();
+
+    // If we acquire it, we won't needs it in recvs.
+    // If we don't acquire it, we won't need it in recvs.
+    recvs.pop();
+
+    if(recv_item->acquire()) {
+      // we have found a match
+      set_send_recv_self_items(std::move(send_item), recv_item);
+
+      // If both queues are empty, remove em both
+      if(recvs.empty()) {
+        self_recvs.erase(tag);
+        self_sends.erase(tag);
+      }
+      return;
+    }
+  }
+
+  // the recvs object will be erased when a recv item is added,
+  // so don't erase it here, even though it is empty
+
+  // no recv to use, add it to the queue
+  self_sends[tag].push(std::move(send_item));
+}
+
+void connection_t::recv_from_self(tag_t tag, recv_item_ptr_t recv_item) {
+  // This will create the queue at tag if one doesn't exist
+  std::queue<send_item_t>&     sends = self_sends[tag];
+  std::queue<recv_item_ptr_t>& recvs = self_recvs[tag];
+
+  if(!recvs.empty()) {
+    // There is already something in the recv queue, so we must be
+    // waiting for sends. Add to the queue and be done
+    recvs.push(recv_item);
+    return;
+  }
+  if(sends.empty()) {
+    // There is no matching send, so we're waiting for sends.
+    // Add to the queue and be done
+    recvs.push(recv_item);
+    return;
+  }
+
+  // recvs empty, sends not empty
+  if(recv_item->acquire()) {
+    // we have a match
+    set_send_recv_self_items(std::move(sends.front()), recv_item);
+
+    sends.pop();
+    // If both queues are empty, remove em both
+    if(sends.empty()) {
+      self_recvs.erase(tag);
+      self_sends.erase(tag);
+    }
+  }
+}
+
+void connection_t::set_send_recv_self_items(
+  send_item_t&& send_item,
+  recv_item_ptr_t recv_item)
+{
+  // Invariant: the recv_item has been acquired
+
+  bytes_t send_bs = send_item.bytes.get_bytes();
+  bool setup_bytes = recv_item->bytes.setup_bytes(send_bs.size);
+  if(!setup_bytes) {
+    // couldn't get the memory to copy the data
+
+    // set recv to fail
+    recv_item->set_fail(get_rank());
+
+    // set send to fail
+    send_item.pr.set_value(false);
+  } else {
+    // copy the data
+    bytes_t recv_bs = recv_item->bytes.get_bytes();
+    char* send_data = (char*)send_bs.data;
+    char* recv_data = (char*)recv_bs.data;
+    std::copy(recv_data, recv_data + send_bs.size, send_data);
+
+    // set recv to success
+    recv_item->set_success(get_rank());
+
+    // set send to success
+    send_item.pr.set_value(true);
+  }
 }
 
 // There are three types of messages:

@@ -28,10 +28,12 @@ struct memory_region_bytes_t {
     own_bytes(false), own_mr(false)
   {}
 
+  bytes_t get_bytes();
+
   own_bytes_t extract_bytes();
 
+  bool setup_bytes(uint32_t size);
   bool setup_bytes_and_mr(uint32_t size, connection_t* connection, int mr_flags);
-
   bool setup_mr(connection_t* connection, int mr_flags);
 
   uint64_t get_addr() const {

@@ -20,6 +20,10 @@ memory_region_bytes_t::~memory_region_bytes_t() {
   }
 }
 
+bytes_t memory_region_bytes_t::get_bytes() {
+  return bytes;
+}
+
 own_bytes_t memory_region_bytes_t::extract_bytes() {
   if(!own_bytes) {
     throw std::runtime_error("cannot extract bytes");
@@ -28,10 +32,7 @@ own_bytes_t memory_region_bytes_t::extract_bytes() {
   return own_bytes_t(bytes);
 }
 
-bool memory_region_bytes_t::setup_bytes_and_mr(
-  uint32_t size,
-  connection_t* connection,
-  int mr_flags)
+bool memory_region_bytes_t::setup_bytes(uint32_t size)
 {
   // It is an error for this function to be called more than once
   if(own_bytes) {
@@ -46,6 +47,17 @@ bool memory_region_bytes_t::setup_bytes_and_mr(
       // not enough bytes were provided
       return false;
     }
+  }
+  return true;
+}
+
+bool memory_region_bytes_t::setup_bytes_and_mr(
+  uint32_t size,
+  connection_t* connection,
+  int mr_flags)
+{
+  if(!setup_bytes(size)) {
+    return false;
   }
   return setup_mr(connection, mr_flags);
 }

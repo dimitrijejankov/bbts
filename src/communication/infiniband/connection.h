@@ -39,6 +39,10 @@ struct own_bytes_t {
     ptr((char*)b.data), size(b.size)
   {}
 
+  own_bytes_t(char* data, uint64_t size):
+    ptr(data), size(size)
+  {}
+
   std::unique_ptr<char[]> ptr;
   uint64_t size;
 };
@@ -53,21 +57,6 @@ bytes_t to_bytes_t(T* ptr, size_t num_t_elems) {
 }
 
 using tag_rank_t = tuple<tag_t, int32_t>;
-
-//struct tag_rank_t {
-//  //tag_rank_t(tag_t tag, int rank): tag(tag), rank(rank) {}
-//  tag_t tag;
-//  int32_t rank;
-//};
-//
-//struct tag_rank_less_t {
-//  bool operator()(tag_rank_t const& lhs, tag_rank_t const& rhs) const {
-//    if(lhs.tag == rhs.tag) {
-//      return lhs.rank < rhs.rank;
-//    }
-//    return lhs.tag < rhs.tag;
-//  }
-//};
 
 // As an algebraic data type, bbts_message_t looks something like this:
 //  type BbtsMessage = (Rank, Tag, Info)
@@ -132,6 +121,9 @@ struct connection_t {
     int32_t rank,
     std::vector<std::string> ips);
 
+  connection_t(connection_t const&) = delete;
+  connection_t& operator=(connection_t const&) = delete;
+
   ~connection_t();
 
   future<bool> send(int32_t dest_rank, tag_t tag, bytes_t bytes);
@@ -155,12 +147,6 @@ struct connection_t {
 
   ibv_pd* get_protection_domain() { return protection_domain; }
 
-private:
-  void check_rank(int32_t other_rank) const {
-    if(get_rank() == other_rank) {
-      throw std::invalid_argument("cannot send and recv from self");
-    }
-  }
 private:
   void post_send(int32_t dest_rank, bbts_message_t const& msg);
 
@@ -193,6 +179,11 @@ private:
   void empty_send_init_queue();
   void empty_recv_init_queue();
   void empty_recv_anywhere_queue();
+
+  void send_to_self(tag_t tag, send_item_t&& item);
+  void recv_from_self(tag_t tag, recv_item_ptr_t item);
+  void set_send_recv_self_items(send_item_t&& send_item, recv_item_ptr_t recv_item);
+
   void handle_work_completion(ibv_wc const& work_completion);
 
   // find out what queue pair was responsible for this work request
@@ -207,13 +198,16 @@ private:
   std::vector<tuple<tag_t, int32_t, send_item_t    > > send_init_queue;
   std::vector<tuple<tag_t, int32_t, recv_item_ptr_t> > recv_init_queue;
   std::vector<tuple<tag_t,          recv_item_ptr_t> > recv_anywhere_init_queue;
-  // A mutext for each of the init queues
+  // A mutex for each of the init queues
   std::mutex send_m, recv_m, recv_anywhere_m;
 
   // virtual send and recv queues
   // TODO: how do you go about deleting unusued queues?
   std::map<tag_rank_t, virtual_send_queue_t> virtual_send_queues;
   std::map<tag_rank_t, virtual_recv_queue_t> virtual_recv_queues;
+  // for sending and recving from self
+  std::map<tag_t, std::queue<send_item_t>     > self_sends;
+  std::map<tag_t, std::queue<recv_item_ptr_t> > self_recvs;
 
   std::queue<int> available_send_msgs;
   bbts_message_t* send_msgs;
