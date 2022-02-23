@@ -60,6 +60,7 @@ ib_communicator_t::~ib_communicator_t() {}
 
 // send a response string
 bool ib_communicator_t::send_response_string(const std::string &val) {
+  _IBC_COUT_("send_response_string");
   if(get_rank() == 0) {
     throw std::runtime_error("node 0 should not send response string");
   }
@@ -77,6 +78,7 @@ std::tuple<bool, std::string>
 ib_communicator_t::expect_response_string(
   int32_t from_rank)
 {
+  _IBC_COUT_("expect_response_string");
   if(get_rank() != 0) {
     throw std::runtime_error("only node 0 should recv response string");
   }
@@ -99,6 +101,7 @@ bool ib_communicator_t::send_sync(
   node_id_t dest_rank,
   int32_t tag)
 {
+  _IBC_COUT_("send_sync");
   return send_async(bytes, num_bytes, dest_rank, tag).get();
 }
 
@@ -107,6 +110,7 @@ bool ib_communicator_t::recv_sync(
   node_id_t from_rank,
   int32_t tag)
 {
+  _IBC_COUT_("recv_sync");
   return connection.recv_from_with_bytes(
     from_rank,
     com_tag::free_tag + tag,
@@ -120,6 +124,7 @@ std::future<bool> ib_communicator_t::send_async(
   node_id_t dest_rank,
   int32_t tag)
 {
+  _IBC_COUT_("send_async");
   return connection.send(
     dest_rank,
     com_tag::free_tag + tag,
@@ -130,6 +135,7 @@ bool ib_communicator_t::tensors_created_notification(
   node_id_t dest_rank,
   const std::vector<bbts::tid_t> &tensor)
 {
+  _IBC_COUT_("tensors_created_notification");
   return connection.send(
     dest_rank,
     com_tag::notify_tensor_tag,
@@ -139,6 +145,7 @@ bool ib_communicator_t::tensors_created_notification(
 
 std::tuple<node_id_t, std::vector<bbts::tid_t>>
 ib_communicator_t::receive_tensor_created_notification() {
+  _IBC_COUT_("treceive_tesnors_created_notification");
   auto [success, from_rank, bytes] = connection.recv(
     com_tag::notify_tensor_tag
   ).get();
@@ -155,11 +162,13 @@ ib_communicator_t::receive_tensor_created_notification() {
 }
 
 bool ib_communicator_t::shutdown_notification_handler() {
+  _IBC_COUT_("shutdown_notification_handler");
   std::vector<bbts::tid_t> tensor = { -1 };
   tensors_created_notification(get_rank(), tensor);
 }
 
 bool ib_communicator_t::op_request(const command_ptr_t &_cmd) {
+  _IBC_COUT_("op_request");
   // find all the nodes referenced in the input
   std::vector<node_id_t> to_send_to;
   auto nodes = _cmd->get_nodes();
@@ -183,6 +192,8 @@ bool ib_communicator_t::op_request(const command_ptr_t &_cmd) {
 }
 
 bool ib_communicator_t::shutdown_op_request() {
+  _IBC_COUT_("shutdown_op_request");
+
   // create a shutdown command to send to the remote handler
   command_ptr_t cmd = command_t::create_shutdown(get_rank());
 
@@ -193,6 +204,8 @@ bool ib_communicator_t::shutdown_op_request() {
 }
 
 command_ptr_t ib_communicator_t::expect_op_request() {
+  _IBC_COUT_("expect_op_request");
+
   // recv a message from anywhere
   auto [success, from_rank, own_bytes] = connection.recv(com_tag::send_cmd_tag).get();
 
@@ -230,6 +243,8 @@ bool ib_communicator_t::sync_resource_aquisition_p2p(
 
 // waits for all the nodes to hit this, should only be used for initialization
 void ib_communicator_t::barrier() {
+  _IBC_COUT_("barrier");
+
   // TODO: Implement an bbts::ib::connection_t::barrier
   // TODO: Guessing this will do as a "barrier"
   char c;
@@ -261,6 +276,7 @@ void ib_communicator_t::barrier() {
 }
 
 bool ib_communicator_t::send_coord_op(const bbts::coordinator_op_t &op) {
+  _IBC_COUT_("send coord op");
   // send the op to all nodes except node zero
   std::vector<std::future<bool>> futs;
   futs.reserve(get_num_nodes());
@@ -277,6 +293,7 @@ bool ib_communicator_t::send_coord_op(const bbts::coordinator_op_t &op) {
 }
 
 bbts::coordinator_op_t ib_communicator_t::expect_coord_op() {
+  _IBC_COUT_("expect coord op");
   bbts::coordinator_op_t op{};
   auto [success, from_rank] = connection.recv_with_bytes(
     com_tag::coordinator_tag,
@@ -293,6 +310,7 @@ bbts::coordinator_op_t ib_communicator_t::expect_coord_op() {
 
 // send the cmds to all nodes
 bool ib_communicator_t::send_coord_cmds(const std::vector<command_ptr_t> &cmds) {
+  _IBC_COUT_("send coord cmds");
   // send all the commands to all nodes except node 0
   for(auto &cmd : cmds) {
     std::vector<std::future<bool>> futs;
@@ -319,6 +337,7 @@ bool ib_communicator_t::expect_coord_cmds(
   size_t num_cmds,
   std::vector<command_ptr_t> &out)
 {
+  _IBC_COUT_("expect_coord_cmds");
   // recv one command at a time and if any fails, stop
   out.reserve(num_cmds);
   for(size_t i = 0; i < num_cmds; ++i) {
@@ -377,10 +396,12 @@ bool ib_communicator_t::recv_meta(
 // TODO: it should be possible to create a fixed size message connection object.
 //       it is a bit silly to send such small messages with connection.h as it is now
 bool ib_communicator_t::send_tensor_size(node_id_t node, int32_t tag, uint64_t val) {
+  _IBC_COUT_("send tensor size");
   return connection.send(node, com_tag::free_tag + tag, to_bytes_t(&val, 1)).get();
 }
 
 std::tuple<uint64_t, bool> ib_communicator_t::recv_tensor_size(node_id_t node, int32_t tag) {
+  _IBC_COUT_("recv tensor size");
   auto [success, own_bytes] = connection.recv_from(node, com_tag::free_tag + tag).get();
   uint64_t ret;
   if(success) {
@@ -390,6 +411,7 @@ std::tuple<uint64_t, bool> ib_communicator_t::recv_tensor_size(node_id_t node, i
 }
 
 bool ib_communicator_t::send_bytes(char* file, size_t file_size) {
+  _IBC_COUT_("send bytes");
   // send it everywhere except the root node
   std::vector<std::future<bool>> futs;
   futs.reserve(get_num_nodes());
@@ -405,6 +427,7 @@ bool ib_communicator_t::send_bytes(char* file, size_t file_size) {
 }
 
 bool ib_communicator_t::expect_bytes(size_t num_bytes, std::vector<char> &out) {
+  _IBC_COUT_("expect bytes");
   out.reserve(num_bytes);
 
   auto [success, _] = connection.recv_with_bytes(

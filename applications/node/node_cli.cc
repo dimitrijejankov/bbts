@@ -118,7 +118,7 @@ bool load_shared_library(std::ostream &out, bbts::node_t &node, const std::strin
   auto file_bytes = new char[file_len];
   in.readsome(file_bytes, file_len);
 
-  // finish the loading message  
+  // finish the loading message
   b = true; t.join();
 
   // kick off a registering message
@@ -347,7 +347,7 @@ void set(std::ostream &out, bbts::node_t &node, const std::string &what, const s
 
   // parse the number of threads
   if(what == "no_threads") {
-    
+
     // check the value
     if(value.empty()) {
       out << "You must provide a number of threads.\n";
@@ -390,7 +390,7 @@ void set(std::ostream &out, bbts::node_t &node, const std::string &what, const s
       // finish the loading message
       b = true; t.join();
       out << bbts::red  << "The value must be a positive number followed by [K|M|G].\n" << bbts::reset;
-      
+
       return;
     }
 
@@ -399,10 +399,10 @@ void set(std::ostream &out, bbts::node_t &node, const std::string &what, const s
 
     // apply the unit
     switch(unit) {
-      case 'K' : val *= 1024; break; 
-      case 'M' : val *= (1024 * 1024); break; 
+      case 'K' : val *= 1024; break;
+      case 'M' : val *= (1024 * 1024); break;
       case 'G' : val *= (1024 * 1024 * 1024); break;
-      default : break; 
+      default : break;
     }
 
     // set the value
@@ -492,17 +492,17 @@ void prompt(bbts::node_t &node) {
   auto loadSubMenu = std::make_unique<Menu>("load");
 
   loadSubMenu->Insert("commands",[&](std::ostream &out, const std::string &file) {
-  
+
     load_binary_command(out, node, file);
-  
+
   },"Load commands form a binary file. Usage : load commands <file>\n");
-  
+
   loadSubMenu->Insert("library", [&](std::ostream &out, const std::string &file) {
 
-    load_shared_library(out, node, file);  
-  
+    load_shared_library(out, node, file);
+
    },"Load a shared object file. Usage : load library <file>\n");
-  
+
   rootMenu->Insert(std::move(loadSubMenu));
 
   // setup the info command
@@ -512,14 +512,14 @@ void prompt(bbts::node_t &node) {
       node.print_cluster_info(out);
     }
     else if(what == "storage") {
-      
+
       auto [success, message] = node.print_storage_info();
       if(!success) {
         out << bbts::red << "[ERROR]\n";
       }
       out << message << '\n';
     }
-    
+
   },"Returns information about the cluster. Usage : info [cluster, storage, tensor] \n ");
 
   rootMenu->Insert("info",[&](std::ostream &out, const std::string &what, int32_t id) {
@@ -637,7 +637,10 @@ int main(int argc, char **argv) {
   // kick off the prompt
   std::thread t;
   if (node.get_rank() == 0) {
-    t = std::thread([&]() { prompt(node); });
+    t = std::thread([&]() {
+      verbose(std::cout, node, true);
+      prompt(node);
+    });
   }
 
   // the node

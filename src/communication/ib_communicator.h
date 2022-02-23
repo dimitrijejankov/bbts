@@ -10,6 +10,18 @@
 
 #include "infiniband/connection.h"
 
+struct _silly {
+  _silly(std::string s): s(s) {
+    std::cout << s << " [enter]" << std::endl;
+  }
+  ~_silly() {
+    std::cout << s << " [exit]" << std::endl;
+  }
+  std::string s;
+};
+#define _IBC_COUT_(x) _silly _silly_monsters_attacking_turtles(x)
+// #define _IBC_COUT_(x) std::cout << x << std::endl
+
 namespace bbts {
 
 using ib::tag_t;

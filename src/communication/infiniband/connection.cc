@@ -615,6 +615,7 @@ future<tuple<bool, int32_t, own_bytes_t> >
       promise<tuple<bool, int32_t, own_bytes_t> >()
     ))
   });
+
   return std::get<recv_item_t::which_pr::rank_bytes>(
     std::get<1>(recv_anywhere_init_queue.back())->pr
   ).get_future();
@@ -628,9 +629,10 @@ future<tuple<bool, int32_t> >
     tag,
     std::shared_ptr<recv_item_t>(new recv_item_t(
       memory_region_bytes_t(bytes),
-      promise<tuple<bool, int32_t, own_bytes_t> >()
+      promise<tuple<bool, int32_t> >()
     ))
   });
+
   return std::get<recv_item_t::which_pr::rank_success>(
     std::get<1>(recv_anywhere_init_queue.back())->pr
   ).get_future();
@@ -645,9 +647,10 @@ future<tuple<bool, int32_t > >
     tag,
     std::shared_ptr<recv_item_t>(new recv_item_t(
       memory_region_bytes_t(bytes, bytes_mr),
-      promise<tuple<bool, int32_t, own_bytes_t> >()
+      promise<tuple<bool, int32_t> >()
     ))
   });
+
   return std::get<recv_item_t::which_pr::rank_success>(
     std::get<1>(recv_anywhere_init_queue.back())->pr
   ).get_future();
@@ -665,6 +668,7 @@ future<tuple<bool, own_bytes_t>>
       promise<tuple<bool, own_bytes_t> >()
     ))
   });
+
   return std::get<recv_item_t::which_pr::just_bytes>(
     std::get<2>(recv_init_queue.back())->pr
   ).get_future();
@@ -683,6 +687,7 @@ future<bool>
       promise<bool>()
     ))
   });
+
   return std::get<recv_item_t::which_pr::just_success>(
     std::get<2>(recv_init_queue.back())->pr
   ).get_future();
@@ -701,6 +706,7 @@ future<bool>
       promise<bool>()
     ))
   });
+
   return std::get<recv_item_t::which_pr::just_success>(
     std::get<2>(recv_init_queue.back())->pr
   ).get_future();
