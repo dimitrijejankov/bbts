@@ -34,33 +34,25 @@ struct ib_communicator_t {
   // notify a node that tensors were created
   bool tensors_created_notification(
     node_id_t out_node, const std::vector<bbts::tid_t> &tensor);
-
   // wait to receive a notification
   std::tuple<node_id_t, std::vector<bbts::tid_t>> receive_tensor_created_notification();
-
   // shutdown the notification handler
   bool shutdown_notification_handler();
 
   // initiates the operation on all the specified nodes
   bool op_request(const command_ptr_t &_cmd);
-
   // waits to recieve an operation
   command_ptr_t expect_op_request();
-
   // this sends a shutdown command to the thread that is calling @see expect_op_request
   bool shutdown_op_request();
 
   // send the coord op to all nodes
   bool send_coord_op(const bbts::coordinator_op_t &op);
-
   // expect the a coord op
   bbts::coordinator_op_t expect_coord_op();
 
   // send the cmds to all nodes
   bool send_coord_cmds(const std::vector<command_ptr_t> &cmds);
-
-  // send a bunch of bytes to all nodes
-  bool send_bytes(char* file, size_t file_size);
 
   // expect the a coord op
   bool expect_coord_cmds(size_t num_cmds, std::vector<command_ptr_t> &out);
@@ -80,6 +72,8 @@ struct ib_communicator_t {
   // send the tensor size
   bool send_tensor_size(node_id_t node, int32_t tag, uint64_t val);
 
+  // send a bunch of bytes to all nodes
+  bool send_bytes(char* file, size_t file_size);
   bool expect_bytes(size_t num_bytes, std::vector<char> &out);
 
   // waits for all the nodes to hit this, should only be used for initialization
@@ -92,8 +86,13 @@ struct ib_communicator_t {
   int32_t get_num_nodes() const;
 private:
   enum com_tag {
-    response_string_tag = 1,
+    response_string_tag,
     notify_tensor_tag,
+    send_cmd_tag,
+    coordinator_tag,
+    coordinator_bcast_cmd_tag,
+    coordinator_bcast_bytes,
+    barrier_tag,
     free_tag
   };
 
