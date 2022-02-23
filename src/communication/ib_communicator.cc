@@ -2,9 +2,7 @@
 
 namespace bbts {
 
-//using ib::bytes_t;
-//using ib::to_bytes_t;
-//using ib::recv_bytes_t;
+using namespace ib;
 
 ib_communicator_t::ib_communicator_t(
   node_config_ptr_t const& _cfg,
@@ -17,87 +15,96 @@ ib_communicator_t::~ib_communicator_t() {}
 
 // send a response string
 bool ib_communicator_t::send_response_string(const std::string &val) {
-//  if(get_rank() == 0) {
-//    throw std::runtime_error("node 0 should not send response string");
-//  }
-//
-//  auto fut = connection.send_bytes(
-//    0,
-//    get_response_string_tag(get_rank()),
-//    to_bytes_t(val.c_str(), val.size()));
-//
-//  return fut.get();
-  return false;
+  if(get_rank() == 0) {
+    throw std::runtime_error("node 0 should not send response string");
+  }
+
+  auto fut = connection.send(
+    0,
+    com_tag::response_string_tag,
+    to_bytes_t(val.data(), val.size()));
+
+  return fut.get();
 }
 
 // expect a response string
 std::tuple<bool, std::string>
 ib_communicator_t::expect_response_string(
-  int32_t recv_from_rank)
+  int32_t from_rank)
 {
-//  if(get_rank() != 0) {
-//    throw std::runtime_error("only node 0 should recv response string");
-//  }
-//  if(node == 0) {
-//    throw std::runtime_error("cannot expect message from self");
-//  }
-//
-//  recv_bytes_t bytes = connection.recv_bytes(
-//    get_response_string_tag(recv_from_rank)).get();
-//
-//  std::string ret(bytes.ptr.get(), bytes.size);
-//  return {true, ret};
-  return {true, ""};
+  if(get_rank() != 0) {
+    throw std::runtime_error("only node 0 should recv response string");
+  }
+  if(from_rank == 0) {
+    throw std::runtime_error("cannot expect message from self");
+  }
+
+  auto [success, bytes] = connection.recv_from(from_rank, com_tag::response_string_tag).get();
+
+  std::string ret;
+  if(success) {
+    ret = std::string(bytes.ptr.get(), bytes.size);
+  }
+  return {success, ret};
 }
 
 bool ib_communicator_t::send_sync(
   const void *bytes,
   size_t num_bytes,
-  node_id_t send_to_rank,
+  node_id_t dest_rank,
   int32_t tag)
 {
-  return true;
-//  return connection.send_bytes_wait(
-//    send_to_rank,
-//    get_free_tag(send_to_rank, tag),
-//    bytes_t{ (void*)bytes, num_bytes }).get();
+  return connection.send(
+    dest_rank,
+    com_tag::free_tag + tag,
+    {(void*)bytes, num_bytes}
+  ).get();
 }
 
 bool ib_communicator_t::recv_sync(
   void *bytes, size_t num_bytes,
-  node_id_t recv_from_rank,
+  node_id_t from_rank,
   int32_t tag)
 {
-  return true;
-//  return connection.recv_bytes_wait(
-//    get_free_tag(recv_from_rank, tag),
-//    { bytes, num_bytes }).get();
+  return connection.recv_from_with_bytes(
+    from_rank,
+    com_tag::free_tag + tag,
+    {bytes, num_bytes}
+  ).get();
 }
 
 bool ib_communicator_t::tensors_created_notification(
-  node_id_t send_to_rank,
+  node_id_t dest_rank,
   const std::vector<bbts::tid_t> &tensor)
 {
-  return true;
+  return connection.send(
+    dest_rank,
+    com_tag::notify_tensor_tag,
+    to_bytes_t(tensor.data(), tensor.size())
+  ).get();
 }
 
 std::tuple<node_id_t, std::vector<bbts::tid_t>>
 ib_communicator_t::receive_tensor_created_notification() {
-  return {0, {}};
+  auto [success, from_rank, bytes] = connection.recv(
+    com_tag::notify_tensor_tag
+  ).get();
+
+  // just keep doing this method on failure
+  if(!success) {
+    return receive_tensor_created_notification();
+  }
+
+  bbts::tid_t* beg = (bbts::tid_t*)bytes.ptr.get();
+  bbts::tid_t* end = (bbts::tid_t*)(bytes.ptr.get() + bytes.size);
+
+  return {from_rank,  std::vector<bbts::tid_t>(beg, end)};
 }
 
 bool ib_communicator_t::shutdown_notification_handler() {
-  return true;
-}
-
-// recieves the request that we got from expect_request_sync
-bool ib_communicator_t::receive_request_sync(
-  node_id_t node,
-  int32_t tag,
-  void *bytes,
-  size_t num_bytes)
-{
-  return true;
+  // TODO: support sending to yourself
+  std::vector<bbts::tid_t> tensor = { -1 };
+  tensors_created_notification(get_rank(), tensor);
 }
 
 bool ib_communicator_t::op_request(const command_ptr_t &_cmd) {

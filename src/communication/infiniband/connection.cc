@@ -582,7 +582,6 @@ connection_t::~connection_t() {
 
 future<bool> connection_t::send(int32_t dest_rank, tag_t tag, bytes_t bytes) {
   check_rank(dest_rank);
-  check_tag(tag);
   std::lock_guard<std::mutex> lk(send_m);
   send_init_queue.push_back({
     tag,
@@ -596,7 +595,6 @@ future<bool> connection_t::send(
   int32_t dest_rank, tag_t tag, bytes_t bytes, ibv_mr* bytes_mr)
 {
   check_rank(dest_rank);
-  check_tag(tag);
   std::lock_guard<std::mutex> lk(send_m);
   send_init_queue.push_back({
     tag,
@@ -609,7 +607,6 @@ future<bool> connection_t::send(
 future<tuple<bool, int32_t, own_bytes_t> >
   connection_t::recv(tag_t tag)
 {
-  check_tag(tag);
   std::lock_guard<std::mutex> lk(recv_anywhere_m);
   recv_anywhere_init_queue.push_back({
     tag,
@@ -626,7 +623,6 @@ future<tuple<bool, int32_t, own_bytes_t> >
 future<tuple<bool, int32_t> >
   connection_t::recv_with_bytes(tag_t tag, bytes_t bytes)
 {
-  check_tag(tag);
   std::lock_guard<std::mutex> lk(recv_anywhere_m);
   recv_anywhere_init_queue.push_back({
     tag,
@@ -644,7 +640,6 @@ future<tuple<bool, int32_t > >
   connection_t::recv_with_bytes(
   tag_t tag, bytes_t bytes, ibv_mr* bytes_mr)
 {
-  check_tag(tag);
   std::lock_guard<std::mutex> lk(recv_anywhere_m);
   recv_anywhere_init_queue.push_back({
     tag,
@@ -662,7 +657,6 @@ future<tuple<bool, own_bytes_t>>
   connection_t::recv_from(int32_t from_rank, tag_t tag)
 {
   check_rank(from_rank);
-  check_tag(tag);
   std::lock_guard<std::mutex> lk(recv_m);
   recv_init_queue.push_back({
     tag,
@@ -682,7 +676,6 @@ future<bool>
     int32_t from_rank, tag_t tag, bytes_t bytes)
 {
   check_rank(from_rank);
-  check_tag(tag);
   std::lock_guard<std::mutex> lk(recv_m);
   recv_init_queue.push_back({
     tag,
@@ -702,7 +695,6 @@ future<bool>
     int32_t from_rank, tag_t tag, bytes_t bytes, ibv_mr* bytes_mr)
 {
   check_rank(from_rank);
-  check_tag(tag);
   std::lock_guard<std::mutex> lk(recv_m);
   recv_init_queue.push_back({
     tag,
@@ -900,8 +892,6 @@ void connection_t::empty_recv_anywhere_queue() {
   recv_anywhere_init_queue.resize(0);
 }
 
-// TODO: you can use tag zero, right? then get rid of checking for valid tags
-
 // There are three types of messages:
 //   recv, send and rdma write
 // If rdma write,
@@ -909,7 +899,8 @@ void connection_t::empty_recv_anywhere_queue() {
 // If send,
 //   which send message has just completed is given by wr_id
 // If recv,
-//   which recv message is given by current_recv_message
+//   which recv message is given by current_recv_message,
+//   wr_id is not used
 void connection_t::handle_work_completion(ibv_wc const& work_completion) {
   bool is_send       = work_completion.opcode == 0;
   bool is_recv       = work_completion.opcode == 128;

@@ -41,9 +41,6 @@ struct ib_communicator_t {
   // shutdown the notification handler
   bool shutdown_notification_handler();
 
-  // recieves the request that we got from expect_request_sync
-  bool receive_request_sync(node_id_t node, int32_t tag, void *bytes, size_t num_bytes);
-
   // initiates the operation on all the specified nodes
   bool op_request(const command_ptr_t &_cmd);
 
@@ -94,23 +91,11 @@ struct ib_communicator_t {
   // return the number of nodes
   int32_t get_num_nodes() const;
 private:
-//  enum com_tag {
-//    response_string_tag = 1,
-//    notify_tensor_tag,
-//    free_tag
-//  };
-//  tag_t get_tag(com_tag t, int32_t rank) const {
-//    return t*get_num_nodes() + rank;
-//  }
-//  tag_t get_response_string_tag(int32_t rank) const {
-//    return get_tag(com_tag::response_str_tag, rank);
-//  }
-//  tag_t get_free_tag(int32_t rank, int t) const {
-//    return get_tag(com_tag::free_tag + t, rank);
-//  }
-//  //tag_t get_notify_tensor_tag() const {
-//  //  return get_tag(com_tag::notify_tensor_tag, 0);
-//  //}
+  enum com_tag {
+    response_string_tag = 1,
+    notify_tensor_tag,
+    free_tag
+  };
 
 private:
   ib::connection_t connection;

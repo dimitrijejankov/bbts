@@ -156,11 +156,6 @@ struct connection_t {
   ibv_pd* get_protection_domain() { return protection_domain; }
 
 private:
-  void check_tag(tag_t tag) const {
-    if(tag == 0) {
-      throw std::invalid_argument("zero tag is invalid");
-    }
-  }
   void check_rank(int32_t other_rank) const {
     if(get_rank() == other_rank) {
       throw std::invalid_argument("cannot send and recv from self");
