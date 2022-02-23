@@ -7,7 +7,7 @@ namespace bbts {
 broadcast_op_t::broadcast_op_t(bbts::communicator_t &_comm,
                                bbts::storage_t &_storage,
                                const bbts::command_t::node_list_t &_nodes,
-                               int32_t _tag, 
+                               int32_t _tag,
                                size_t _num_bytes,
                                bbts::tid_t _tid): _comm(_comm),
                                                   _storage(_storage),
@@ -52,10 +52,10 @@ void broadcast_op_t::apply() {
 
   // init a remote transaction on all nodes
   bool success = true;
-  _storage.remote_transaction(_tag, _nodes, get, create, 
+  _storage.remote_transaction(_tag, _nodes, get, create,
   [&](const storage_t::reservation_result_t &res) {
 
-    // the root node has the vrank 0, if this is not the root node 
+    // the root node has the vrank 0, if this is not the root node
     // we need to recieve the broadcasted tensor
     if (vrank > 0) {
 
@@ -67,7 +67,7 @@ void broadcast_op_t::apply() {
       _in = res.create[0].get().tensor;
 
       // recieve the request and check if there is an error
-      if (!_comm.receive_request_sync(get_global_rank(peer), _tag, _in, _num_bytes)) {
+      if (!_comm.recv_sync(_in, _num_bytes, get_global_rank(peer), _tag)) {
         std::cout << "Failed to recieve the tensor for node " << _comm.get_rank() << " \n";
       }
     }
@@ -77,8 +77,7 @@ void broadcast_op_t::apply() {
       _in = res.get[0].get().tensor;
     }
 
-    // allocate the requests
-    std::vector<communicator_t::async_request_t> requests;
+    std::vector<std::future<bool>> requests;
     requests.reserve(size);
 
     // send the tensor to the right nodes
@@ -90,13 +89,7 @@ void broadcast_op_t::apply() {
         peer = peer % size;
 
         // send the tensor async
-        requests.emplace_back(_comm.send_async(_in, _num_bytes, get_global_rank(peer), _tag));
-
-        // we failed here return null
-        if(!requests.back().request) {
-          std::cout << "Failed to forward a tensor\n";
-          exit(-1);
-        }
+        requests.push_back(_comm.send_async(_in, _num_bytes, get_global_rank(peer), _tag));
       }
     }
 
@@ -104,10 +97,12 @@ void broadcast_op_t::apply() {
     bool success = true;
     if (!requests.empty()) {
       for(auto &r : requests) {
-        
+
         // wait for request to finish
-        if(!_comm.wait_async(r)) {
+        if(!r.get()) {
           success = false;
+          std::cout << "Failed to forward a tensor\n";
+          exit(-1);
         }
       }
     }

@@ -26,6 +26,9 @@ struct ib_communicator_t {
   // sends, recives a blob with the matching tag from a given node, blocking
   bool send_sync(const void *_bytes, size_t num_bytes, node_id_t _node, int32_t _tag);
   bool recv_sync(void *_bytes, size_t num_bytes, node_id_t _node, int32_t _tag);
+  // and non blocking
+  std::future<bool> send_async(
+    const void *_bytes, size_t num_bytes, node_id_t _node, int32_t _tag);
 
   // notify a node that tensors were created
   bool tensors_created_notification(
@@ -53,6 +56,9 @@ struct ib_communicator_t {
   // expect the a coord op
   bool expect_coord_cmds(size_t num_cmds, std::vector<command_ptr_t> &out);
 
+  bool send_tensor_meta(const std::vector<std::tuple<tid_t, tensor_meta_t>> &meta);
+  bool recv_meta(node_id_t node, std::vector<std::tuple<tid_t, tensor_meta_t>> &data);
+
   // sync the resource aquisition
   bool sync_resource_aquisition(
     command_id_t cmd,
@@ -62,11 +68,9 @@ struct ib_communicator_t {
   // sync the resource aquisition between two nodes
   bool sync_resource_aquisition_p2p(command_id_t cmd, node_id_t &node, bool my_val);
 
-  // recieved the tensors size
-  std::tuple<uint64_t, bool> recv_tensor_size(node_id_t node, int32_t tag);
-
-  // send the tensor size
+  // send and recv the tensors size
   bool send_tensor_size(node_id_t node, int32_t tag, uint64_t val);
+  std::tuple<uint64_t, bool> recv_tensor_size(node_id_t node, int32_t tag);
 
   // send a bunch of bytes to all nodes
   bool send_bytes(char* file, size_t file_size);
@@ -89,6 +93,7 @@ private:
     coordinator_bcast_cmd_tag,
     coordinator_bcast_bytes,
     barrier_tag,
+    tensor_meta_tag,
     free_tag
   };
 

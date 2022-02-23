@@ -99,11 +99,7 @@ bool ib_communicator_t::send_sync(
   node_id_t dest_rank,
   int32_t tag)
 {
-  return connection.send(
-    dest_rank,
-    com_tag::free_tag + tag,
-    {(void*)bytes, num_bytes}
-  ).get();
+  return send_async(bytes, num_bytes, dest_rank, tag).get();
 }
 
 bool ib_communicator_t::recv_sync(
@@ -116,6 +112,18 @@ bool ib_communicator_t::recv_sync(
     com_tag::free_tag + tag,
     {bytes, num_bytes}
   ).get();
+}
+
+std::future<bool> ib_communicator_t::send_async(
+  const void *bytes,
+  size_t num_bytes,
+  node_id_t dest_rank,
+  int32_t tag)
+{
+  return connection.send(
+    dest_rank,
+    com_tag::free_tag + tag,
+    {(void*)bytes, num_bytes});
 }
 
 bool ib_communicator_t::tensors_created_notification(
@@ -327,6 +335,58 @@ bool ib_communicator_t::expect_coord_cmds(
     }
   }
   return true;
+}
+
+bool ib_communicator_t::send_tensor_meta(
+  std::vector<std::tuple<tid_t, tensor_meta_t>> const& meta)
+{
+  // send the meta info to node 0
+
+  // the number of bytes
+  size_t num_bytes = meta.size() * sizeof(std::tuple<tid_t, tensor_meta_t>);
+
+  return connection.send(
+    0,
+    com_tag::tensor_meta_tag,
+    {(void*)meta.data(), num_bytes}).get();
+}
+
+bool ib_communicator_t::recv_meta(
+  node_id_t node,
+  std::vector<std::tuple<tid_t, tensor_meta_t>> &data)
+{
+  // TODO: this method does an extra copy
+  // One could do two connection.send messages, one with the size. But that'd be silly
+  // because the connection class is already sending size information in it's communication.
+  // The problem is that std::vector is owning the data and the connection class isn't
+  // std::vector aware. The best bet would be to use a data structure besides std::vector..
+
+  auto [success, own_bytes] = connection.recv_from(node, com_tag::tensor_meta_tag).get();
+
+  if(success) {
+    auto num = own_bytes.size / sizeof(std::tuple<tid_t, tensor_meta_t>);
+    data.resize(num);
+    std::tuple<tid_t, tensor_meta_t>* recv_beg =
+      (std::tuple<tid_t, tensor_meta_t>*) own_bytes.ptr.get();
+    std::copy(recv_beg, recv_beg + num, data.begin());
+  }
+  return success;
+}
+
+
+// TODO: it should be possible to create a fixed size message connection object.
+//       it is a bit silly to send such small messages with connection.h as it is now
+bool ib_communicator_t::send_tensor_size(node_id_t node, int32_t tag, uint64_t val) {
+  return connection.send(node, com_tag::free_tag + tag, to_bytes_t(&val, 1)).get();
+}
+
+std::tuple<uint64_t, bool> ib_communicator_t::recv_tensor_size(node_id_t node, int32_t tag) {
+  auto [success, own_bytes] = connection.recv_from(node, com_tag::free_tag + tag).get();
+  uint64_t ret;
+  if(success) {
+    ret = *((uint64_t*)own_bytes.ptr.release());
+  }
+  return {ret, success};
 }
 
 bool ib_communicator_t::send_bytes(char* file, size_t file_size) {
