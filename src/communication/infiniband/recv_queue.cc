@@ -154,6 +154,12 @@ void virtual_recv_queue_t::completed_fail_recv() {
   process_next();
 }
 
+bool virtual_recv_queue_t::empty() const {
+  return in_process_items.empty() &&
+         waiting_open_send_items.empty() &&
+         pending_sizes.empty();
+}
+
 void virtual_recv_queue_t::process_next() {
   if(!in_process_items.empty()) {
     post_open_recv();

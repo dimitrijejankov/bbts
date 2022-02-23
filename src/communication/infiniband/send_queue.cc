@@ -72,6 +72,9 @@ void virtual_send_queue_t::completed_fail_send() {
   process_next();
 }
 
+bool virtual_send_queue_t::empty() const {
+  return items.empty();
+}
 
 void virtual_send_queue_t::process_next() {
   if(!items.empty()) {

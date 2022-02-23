@@ -496,9 +496,11 @@ int bbts_connect_context(
 connection_t::connection_t(
   std::string dev_name,
   int32_t rank,
+  uint64_t num_pinned_tags,
   std::vector<std::string> ips):
     rank(rank),
     current_recv_msg(0),
+    num_pinned_tags(num_pinned_tags),
     send_wr_cnts(ips.size()),
     pending_msgs(ips.size()),
     write_wr_cnts(ips.size()),
@@ -925,7 +927,7 @@ void connection_t::send_to_self(tag_t tag, send_item_t&& send_item) {
       set_send_recv_self_items(std::move(send_item), recv_item);
 
       // If both queues are empty, remove em both
-      if(recvs.empty()) {
+      if(recvs.empty() && tag >= num_pinned_tags) {
         self_recvs.erase(tag);
         self_sends.erase(tag);
       }
@@ -965,7 +967,7 @@ void connection_t::recv_from_self(tag_t tag, recv_item_ptr_t recv_item) {
 
     sends.pop();
     // If both queues are empty, remove em both
-    if(sends.empty()) {
+    if(sends.empty() && tag >= num_pinned_tags) {
       self_recvs.erase(tag);
       self_sends.erase(tag);
     }
@@ -1047,7 +1049,7 @@ void connection_t::handle_work_completion(ibv_wc const& work_completion) {
     auto& which = work_completion.wr_id;
     auto& msg = send_msgs[which];
     tag_rank_t tag_rank = {msg.tag, msg.rank};
-    auto& dest_rank = std::get<1>(tag_rank);
+    auto& [tag, dest_rank] = tag_rank;
 
     if(msg.type == bbts_message_t::message_type::open_send) {
       _DCB_COUT_("handle: sent open send" << std::endl);
@@ -1057,13 +1059,30 @@ void connection_t::handle_work_completion(ibv_wc const& work_completion) {
       virtual_recv_queues.at(tag_rank).completed_open_recv();
     } else if(msg.type == bbts_message_t::message_type::close_send) {
       _DCB_COUT_("handle: sent close send" << std::endl);
-      virtual_send_queues.at(tag_rank).completed_close_send();
+      virtual_send_queue_t& v_send_queue = virtual_send_queues.at(tag_rank);
+      v_send_queue.completed_close_send();
+      // A message has been completed, so it could be the case that
+      // v_send_queue is sitting unused in virtual_send_queues, so
+      // get rid of it.
+      if(tag >= this->num_pinned_tags && v_send_queue.empty()) {
+        virtual_send_queues.erase(tag_rank);
+      }
     } else if(msg.type == bbts_message_t::message_type::fail_send) {
       _DCB_COUT_("handle: sent fail send" << std::endl);
-      virtual_send_queues.at(tag_rank).completed_fail_send();
+      virtual_send_queue_t& v_send_queue = virtual_send_queues.at(tag_rank);
+      v_send_queue.completed_fail_send();
+      // A message has been completed.
+      if(tag >= this->num_pinned_tags && v_send_queue.empty()) {
+        virtual_send_queues.erase(tag_rank);
+      }
     } else if(msg.type == bbts_message_t::message_type::fail_recv) {
       _DCB_COUT_("handle: sent fail recv" << std::endl);
-      virtual_recv_queues.at(tag_rank).completed_fail_recv();
+      virtual_recv_queue_t& v_recv_queue = virtual_recv_queues.at(tag_rank);
+      v_recv_queue.completed_fail_recv();
+      // A message has been completed.
+      if(tag >= this->num_pinned_tags && v_recv_queue.empty()) {
+        virtual_recv_queues.erase(tag_rank);
+      }
     } else {
       throw std::runtime_error("invalid message type");
     }
@@ -1113,7 +1132,7 @@ void connection_t::handle_work_completion(ibv_wc const& work_completion) {
 
     // now handle the message
     tag_rank_t tag_rank = {msg.tag, msg.from_rank};
-    auto& from_rank = std::get<1>(tag_rank);
+    auto& [tag, from_rank] = tag_rank;
     if(msg.type == bbts_message_t::message_type::open_send) {
       _DCB_COUT_("handle: recv open send" << std::endl);
       // Note: this can recv an open send without there being an open channel
@@ -1127,13 +1146,28 @@ void connection_t::handle_work_completion(ibv_wc const& work_completion) {
         msg.m.open_recv.key);
     } else if(msg.type == bbts_message_t::message_type::close_send) {
       _DCB_COUT_("handle: recv close send" << std::endl);
-      virtual_recv_queues.at(tag_rank).recv_close_send();
+      virtual_recv_queue_t& v_recv_queue = virtual_recv_queues.at(tag_rank);
+      v_recv_queue.recv_close_send();
+      // A message has been completed
+      if(tag >= this->num_pinned_tags && v_recv_queue.empty()) {
+        virtual_recv_queues.erase(tag_rank);
+      }
     } else if(msg.type == bbts_message_t::message_type::fail_send) {
       _DCB_COUT_("handle: recv fail send" << std::endl);
-      virtual_recv_queues.at(tag_rank).recv_fail_send();
+      virtual_recv_queue_t& v_recv_queue = virtual_recv_queues.at(tag_rank);
+      v_recv_queue.recv_fail_send();
+      // A message has been completed
+      if(tag >= this->num_pinned_tags && v_recv_queue.empty()) {
+        virtual_recv_queues.erase(tag_rank);
+      }
     } else if(msg.type == bbts_message_t::message_type::fail_recv) {
       _DCB_COUT_("handle: recv fail recv" << std::endl);
-      virtual_send_queues.at(tag_rank).recv_fail_recv();
+      virtual_send_queue_t& v_send_queue = virtual_send_queues.at(tag_rank);
+      v_send_queue.recv_fail_recv();
+      // A message has been completed.
+      if(tag >= this->num_pinned_tags && v_send_queue.empty()) {
+        virtual_send_queues.erase(tag_rank);
+      }
     } else {
       throw std::runtime_error("invalid message type");
     }

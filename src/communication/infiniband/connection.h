@@ -115,10 +115,14 @@ using recv_item_ptr_t = std::shared_ptr<recv_item_t>;
 // The connection_t object holds an "infinite" set of queues, each queue
 // specified by a tag. The idea is that each queue must only be processing one
 // item at a time.
+//
+// The first num_pinned_tags are not removed from virtual_send_queues or
+// virtual_recv_queues when they are unused.
 struct connection_t {
   connection_t(
     std::string dev_name,
     int32_t rank,
+    uint64_t num_pinned_tags,
     std::vector<std::string> ips);
 
   connection_t(connection_t const&) = delete;
@@ -202,7 +206,6 @@ private:
   std::mutex send_m, recv_m, recv_anywhere_m;
 
   // virtual send and recv queues
-  // TODO: how do you go about deleting unusued queues?
   std::map<tag_rank_t, virtual_send_queue_t> virtual_send_queues;
   std::map<tag_rank_t, virtual_recv_queue_t> virtual_recv_queues;
   // for sending and recving from self
@@ -241,6 +244,8 @@ private:
   uint32_t num_recv;
   uint32_t num_send_per_qp;
   uint32_t num_write_per_qp;
+
+  uint64_t num_pinned_tags;
 
   // for each rank except self, contain the number of send wrs left.
   // if this hits zero, you can't post a send to the given location

@@ -16,7 +16,9 @@ ib_communicator_t::ib_communicator_t(
   node_config_ptr_t const& _cfg,
   std::string const& dev_name,
   int rank,
-  std::vector<std::string> const& ips): connection(dev_name, rank, ips)
+  std::vector<std::string> const& ips):
+    connection(dev_name, rank, com_tag::free_tag, ips)
+    // ^ pin all tags before the free tag
 {}
 
 ib_communicator_t::~ib_communicator_t() {}
