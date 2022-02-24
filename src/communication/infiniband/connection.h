@@ -196,7 +196,7 @@ private:
 
   void send_to_self(tag_t tag, send_item_t&& item);
   void recv_from_self(tag_t tag, recv_item_ptr_t item);
-  void set_send_recv_self_items(send_item_t&& send_item, recv_item_ptr_t recv_item);
+  void set_send_recv_self_items(send_item_t& send_item, recv_item_ptr_t recv_item);
 
   void handle_work_completion(ibv_wc const& work_completion);
 

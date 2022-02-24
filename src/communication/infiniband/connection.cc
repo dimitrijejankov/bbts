@@ -584,6 +584,7 @@ connection_t::~connection_t() {
 
 future<bool> connection_t::send(int32_t dest_rank, tag_t tag, bytes_t bytes) {
   std::lock_guard<std::mutex> lk(send_m);
+
   send_init_queue.push_back({
     tag,
     dest_rank,
@@ -608,6 +609,7 @@ future<tuple<bool, int32_t, own_bytes_t> >
   connection_t::recv(tag_t tag)
 {
   std::lock_guard<std::mutex> lk(recv_anywhere_m);
+
   recv_anywhere_init_queue.push_back({
     tag,
     std::shared_ptr<recv_item_t>(new recv_item_t(
@@ -930,7 +932,7 @@ void connection_t::send_to_self(tag_t tag, send_item_t&& send_item) {
 
     if(recv_item->acquire()) {
       // we have found a match
-      set_send_recv_self_items(std::move(send_item), recv_item);
+      set_send_recv_self_items(send_item, recv_item);
 
       // If both queues are empty, remove em both
       if(recvs.empty() && tag >= num_pinned_tags) {
@@ -969,7 +971,7 @@ void connection_t::recv_from_self(tag_t tag, recv_item_ptr_t recv_item) {
   // recvs empty, sends not empty
   if(recv_item->acquire()) {
     // we have a match
-    set_send_recv_self_items(std::move(sends.front()), recv_item);
+    set_send_recv_self_items(sends.front(), recv_item);
 
     sends.pop();
     // If both queues are empty, remove em both
@@ -981,7 +983,7 @@ void connection_t::recv_from_self(tag_t tag, recv_item_ptr_t recv_item) {
 }
 
 void connection_t::set_send_recv_self_items(
-  send_item_t&& send_item,
+  send_item_t& send_item,
   recv_item_ptr_t recv_item)
 {
   // Invariant: the recv_item has been acquired
@@ -1001,7 +1003,7 @@ void connection_t::set_send_recv_self_items(
     bytes_t recv_bs = recv_item->bytes.get_bytes();
     char* send_data = (char*)send_bs.data;
     char* recv_data = (char*)recv_bs.data;
-    std::copy(recv_data, recv_data + send_bs.size, send_data);
+    std::copy(send_data, send_data + send_bs.size, recv_data);
 
     // set recv to success
     recv_item->set_success(get_rank());
