@@ -507,6 +507,22 @@ connection_t::connection_t(
     pending_writes(ips.size())
 {
   num_rank = ips.size();
+  if(num_rank == 1) {
+    // TODO: How best to handle one rank?
+    //
+    // Do not set up infiniband but have a poll thread busy wait.
+    // This could be made more efficient by not busy waiting--there is no need to,
+    // since infiniband queues aren't going to be getting full.
+    //
+    // Only self_sends, self_recvs, the init queues and the poll thread
+    // should be used.
+    std::cout
+      << "WARNING: using infiniband connection class with only 1 rank"
+      << std::endl;
+
+    poll_thread = std::thread(&connection_t::poll, this);
+    return;
+  }
 
   bbts_context_t *context = bbts_init_context(
     dev_name,
@@ -810,6 +826,18 @@ void connection_t::post_fail_recv(int32_t dest_rank, tag_t tag){
 
 void connection_t::poll() {
   ibv_wc work_completion;
+
+  if(num_rank == 1) {
+    for(int i = 0; i != 1000000; ++i) {
+      while(!destruct) {
+        empty_send_init_queue();
+        empty_recv_init_queue();
+        empty_recv_anywhere_queue();
+      }
+    }
+    return;
+  }
+
   while(!destruct){
     // It's not important that the thread catches the destruct exactly.
     for(int i = 0; i != 1000000; ++i) {

@@ -638,7 +638,7 @@ int main(int argc, char **argv) {
   std::thread t;
   if (node.get_rank() == 0) {
     t = std::thread([&]() {
-      verbose(std::cout, node, true);
+      //verbose(std::cout, node, true);
       prompt(node);
     });
   }
