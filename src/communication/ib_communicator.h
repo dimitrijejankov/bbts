@@ -19,8 +19,7 @@ struct _silly {
   }
   std::string s;
 };
-#define _IBC_COUT_(x) _silly _silly_monsters_attacking_turtles(x)
-// #define _IBC_COUT_(x) std::cout << x << std::endl
+#define _IBC_COUT_(x) // _silly _silly_monsters_attacking_turtles(x)
 
 namespace bbts {
 

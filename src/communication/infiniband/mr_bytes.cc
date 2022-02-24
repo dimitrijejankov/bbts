@@ -43,8 +43,8 @@ bool memory_region_bytes_t::setup_bytes(uint32_t size)
       return false;
     }
   } else {
-    if(bytes.size < size) {
-      // not enough bytes were provided
+    if(!bytes.data || bytes.size < size) {
+      // either a nullptr or not enough bytes were provided
       return false;
     }
   }

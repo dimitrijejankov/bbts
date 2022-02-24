@@ -145,7 +145,8 @@ bool ib_communicator_t::tensors_created_notification(
 
 std::tuple<node_id_t, std::vector<bbts::tid_t>>
 ib_communicator_t::receive_tensor_created_notification() {
-  _IBC_COUT_("treceive_tesnors_created_notification");
+  _IBC_COUT_("recv tensor created notification");
+
   auto [success, from_rank, bytes] = connection.recv(
     com_tag::notify_tensor_tag
   ).get();
@@ -164,7 +165,7 @@ ib_communicator_t::receive_tensor_created_notification() {
 bool ib_communicator_t::shutdown_notification_handler() {
   _IBC_COUT_("shutdown_notification_handler");
   std::vector<bbts::tid_t> tensor = { -1 };
-  tensors_created_notification(get_rank(), tensor);
+  return tensors_created_notification(get_rank(), tensor);
 }
 
 bool ib_communicator_t::op_request(const command_ptr_t &_cmd) {
