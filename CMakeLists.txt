@@ -54,7 +54,7 @@ if(${ENABLE_GPU})
     enable_language(CUDA)
 
     # set the cuda standard
-    set(CMAKE_CUDA_STANDARD 11)
+    set(CMAKE_CUDA_STANDARD 17)
 
     # set the cuda flags
     set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --default-stream per-thread -Xcompiler -fPIC")
