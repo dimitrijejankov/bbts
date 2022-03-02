@@ -13,7 +13,6 @@
 #include <iostream>
 #include <sstream>
 #include <sys/mman.h>
-#include <jemalloc/jemalloc.h>
 
 
 namespace bbts {
@@ -81,10 +80,7 @@ tensor_t *memory_storage_t::_allocate_tensor(size_t num_bytes) {
     checkCudaErrors(cudaMallocManaged(&ts, num_bytes));
   #else
     // we can not do this
-    ts = (tensor_t*) malloc(num_bytes); 
-    if(mlock(ts, num_bytes) == -1) {
-      throw std::runtime_error("Failed to lock the memory.");
-    }
+    ts = (tensor_t*) aligned_alloc(sizeof(double), num_bytes); 
   #endif
 
   return ts;

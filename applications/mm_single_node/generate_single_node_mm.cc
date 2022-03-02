@@ -16,7 +16,8 @@ using to_agg_index_t = std::map<std::tuple<int32_t, int32_t>, std::vector<std::t
 
 // creates the matrix tensors on this node
 index_t create_matrix_tensors(int n,
-                              int split,
+                              int row_split,
+                              int col_split,
                               int &cur_tid,
                               bbts::parsed_command_list_t &_cmds) {
 
@@ -24,12 +25,13 @@ index_t create_matrix_tensors(int n,
   index_t index;
 
   // block size
-  uint32_t block_size = n / split;
+  uint32_t row_block_size = n / row_split;
+  uint32_t col_block_size = n / col_split;
 
   // create all the rows an columns we need
   auto hash_fn = std::hash<int>();
-  for (int row_id = 0; row_id < split; ++row_id) {
-    for (int col_id = 0; col_id < split; ++col_id) {
+  for (int row_id = 0; row_id < row_split; ++row_id) {
+    for (int col_id = 0; col_id < col_split; ++col_id) {
 
       // set the index
       index[{row_id, col_id}] = {0, cur_tid};
@@ -41,8 +43,8 @@ index_t create_matrix_tensors(int n,
                       false,
                       {},
                       {{cur_tid, 0}},
-                      {command_param_t{.u = block_size},
-                       command_param_t{.u = block_size},
+                      {command_param_t{.u = row_block_size},
+                       command_param_t{.u = col_block_size},
                        command_param_t{.f = 0.0f},
                        command_param_t{.f = 1.0f}});
 
@@ -55,7 +57,9 @@ index_t create_matrix_tensors(int n,
   return std::move(index);
 }
 
-to_agg_index_t create_multiply(size_t split,
+to_agg_index_t create_multiply(size_t i_split,
+                               size_t j_split,
+                               size_t k_split,
                                index_t a_mat,
                                index_t b_mat,
                                int32_t &tid_offset,
@@ -67,15 +71,16 @@ to_agg_index_t create_multiply(size_t split,
   std::map<std::tuple<int32_t, int32_t>, std::vector<std::tuple<tid_t, node_id_t>>> multiplies;
 
   // generate the applies to do the multiplication
-  for (int32_t i = 0; i < split; ++i) {
-    for (int32_t j = 0; j < split; ++j) {
-      for (int32_t k = 0; k < split; ++k) {
+  for (int32_t i = 0; i < i_split; ++i) {
+    for (int32_t j = 0; j < j_split; ++j) {
+      for (int32_t k = 0; k < k_split; ++k) {
 
         // get the tid and the node
         auto[a_node, a_tid] = a_mat[{i, k}];
         auto[b_node, b_tid] = b_mat[{k, j}];
 
         // add the command
+        std::cout << "mult\n";
         _cmds.add_apply("matrix_mult",
                         {"dense", "dense"},
                         {"dense"},
@@ -98,15 +103,16 @@ to_agg_index_t create_multiply(size_t split,
   return std::move(multiplies);
 }
 
-void generate_aggregation(size_t split,
+void generate_aggregation(size_t i_split,
+                          size_t j_split,
                           int32_t &tid_offset,
                           to_agg_index_t &multiplies,
                           bbts::parsed_command_list_t &_cmds,
                           bool gpu_add) {
 
   // create the aggregate
-  for (int32_t rowID = 0; rowID < split; ++rowID) {
-    for (int32_t colID = 0; colID < split; ++colID) {
+  for (int32_t rowID = 0; rowID < i_split; ++rowID) {
+    for (int32_t colID = 0; colID < j_split; ++colID) {
 
       // all the multiplied tensors
       auto &muls = multiplies[{rowID, colID}];
@@ -145,27 +151,27 @@ void create_delete(std::vector<int32_t> &to_del,
     _cmds.add_delete(_inputs);
 }
 
-std::tuple<bbts::parsed_command_list_t, index_t, index_t> generate_matrices(size_t split, size_t matrix_size) {
+std::tuple<bbts::parsed_command_list_t, index_t, index_t> generate_matrices(size_t i_split, size_t j_split, size_t k_split, size_t matrix_size) {
 
   bbts::parsed_command_list_t commands;
 
-  auto a_idx = create_matrix_tensors(matrix_size, split, tid_offset, commands);
-  auto b_idx = create_matrix_tensors(matrix_size, split, tid_offset, commands);
+  auto a_idx = create_matrix_tensors(matrix_size, i_split, k_split, tid_offset, commands);
+  auto b_idx = create_matrix_tensors(matrix_size, k_split, j_split, tid_offset, commands);
 
   return {std::move(commands), a_idx, b_idx};
 }
 
-bbts::parsed_command_list_t generate_commands(index_t &a_idx, index_t b_idx, bool gpu_add, bool gpu_mult, size_t split, size_t matrix_size) {
+bbts::parsed_command_list_t generate_commands(index_t &a_idx, index_t b_idx, bool gpu_add, bool gpu_mult, size_t i_split, size_t j_split, size_t k_split, size_t matrix_size) {
 
   bbts::parsed_command_list_t commands;
   // all the tensors that we need to delete
   std::vector<int32_t> to_del;
 
   // create the multiply commands
-  auto multiplies = create_multiply(split, a_idx, b_idx, tid_offset, commands, to_del, gpu_mult);
+  auto multiplies = create_multiply(i_split, j_split, k_split, a_idx, b_idx, tid_offset, commands, to_del, gpu_mult);
 
   // generate the aggregation
-  generate_aggregation(split, tid_offset, multiplies, commands, gpu_add);
+  generate_aggregation(i_split, j_split, tid_offset, multiplies, commands, gpu_add);
 
   // create the delete
   create_delete(to_del, commands);
@@ -175,9 +181,9 @@ bbts::parsed_command_list_t generate_commands(index_t &a_idx, index_t b_idx, boo
 
 int main(int argc, char **argv) {
 
-  if (argc != 8) {
+  if (argc != 9) {
     std::cout << "Incorrect usage\n";
-    std::cout << "Usage ./generate_bmm <gpu_add> <gpu_mult> <split> <matrix_size> <gen_file>.bbts <cmd_file>.bbts\n";
+    std::cout << "Usage ./generate_bmm <gpu_add> <gpu_mult> <i_split> <j_split> <k_split> <matrix_size> <gen_file>.bbts <cmd_file>.bbts\n";
     return 0;
   }
 
@@ -187,17 +193,18 @@ int main(int argc, char **argv) {
   
   // 
   char *end;
-  auto split = std::strtol(argv[3], &end, 10);
-  auto num_nodes = std::strtol(argv[4], &end, 10);
-  auto matrix_size = std::strtol(argv[5], &end, 10);
+  auto i_split = std::strtol(argv[3], &end, 10);
+  auto j_split = std::strtol(argv[4], &end, 10);
+  auto k_split = std::strtol(argv[5], &end, 10);
+  auto matrix_size = std::strtol(argv[6], &end, 10);
 
   // make the generate matrix commands
-  auto [matrix_gen, a_idx, b_idx] = generate_matrices(split, matrix_size);
-  matrix_gen.serialize(argv[6]);
+  auto [matrix_gen, a_idx, b_idx] = generate_matrices(i_split, j_split, k_split, matrix_size);
+  matrix_gen.serialize(argv[7]);
 
   // make the multiply commands
-  auto cmds = generate_commands(a_idx, b_idx, gpu_add, gpu_mult, split, matrix_size);
-  cmds.serialize(argv[7]);
+  auto cmds = generate_commands(a_idx, b_idx, gpu_add, gpu_mult, i_split, j_split, k_split, matrix_size);
+  cmds.serialize(argv[8]);
 
   return 0;
 }

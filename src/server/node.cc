@@ -67,8 +67,15 @@ void bbts::node_t::run() {
   command_processing_threads.reserve(_comm->get_num_nodes());
   for (node_id_t t = 0; t < _config->num_threads; ++t) {
     command_processing_threads.push_back(std::move(create_move_processing_thread()));
-    command_processing_threads.push_back(std::move(create_apply_processing_thread()));
     command_processing_threads.push_back(std::move(create_reduce_processing_thread()));
+    command_processing_threads.push_back(std::move(create_apply_processing_thread()));
+
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(t, &cpuset);
+    int rc = pthread_setaffinity_np(command_processing_threads.back().native_handle(),
+                                    sizeof(cpu_set_t), &cpuset);
+
   }
 
   // create all the request threads if we are using storage

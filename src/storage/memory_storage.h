@@ -208,8 +208,6 @@ private:
   // communicator used for remote transactions
   bbts::communicator_ptr_t _com;
 
-  // the tensors that are preallocated so far
-  std::unordered_map<size_t, std::vector<tensor_t*>> _preallocated_tensors;
 };
 
 }
