@@ -6,7 +6,10 @@
 #include "../ud_functions/udf_manager.h"
 #include "../utils/concurent_queue.h"
 
+
 namespace bbts {
+
+#define BBTS_MAX_GPU_DEVICES 8
 
 struct kernel_run_t {
 

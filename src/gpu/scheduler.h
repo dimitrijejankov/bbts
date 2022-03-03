@@ -1,8 +1,7 @@
 #pragma once
 
 #include "types.h"
-#include "early_scheduler.h"
-#include "goodness_heuristic.h"
+#include "gpu_heuristic.h"
 #include "gpu_memory.h"
 #include "../storage/storage.h"
 #include "../ud_functions/udf_manager.h"
@@ -14,7 +13,7 @@ public:
   multi_gpu_scheduler_t(size_t num_gpus, bbts::storage_ptr_t storage,
                         bbts::udf_manager_ptr udm, tensor_factory_ptr_t tf)
       : _num_gpus(num_gpus), run_queue(num_gpus), storage(std::move(storage)),
-        udm(std::move(udm)), tf(std::move(tf)) {
+        udm(std::move(udm)), tf(std::move(tf)), heuristic(num_gpus) {
 
     // p2p nvlink initialization
   }
@@ -137,6 +136,7 @@ public:
   // moves memory from the CPU to GPUs
   void command_prep_thread() {
 
+    int preffered_dev = 0;
     bool should_sleep = false;
     scheduler_request_ptr_t req = std::make_shared<scheduler_request_t>();
     while (true) {
@@ -157,8 +157,7 @@ public:
         // 2. since a new tensor has been created update commands that can be
         // scheduled
         for (auto &out : fk->output) {
-          heuristic.tensor_loaded(out);
-          early_scheuler.tensor_loaded(out, fk->dev);
+          heuristic.tensor_loaded(out, fk->dev);
           mem.tensor_created(out, fk->dev);
         }
       }
@@ -170,7 +169,6 @@ public:
 
         // register the apply with the heuristic
         heuristic.register_apply(nc->cmd);
-        early_scheuler.register_apply(nc->cmd);
 
         // mark all the inputs for use
         for (auto idx = 0; idx < nc->cmd->get_num_inputs(); ++idx) {
@@ -181,7 +179,6 @@ public:
 
         // register the reduce with the heuristic
         heuristic.register_reduce(nc->cmd);
-        early_scheuler.register_reduce(nc->cmd);
 
         // mark all the inputs for use
         for (auto idx = 0; idx < nc->cmd->get_num_inputs(); ++idx) {
@@ -200,11 +197,8 @@ public:
 
       // 4.1. check if we have a command that we can run immeidately (all the
       // inputs are on the same GPU)
-      int dev;
-      if ((dev = early_scheuler.has_same_gpu()) != -1) {
-
-        // get the command and schedule it
-        kernel_prep_ptr_t kernel_prep = early_scheuler.get_next();
+      auto [kernel_prep, dev] = heuristic.get_next_on_same(preffered_dev);
+      if (dev != -1) {
 
         // schedule them for execution (pin resources and add to execution
         // queue)
@@ -213,10 +207,7 @@ public:
       }
       // 4.2. othwerwise check if we have commands that have inputs on at least
       // one of the GPUs
-      else if (early_scheuler.has_on_gpu()) {
-
-        // get the schedluling command
-        kernel_prep_ptr_t kernel_prep = early_scheuler.get_next();
+      else if ((kernel_prep = heuristic.get_next_on_any()) == nullptr) {
 
         // 4.2.1 check if we can preallocate the additional memory
         // on one of the GPUs (priority should be give to the least busy GPU)
@@ -256,7 +247,7 @@ public:
 
       // 5.1 if there are not commands we can schedule immediately
       //  we pick a command based on a 'GOODNESS' score
-      kernel_prep_ptr_t kernel_prep = heuristic.get_next();
+      kernel_prep = heuristic.get_next_heuristic();
       if (kernel_prep == nullptr) {
         continue;
       }
@@ -456,11 +447,8 @@ public:
     _is_running = false;
   }
 
-  // the heuristic we use to prioritize commands
-  goodness_heuristic_class_t heuristic;
-
   // this schedules commands that are already known to be on the GPU
-  early_scheduler_t early_scheuler;
+  gpu_heuristic_t heuristic;
 
   //
   memory_t mem;
