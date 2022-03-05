@@ -4,11 +4,13 @@
 #include <array>
 #include <cassert>
 #include <cstdint>
+#include <memory>
 #include <sys/types.h>
 #include <tuple>
 #include <unordered_map>
 #include <set>
 #include <unordered_set>
+#include <vector>
 
 namespace bbts {
 
@@ -20,10 +22,18 @@ public:
   struct es_apply_command_nfo_t {
 
     command_id_t id;
-    
+
     uint32_t num_inputs;
 
+    uint32_t num_outputs;
+
     uint32_t loaded_inputs;
+
+    std::vector<tid_t> input_tids;
+
+    std::vector<tid_t> output_tids;
+
+    kernel_run_ptr_t run_me;
 
     std::array<u_int32_t, BBTS_MAX_GPU_DEVICES> inputs_on_devices = {0};
   };
@@ -31,15 +41,21 @@ public:
   struct es_reduce_command_nfo_t {
 
     command_id_t id;
-    
+
     // how many inputs does the reduce have
     uint32_t num_inputs;
 
     // how many times have we issued a partial reduce (should be a total num_inputs - 1 at the end)
     uint32_t num_issued;
 
+    // the output tid of thefinal result
+    tid_t output_tid;
+
     // we store here a list of all the inputs currently available on all the GPUs
-    std::vector<tid_t> inputs;
+    std::vector<tid_t> avalable_inputs;
+
+    // run this kernel
+    kernel_run_ptr_t run_me;
 
     // here we store a list of all the inputs available per GPU
     std::array<std::vector<tid_t>, BBTS_MAX_GPU_DEVICES> inputs_on_devices;
@@ -91,13 +107,13 @@ public:
         cmd.inputs_on_devices[dev].push_back(id);
 
         // add this input if we don't already have it
-        auto it = std::find(cmd.inputs.begin(), cmd.inputs.end(), id);
-        if(it == cmd.inputs.end()) {
-          cmd.inputs.push_back(id);
+        auto it = std::find(cmd.avalable_inputs.begin(), cmd.avalable_inputs.end(), id);
+        if(it == cmd.avalable_inputs.end()) {
+          cmd.avalable_inputs.push_back(id);
         }
 
         // if there are at least two inputs of a reduce it can be scheduled
-        if(cmd.inputs.size() == 2) {
+        if(cmd.avalable_inputs.size() == 2) {
           reduce_in_gpu_memory.insert(id);
         }
 
@@ -148,15 +164,15 @@ public:
         if(t.copies == 0) {
           
           // find it the tensor (not finding it is a bug)
-          auto it = std::find(cmd.inputs.begin(), cmd.inputs.end(), id);
-          assert(it != cmd.inputs.end());
+          auto it = std::find(cmd.avalable_inputs.begin(), cmd.avalable_inputs.end(), id);
+          assert(it != cmd.avalable_inputs.end());
 
           // remove it
-          std::swap(*it, *(cmd.inputs.end() - 1));
-          cmd.inputs.pop_back();
+          std::swap(*it, *(cmd.avalable_inputs.end() - 1));
+          cmd.avalable_inputs.pop_back();
 
           // if we dropped to one input we need to unschedule it
-          if(cmd.inputs.size() == 1) {
+          if(cmd.avalable_inputs.size() == 1) {
             reduce_in_gpu_memory.erase(command_id);
           }
         }
@@ -178,13 +194,16 @@ public:
 
   }
 
-  void register_apply(const bbts::command_ptr_t &cmd){
+  void register_apply(bbts::apply_schedule_ptr_t &apply_sch){
 
+    auto &cmd = apply_sch->cmd;
     auto &apply_cmd = apply_cmds[cmd->id];
 
     apply_cmd.id = cmd->id;
     apply_cmd.num_inputs = cmd->get_num_inputs();
     apply_cmd.loaded_inputs = 0;
+    apply_cmd.input_tids.reserve(cmd->get_num_inputs());
+    apply_cmd.output_tids.reserve(cmd->get_num_outputs());
 
     for(int32_t idx = 0; idx < cmd->get_num_inputs(); ++idx) {
 
@@ -205,6 +224,14 @@ public:
 
       // add a link
       tensors_to_cmds.insert({in_tid, {apply_cmd.id, command_t::APPLY}});
+
+      // store the input tid
+      apply_cmd.input_tids.push_back(in_tid);
+    }
+
+    // store the output tids
+    for(int32_t idx = 0; idx < cmd->get_num_outputs(); ++idx) {
+      apply_cmd.output_tids.push_back(cmd->get_outputs()[idx].tid);
     }
 
     // check if we have enough inputs on any GPU
@@ -220,8 +247,9 @@ public:
     }
   };
 
-  void register_reduce(const bbts::command_ptr_t &cmd){
+  void register_reduce(bbts::reduce_schedule_ptr_t &reduce_sch){
 
+    auto &cmd = reduce_sch->cmd;
     auto &reduce_cmd = reduce_cmds[cmd->id];
 
     reduce_cmd.id = cmd->id;
@@ -235,7 +263,7 @@ public:
       
       // do we have it on any of the GPUs
       if(in.copies > 0) {
-        reduce_cmd.inputs.push_back(in_tid);
+        reduce_cmd.avalable_inputs.push_back(in_tid);
       }
 
       // update the per device count
@@ -250,7 +278,7 @@ public:
     }
 
     // check if we have enough inputs on any GPU
-    if(reduce_cmd.inputs.size() >= 2) {
+    if(reduce_cmd.avalable_inputs.size() >= 2) {
       reduce_in_gpu_memory.insert(reduce_cmd.id);
     }
 
@@ -262,13 +290,85 @@ public:
     }
   };
 
+  kernel_prep_ptr_t create_reduce(command_id_t cmd, int32_t cur_dev) {
+
+    // grab the reduce
+    auto &reduce_cmd = reduce_cmds[cmd];
+
+    // fill it out
+    auto ret = std::make_shared<kernel_prep_t>();
+    ret->command_id = reduce_cmd.id;
+    ret->dev = cur_dev;
+    ret->cpu_done = false;
+    ret->gpu_done = false;
+    ret->cpu_transfers = {};
+    ret->gpu_transfers = {};
+    ret->input = { reduce_cmd.avalable_inputs[0], 
+                    reduce_cmd.avalable_inputs[1] };
+
+    // check if this is the last time we are issuing a reduce
+    if(reduce_cmd.num_issued == reduce_cmd.num_inputs - 1){
+      ret->output = { reduce_cmd.output_tid };
+    }
+    else {
+      ret->output = { inner_anon_id++ };
+
+      // linup stuff so that  
+    }
+    
+    ret->run_me = reduce_cmd.run_me;
+    return std::move(ret);
+  }
+
+  kernel_prep_ptr_t create_apply(command_id_t cmd, int32_t cur_dev) {
+
+    auto &apply_cmd = apply_cmds[cmd];
+
+    // fill out the stuff
+    auto ret = std::make_shared<kernel_prep_t>();
+
+    // fill it out
+    ret->command_id = apply_cmd.id;
+    ret->dev = cur_dev;
+    ret->cpu_done = false;
+    ret->gpu_done = false;
+    ret->cpu_transfers = {};
+    ret->gpu_transfers = {};
+    ret->input = apply_cmd.input_tids;
+    ret->output = apply_cmd.output_tids;
+    ret->run_me = apply_cmd.run_me;
+    
+    return std::move(ret);
+  }
+
   // returns the commands and the device to schedule it on
   std::tuple<kernel_prep_ptr_t, int32_t> get_next_on_same(int32_t preffered_dev) {
+
+    // first check if we have a reduce as we give priority to reduce
+    for(int32_t dev = 0; dev < num_devices; ++dev) {
+      auto cur_dev = (preffered_dev + dev) % num_devices;
+      if(!on_reduce_single_gpu[cur_dev].empty()) {
+
+        // prepare the reduce kenel since we found on an op that can run it
+        auto cmd = *on_reduce_single_gpu[cur_dev].begin();
+        auto ret = create_reduce(cmd, cur_dev);
+        
+        // return what we have
+        return {std::move(ret), cur_dev};
+      }
+    }
+
+    // next check of apply
     for(int32_t dev = 0; dev < num_devices; ++dev) {
       auto cur_dev = (preffered_dev + dev) % num_devices;
       if(!on_apply_single_gpu[cur_dev].empty()) {
-        //*on_single_gpu[cur_dev].begin()
-        return {nullptr, cur_dev};
+        
+        // get the apply
+        auto cmd = *on_apply_single_gpu[cur_dev].begin();
+        auto ret = create_apply(cmd, cur_dev);
+
+        // return what we have
+        return {std::move(ret), cur_dev};
       }
     }
     return {nullptr, -1}; 

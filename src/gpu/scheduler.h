@@ -167,23 +167,23 @@ public:
       // 'GOODNESS'
       for (auto &nc : req->apply_cmds) {
 
-        // register the apply with the heuristic
-        heuristic.register_apply(nc->cmd);
-
         // mark all the inputs for use
         for (auto idx = 0; idx < nc->cmd->get_num_inputs(); ++idx) {
           mem.mark_for_use(nc->cmd->get_inputs()[idx].tid);
         }
+
+        // register the apply with the heuristic
+        heuristic.register_apply(nc);
       }
       for (auto &nc : req->reduce_cmds) {
 
-        // register the reduce with the heuristic
-        heuristic.register_reduce(nc->cmd);
-
         // mark all the inputs for use
         for (auto idx = 0; idx < nc->cmd->get_num_inputs(); ++idx) {
           mem.mark_for_use(nc->cmd->get_inputs()[idx].tid);
         }
+
+        // register the reduce with the heuristic
+        heuristic.register_reduce(nc);
       }
 
       // 3. check for resource freed
