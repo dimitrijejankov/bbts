@@ -290,7 +290,7 @@ public:
     }
   };
 
-  kernel_prep_ptr_t create_reduce(command_id_t cmd, int32_t cur_dev) {
+  kernel_prep_ptr_t create_reduce(command_id_t cmd) {
 
     // grab the reduce
     auto &reduce_cmd = reduce_cmds[cmd];
@@ -298,7 +298,6 @@ public:
     // fill it out
     auto ret = std::make_shared<kernel_prep_t>();
     ret->command_id = reduce_cmd.id;
-    ret->dev = cur_dev;
     ret->cpu_done = false;
     ret->gpu_done = false;
     ret->cpu_transfers = {};
@@ -320,7 +319,7 @@ public:
     return std::move(ret);
   }
 
-  kernel_prep_ptr_t create_apply(command_id_t cmd, int32_t cur_dev) {
+  kernel_prep_ptr_t create_apply(command_id_t cmd) {
 
     auto &apply_cmd = apply_cmds[cmd];
 
@@ -329,7 +328,6 @@ public:
 
     // fill it out
     ret->command_id = apply_cmd.id;
-    ret->dev = cur_dev;
     ret->cpu_done = false;
     ret->gpu_done = false;
     ret->cpu_transfers = {};
@@ -351,7 +349,8 @@ public:
 
         // prepare the reduce kenel since we found on an op that can run it
         auto cmd = *on_reduce_single_gpu[cur_dev].begin();
-        auto ret = create_reduce(cmd, cur_dev);
+        auto ret = create_reduce(cmd);
+        ret->dev = cur_dev;
         
         // return what we have
         return {std::move(ret), cur_dev};
@@ -365,7 +364,8 @@ public:
         
         // get the apply
         auto cmd = *on_apply_single_gpu[cur_dev].begin();
-        auto ret = create_apply(cmd, cur_dev);
+        auto ret = create_apply(cmd);
+        ret->dev = cur_dev;
 
         // return what we have
         return {std::move(ret), cur_dev};
@@ -376,9 +376,15 @@ public:
   
   // returns the commands and the device to schedule it on
   kernel_prep_ptr_t get_next_on_any() {
+
+    if(!reduce_in_gpu_memory.empty()) {
+      auto cmd = *reduce_in_gpu_memory.begin();
+      return create_apply(cmd);
+    }
+
     if(!apply_in_gpu_memory.empty()) {
-      // return *apply_in_gpu_memory.begin();
-      return nullptr;
+      auto cmd = *apply_in_gpu_memory.begin();
+      return create_apply(cmd);
     }
     return nullptr;
   };
