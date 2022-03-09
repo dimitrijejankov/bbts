@@ -131,6 +131,10 @@ add_library(storage OBJECT ${STORAGE_SOURCE})
 file(GLOB SERVER_SOURCE "src/server/*.cc")
 add_library(server OBJECT ${SERVER_SOURCE})
 
+# the server
+file(GLOB GPU_SOURCE "src/gpu/*.cc")
+add_library(gpu OBJECT ${GPU_SOURCE})
+
 # the communication
 file(GLOB COMMUNICATION_SOURCE "src/communication/*.cc")
 add_library(communication OBJECT ${COMMUNICATION_SOURCE})
@@ -147,6 +151,7 @@ add_library(bbts-common $<TARGET_OBJECTS:tensor>
                         $<TARGET_OBJECTS:storage>
                         $<TARGET_OBJECTS:communication>
                         $<TARGET_OBJECTS:server>
+                        $<TARGET_OBJECTS:gpu>
                         $<TARGET_OBJECTS:ud_functions>)
 
 # to open .so files and stuff

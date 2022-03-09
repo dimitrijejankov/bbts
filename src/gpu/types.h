@@ -32,6 +32,9 @@ struct kernel_prep_t {
   // the id of the command the kernel is associated with
   int32_t command_id;
 
+  // the type of the command the kernel comes from
+  bbts::command_t::op_type_t type;
+
   // we want to run this kernel but we first need to prepare it
   kernel_run_ptr_t run_me;
 
