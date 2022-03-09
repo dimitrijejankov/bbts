@@ -6,11 +6,15 @@ class memory_t {
 public:
   
   void mark_for_use(tid_t id) {};
+  
   void mark_for_deletion(tid_t id) {};
 
   void tensor_unpinned(tid_t id, int dev) {};
+
   void tensor_created(tid_t id, int dev) {};
+
   void pin(kernel_prep_ptr_t kp, int dev) {};
+
   int can_preallocate(kernel_prep_ptr_t kp) { return -1; };
 
 
@@ -24,7 +28,9 @@ public:
   // transfer the least, if they need to transfer the same we pick the most
   // free memory (or based on the workload not sure)
   void preallocate(kernel_prep_ptr_t kp, int dev) {};
+
   int can_gc(kernel_prep_ptr_t kp) { return -1; };
+
   reaper_request_ptr_t get_gc_request(kernel_prep_ptr_t kp, int dev) { return nullptr; };
 };
 
