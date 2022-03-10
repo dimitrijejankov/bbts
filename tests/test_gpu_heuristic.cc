@@ -1,3 +1,4 @@
+#include <array>
 #include <gtest/gtest.h>
 #include "../src/gpu/gpu_heuristic.h"
 #include "../src/commands/reservation_station.h"
@@ -52,7 +53,7 @@ apply_schedule_ptr_t create_reduce(command_id_t id,
   return std::move(reduce);
 }
 
-TEST(TestGPUHeuristic, TestSingleGPU) {
+TEST(TestGPUHeuristic, TestPerGPU) {
 
   command_id_t id = 0;
   bbts::gpu_heuristic_t heuristic(4);
@@ -102,6 +103,88 @@ TEST(TestGPUHeuristic, TestSingleGPU) {
 
   EXPECT_EQ(dev1, 1);
 
+  auto [k_none, dev_none] = heuristic.get_next_on_same(0);
+  EXPECT_EQ(dev_none, -1);
+}
+
+TEST(TestGPUHeuristic, TestBetweenGPU) {
+
+  command_id_t id = 0;
+  bbts::gpu_heuristic_t heuristic(4);
+
+  auto cmd1 = create_apply(id++, {0, 1}, {8});
+  heuristic.register_apply(cmd1);
+
+  auto cmd2 = create_apply(id++, {2, 3}, {9});
+  heuristic.register_apply(cmd2);
+
+  auto cmd3 = create_apply(id++, {4, 5}, {10});
+  heuristic.register_apply(cmd3);
+
+  auto cmd4 = create_apply(id++, {6, 7}, {11});
+  heuristic.register_apply(cmd4);
+
+  heuristic.tensor_loaded(0, 0);
+  heuristic.tensor_loaded(1, 1);
+
+  heuristic.tensor_loaded(2, 0);
+  heuristic.tensor_loaded(3, 1);
+
+  heuristic.tensor_loaded(4, 3);
+  heuristic.tensor_loaded(5, 2);
+
+  heuristic.tensor_loaded(6, 3);
+  heuristic.tensor_loaded(7, 2);
+
+  auto [k2, dev2] = heuristic.get_next_on_same(2);
+
+  // check everything
+  EXPECT_EQ(k2, nullptr);
+  EXPECT_EQ(dev2, -1);
+
+  auto [k3, dev3] = heuristic.get_next_on_same(3);
+
+  // check everything
+  EXPECT_EQ(k3, nullptr);
+  EXPECT_EQ(dev3, -1);
+
+  auto [k0, dev0] = heuristic.get_next_on_same(0);
+
+  // check everything
+  EXPECT_EQ(k0, nullptr);
+  EXPECT_EQ(dev0, -1);
+
+  auto [k1, dev1] = heuristic.get_next_on_same(1);
+
+  // check everything
+  EXPECT_EQ(k1, nullptr);
+  EXPECT_EQ(dev1, -1);
+
+  std::array<kernel_prep_ptr_t, 4> preps;
+
+  // check the results
+  auto k_tmp = heuristic.get_next_on_any();
+  preps[k_tmp->command_id] = k_tmp;
+  heuristic.mark_as_scheduled(k_tmp);
+
+  k_tmp = heuristic.get_next_on_any();
+  preps[k_tmp->command_id] = k_tmp;
+  heuristic.mark_as_scheduled(k_tmp);
+
+  k_tmp = heuristic.get_next_on_any();
+  preps[k_tmp->command_id] = k_tmp;
+  heuristic.mark_as_scheduled(k_tmp);
+
+  k_tmp = heuristic.get_next_on_any();
+  preps[k_tmp->command_id] = k_tmp;
+  heuristic.mark_as_scheduled(k_tmp);
+
+  // make sure they are all there
+  EXPECT_EQ(preps[0]->command_id, 0);
+  EXPECT_EQ(preps[1]->command_id, 1);
+  EXPECT_EQ(preps[2]->command_id, 2);
+  EXPECT_EQ(preps[3]->command_id, 3);
+  
   auto [k_none, dev_none] = heuristic.get_next_on_same(0);
   EXPECT_EQ(dev_none, -1);
 }
