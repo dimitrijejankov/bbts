@@ -188,3 +188,64 @@ TEST(TestGPUHeuristic, TestBetweenGPU) {
   auto [k_none, dev_none] = heuristic.get_next_on_same(0);
   EXPECT_EQ(dev_none, -1);
 }
+
+TEST(TestGPUHeuristic, TestMixed) {
+
+  command_id_t id = 0;
+  bbts::gpu_heuristic_t heuristic(4);
+
+  auto cmd1 = create_apply(id++, {0, 1}, {8});
+  heuristic.register_apply(cmd1);
+
+  auto cmd2 = create_apply(id++, {2, 3}, {9});
+  heuristic.register_apply(cmd2);
+
+  auto cmd3 = create_apply(id++, {4, 5}, {10});
+  heuristic.register_apply(cmd3);
+
+  auto cmd4 = create_apply(id++, {6, 7}, {11});
+  heuristic.register_apply(cmd4);
+
+  heuristic.tensor_loaded(0, 0);
+  heuristic.tensor_loaded(1, 0);
+
+  heuristic.tensor_loaded(2, 0);
+  heuristic.tensor_loaded(3, 1);
+
+  heuristic.tensor_loaded(4, 3);
+  heuristic.tensor_loaded(5, 2);
+
+  heuristic.tensor_loaded(6, 3);
+  heuristic.tensor_loaded(7, 3);
+  
+  auto [k1, dev1] = heuristic.get_next_on_same(3);
+  heuristic.mark_as_scheduled(k1);
+
+  auto [k2, dev2] = heuristic.get_next_on_same(3);
+  heuristic.mark_as_scheduled(k2);
+
+  auto [k_none, dev_none] = heuristic.get_next_on_same(3);
+  EXPECT_EQ(dev_none, -1);
+
+  auto k3 = heuristic.get_next_on_any();
+  heuristic.mark_as_scheduled(k3);
+
+  auto k4 = heuristic.get_next_on_any();
+  heuristic.mark_as_scheduled(k4);
+
+  // make sure we don't have any
+  k_none = heuristic.get_next_on_any();
+  EXPECT_EQ(k_none, nullptr);
+
+  std::array<kernel_prep_ptr_t, 4> preps;
+  preps[k1->command_id] = k1;
+  preps[k2->command_id] = k2;
+  preps[k3->command_id] = k3;
+  preps[k4->command_id] = k4;
+
+  // make sure they are all there
+  EXPECT_EQ(preps[0]->command_id, 0);
+  EXPECT_EQ(preps[1]->command_id, 1);
+  EXPECT_EQ(preps[2]->command_id, 2);
+  EXPECT_EQ(preps[3]->command_id, 3);
+}
