@@ -249,3 +249,105 @@ TEST(TestGPUHeuristic, TestMixed) {
   EXPECT_EQ(preps[2]->command_id, 2);
   EXPECT_EQ(preps[3]->command_id, 3);
 }
+
+
+TEST(TestGPUHeuristic, TestLoadingUnloading) {
+
+  command_id_t id = 0;
+  bbts::gpu_heuristic_t heuristic(4);
+
+  auto cmd1 = create_apply(id++, {0, 1}, {6});
+  heuristic.register_apply(cmd1);
+
+  auto cmd2 = create_apply(id++, {0, 2}, {7});
+  heuristic.register_apply(cmd2);
+
+  auto cmd3 = create_apply(id++, {3, 2}, {8});
+  heuristic.register_apply(cmd3);
+
+  auto cmd4 = create_apply(id++, {3, 4}, {9});
+  heuristic.register_apply(cmd4);
+
+  // 
+  heuristic.tensor_loaded(0, 0);
+  heuristic.tensor_loaded(1, 0);
+  heuristic.tensor_loaded(2, 3);
+  heuristic.tensor_loaded(3, 3);
+  
+  heuristic.tensor_unloaded(0, 0);
+  heuristic.tensor_unloaded(3, 3);
+
+  // make sure we have nothing
+  {
+    auto [k_none, dev_none] = heuristic.get_next_on_same(0);
+    EXPECT_EQ(k_none, nullptr);
+    EXPECT_EQ(dev_none, -1);
+
+    k_none = heuristic.get_next_on_any();
+    EXPECT_EQ(k_none, nullptr);
+  }
+  heuristic.tensor_unloaded(2, 3);
+
+  // make sure we still have nothing
+  {
+    auto [k_none, dev_none] = heuristic.get_next_on_same(0);
+    EXPECT_EQ(k_none, nullptr);
+    EXPECT_EQ(dev_none, -1);
+
+    k_none = heuristic.get_next_on_any();
+    EXPECT_EQ(k_none, nullptr);
+  }
+
+  heuristic.tensor_loaded(0, 2);
+
+  // 
+  {
+    auto [k_none, dev_none] = heuristic.get_next_on_same(0);
+    EXPECT_EQ(k_none, nullptr);
+    EXPECT_EQ(dev_none, -1);
+
+    auto k_1 = heuristic.get_next_on_any();
+    EXPECT_EQ(k_1->command_id, 0);
+    heuristic.mark_as_scheduled(k_1);
+  }
+
+  heuristic.tensor_loaded(2, 2);
+
+  // 
+  {
+    auto [k_2, dev_2] = heuristic.get_next_on_same(0);
+    heuristic.mark_as_scheduled(k_2);
+    EXPECT_EQ(k_2->command_id, 1);
+    EXPECT_EQ(dev_2, 2);
+
+    auto k_none = heuristic.get_next_on_any();
+    EXPECT_EQ(k_none, nullptr);
+  }
+
+  heuristic.tensor_loaded(3, 3);
+
+  // 
+  {
+    auto [k_none, dev_none] = heuristic.get_next_on_same(0);
+    EXPECT_EQ(k_none, nullptr);
+    EXPECT_EQ(dev_none, -1);
+
+    auto k_3 = heuristic.get_next_on_any();
+    EXPECT_EQ(k_3->command_id, 2);
+    heuristic.mark_as_scheduled(k_3);
+  }
+
+  heuristic.tensor_loaded(4, 3);
+
+  // 
+  {
+    auto [k_3, dev_3] = heuristic.get_next_on_same(0);
+    heuristic.mark_as_scheduled(k_3);
+    EXPECT_EQ(k_3->command_id, 3);
+    EXPECT_EQ(dev_3, 3);
+
+    auto k_none = heuristic.get_next_on_any();
+    EXPECT_EQ(k_none, nullptr);
+  }
+
+}

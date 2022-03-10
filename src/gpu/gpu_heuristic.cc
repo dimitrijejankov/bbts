@@ -104,7 +104,7 @@ void gpu_heuristic_t::tensor_unloaded(tid_t id, int dev) {
       // should we unschedule it from a particular device
       if (apply_cmds[command_id].inputs_on_devices[dev] !=
           apply_cmds[command_id].num_inputs) {
-        on_apply_single_gpu[dev].erase(command_t::APPLY);
+        on_apply_single_gpu[dev].erase(command_id);
       }
     } else if (command_type == command_t::REDUCE) {
 
