@@ -32,7 +32,7 @@ apply_schedule_ptr_t create_apply(command_id_t id,
   return std::move(apply);
 }
 
-apply_schedule_ptr_t create_reduce(command_id_t id,
+reduce_schedule_ptr_t create_reduce(command_id_t id,
                                   const std::vector<tid_t> &inputs, 
                                   tid_t output) {
 
@@ -41,13 +41,14 @@ apply_schedule_ptr_t create_reduce(command_id_t id,
     in.push_back(command_t::tid_node_id_t{.tid = i, .node = 0});
   }
 
-  // make the actual apply schedule
-  auto reduce = std::make_shared<bbts::apply_schedule_t>(); 
+  // make the actual reduce schedule
+  auto reduce = std::make_shared<bbts::reduce_schedule_t>(); 
   reduce->cmd = command_t::create_reduce(id, {0, 0}, true, {}, in, command_t::tid_node_id_t{.tid = output, .node = 0});
 
   // we don't care about this
-  reduce->input_num_bytes = {};
-  reduce->output_num_bytes = {};
+  reduce->input_meta = {};
+  reduce->output_meta = {};
+  reduce->_params = {};
   reduce->fn = nullptr;
 
   return std::move(reduce);
@@ -350,4 +351,42 @@ TEST(TestGPUHeuristic, TestLoadingUnloading) {
     EXPECT_EQ(k_none, nullptr);
   }
 
+}
+
+TEST(TestGPUHeuristic, TestReduce1) {
+
+  command_id_t id = 0;
+  bbts::gpu_heuristic_t heuristic(4);
+
+  auto cmd1 = create_reduce(id++, {0, 1, 2, 3}, 4);
+  heuristic.register_reduce(cmd1);
+
+  heuristic.tensor_loaded(0, 0);
+  heuristic.tensor_loaded(1, 1);
+  heuristic.tensor_loaded(2, 2);
+  heuristic.tensor_loaded(3, 3);
+
+  auto k_1 = heuristic.get_next_on_any();
+  heuristic.mark_as_scheduled(k_1);
+
+  auto k_2 = heuristic.get_next_on_any();
+  heuristic.mark_as_scheduled(k_2);
+
+  // make sure the outputs are anonymous tensors (less than 4)
+  EXPECT_LE(k_1->output.front(), 0);
+  EXPECT_LE(k_2->output.front(), 0);
+
+  auto k_none = heuristic.get_next_on_any();
+  EXPECT_EQ(k_none, nullptr);
+
+  heuristic.tensor_loaded(k_1->output[0], 1);
+  heuristic.tensor_loaded(k_2->output[0], 2);
+
+  auto k_3 = heuristic.get_next_on_any();
+  heuristic.mark_as_scheduled(k_3);
+
+  EXPECT_EQ(k_3->output.front(), 4);
+
+  k_none = heuristic.get_next_on_any();
+  EXPECT_EQ(k_none, nullptr);
 }

@@ -1,5 +1,6 @@
 #include "gpu_heuristic.h"
 #include <cassert>
+#include <cstdint>
 #include <tuple>
 
 namespace bbts {
@@ -308,6 +309,9 @@ void gpu_heuristic_t::register_reduce(bbts::reduce_schedule_ptr_t &reduce_sch) {
     tensors_to_cmds.insert({in_tid, {reduce_cmd.id, command_t::REDUCE}});
   }
 
+  // set the output
+  reduce_cmd.output_tid = cmd->get_output(0).tid;
+
   // check if we have enough inputs on any GPU
   if (reduce_cmd.loaded_inputs.size() >= 2) {
     reduce_in_gpu_memory.insert(reduce_cmd.id);
@@ -335,13 +339,13 @@ kernel_prep_ptr_t gpu_heuristic_t::create_reduce(command_id_t cmd) {
   ret->gpu_transfers = {};
   ret->input = {reduce_cmd.loaded_inputs[0], reduce_cmd.loaded_inputs[1]};
 
-  // check if this is the last time we are issuing a reduce
-  if (reduce_cmd.num_issued == reduce_cmd.num_inputs - 1) {
+  // check if this is the last time would be issuing a partial reduce
+  // we need to issue it reduce_cmd.num_inputs - 1
+  if (reduce_cmd.num_issued + 1 == reduce_cmd.num_inputs - 1) {
     ret->output = {reduce_cmd.output_tid};
   } else {
-    ret->output = {inner_anon_id++};
-
-    // TODO linup stuff so that
+    // get the new anonymous tensor
+    ret->output = {inner_anon_id - 1};
   }
 
   ret->run_me = reduce_cmd.run_me;
@@ -406,7 +410,7 @@ kernel_prep_ptr_t gpu_heuristic_t::get_next_on_any() {
 
   if (!reduce_in_gpu_memory.empty()) {
     auto cmd = *reduce_in_gpu_memory.begin();
-    return create_apply(cmd);
+    return create_reduce(cmd);
   }
 
   if (!apply_in_gpu_memory.empty()) {
@@ -437,16 +441,70 @@ void gpu_heuristic_t::mark_as_scheduled(const kernel_prep_ptr_t &prep) {
     }
   } else {
 
-    // remove them from all the schedulings
-    reduce_cmds.erase(cmd);
-    reduce_in_gpu_memory.erase(cmd);
-    for (auto &rsg : on_reduce_single_gpu) {
-      rsg.erase(cmd);
+    auto &reduce_op = reduce_cmds[cmd]; 
+      
+    // we are issuing this one
+    reduce_op.num_issued++;
+
+    // go through the inputs and check 
+    for (auto in : prep->input) {
+      
+      // find the inputs to the reduce and remove them
+      auto it = std::find(reduce_op.loaded_inputs.begin(),
+                          reduce_op.loaded_inputs.end(), in);
+
+      std::swap(*reduce_op.loaded_inputs.end(), *it);
+      reduce_op.loaded_inputs.pop_back();
+    }
+
+    // if we don't have anything else to run unschedule it
+    if (reduce_op.loaded_inputs.size() < 2) {
+      reduce_in_gpu_memory.erase(cmd);
+    }
+
+    // we also have to do this on per device basis
+    for(int32_t dev = 0; dev < num_devices; ++dev) {
+
+      // go through all the inputs try to find them per device...
+      auto &dev_inputs = reduce_op.inputs_on_devices[dev];
+      for (auto in : prep->input) {
+
+        // find the inputs to the reduce and remove them
+        auto it = std::find(dev_inputs.begin(), dev_inputs.end(), in);
+
+        std::swap(*dev_inputs.end(), *it);
+        dev_inputs.pop_back();
+      }
+
+      // do we need to unschedule it per device
+      if(dev_inputs.size() < 2) {
+        on_reduce_single_gpu[dev].erase(cmd);
+      }
+    }
+
+    // are we done here if so remove it
+    if(reduce_op.num_issued == reduce_op.num_inputs - 1) {
+      
+      // remove them from all the schedulings
+      reduce_cmds.erase(cmd);
     }
 
     // unlink all the inputs to this command
     for (auto in : prep->input) {
       _unlink_command_from_tensor(in, cmd);
+    }
+
+    // is this an intermediate result
+    if(prep->output.front() < 0) {
+
+      // link it to this reduce
+      tensors_to_cmds.insert({prep->output.front(), {reduce_op.id, command_t::REDUCE}});
+
+      // we have not copies of it and the tensor is not initialized
+      tensors[prep->output.front()] = {};
+
+      // we use this anoymous tid
+      inner_anon_id--;
     }
   }
 }
