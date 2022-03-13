@@ -428,8 +428,14 @@ void gpu_heuristic_t::mark_as_scheduled(const kernel_prep_ptr_t &prep) {
   assert(prep->type == command_t::APPLY || prep->type == command_t::REDUCE);
   if (prep->type == command_t::APPLY) {
 
+    // remove it from the goodness heuristic in necessary
+    auto apply_cmd_it = apply_cmds.find(cmd);
+    if(apply_cmd_it->second.it != goodness_heuristic.end()) {
+      goodness_heuristic.erase(apply_cmd_it->second.it);
+    }
+
     // remove them from all the schedulings
-    apply_cmds.erase(cmd);
+    apply_cmds.erase(apply_cmd_it);
     apply_in_gpu_memory.erase(cmd);
     for (auto &asg : on_apply_single_gpu) {
       asg.erase(cmd);
@@ -442,7 +448,9 @@ void gpu_heuristic_t::mark_as_scheduled(const kernel_prep_ptr_t &prep) {
   } else {
 
     auto &reduce_op = reduce_cmds[cmd]; 
-      
+    
+    // TODO : remove it from the GOODNESS heuristic
+
     // we are issuing this one
     reduce_op.num_issued++;
 
@@ -536,11 +544,6 @@ void gpu_heuristic_t::_unlink_command_from_tensor(tid_t id, command_id_t cmd) {
 kernel_prep_ptr_t gpu_heuristic_t::get_next_heuristic() { 
 
   if(goodness_heuristic.empty()) { return nullptr; }
-
-  for(auto &it : goodness_heuristic) {
-    auto [cmd, type] = it.second;
-    std::cout << std::get<0>(it.first) << " " << std::get<1>(it.first) << " " << cmd << '\n';
-  }
 
   // get the thing from the goodness heuristic
   auto it = goodness_heuristic.begin();
