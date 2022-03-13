@@ -23,7 +23,18 @@ namespace bbts {
 class gpu_heuristic_t {
 public:
 
-  using heuristic_map_t = std::multimap<std::tuple<int32_t, int32_t>, command_id_t>;
+  struct heuristic_map_cmp_t {
+      bool operator()(const std::tuple<int32_t, int32_t> &lhs, 
+                      const std::tuple<int32_t, int32_t> &rhs) const {
+
+          if (std::get<0>(lhs) == std::get<0>(rhs)) {
+            return std::get<1>(lhs) > std::get<1>(rhs);
+          }
+          return std::get<0>(lhs) < std::get<0>(rhs);
+      }
+  };
+
+  using heuristic_map_t = std::multimap<std::tuple<int32_t, int32_t>, std::tuple<command_id_t, command_t::op_type_t>, heuristic_map_cmp_t>;
 
   gpu_heuristic_t(uint32_t num_devices);
 
@@ -92,8 +103,13 @@ public:
 
   struct es_tensor_nfo {
 
+    // is this tensor on the CPU
+    bool on_cpu = false;
+
+    // how many GPU copies of the tensor do we have
     int32_t gpu_copies = 0;
 
+    // it this on the device
     std::array<bool, BBTS_MAX_GPU_DEVICES> on_device;
   };
 
@@ -102,6 +118,10 @@ public:
   void tensor_unloaded(tid_t id, int dev);
 
   uint64_t calculate_heuristic(const std::vector<tid_t> inputs);
+
+  void update_heuristic_for_apply(command_id_t id);
+
+  void update_heuristic_for_reduce(command_id_t id);
 
   void tensor_update_heuristic(tid_t id, bool is_loaded);
 
@@ -127,6 +147,8 @@ public:
   kernel_prep_ptr_t get_next_heuristic();
 
   void mark_as_scheduled(const kernel_prep_ptr_t &prep);
+
+  void remove_tensor(tid_t id);
 
   void _unlink_command_from_tensor(tid_t id, command_id_t cmd);
 

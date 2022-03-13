@@ -385,8 +385,49 @@ TEST(TestGPUHeuristic, TestReduce1) {
   auto k_3 = heuristic.get_next_on_any();
   heuristic.mark_as_scheduled(k_3);
 
+  // remove the heuristics
+  heuristic.remove_tensor(k_1->output[0]);
+  heuristic.remove_tensor(k_2->output[0]);
+
   EXPECT_EQ(k_3->output.front(), 4);
 
   k_none = heuristic.get_next_on_any();
   EXPECT_EQ(k_none, nullptr);
+}
+
+
+TEST(TestGPUHeuristic, TestApplyHeuristic) {
+
+  command_id_t id = 0;
+  bbts::gpu_heuristic_t heuristic(4);
+
+  // load all the tensors on the CPU
+  heuristic.tensor_on_cpu(1);
+  heuristic.tensor_on_cpu(2);
+  heuristic.tensor_on_cpu(3);
+  heuristic.tensor_on_cpu(4);
+  heuristic.tensor_on_cpu(5);
+  heuristic.tensor_on_cpu(6);
+  heuristic.tensor_on_cpu(7);
+  heuristic.tensor_on_cpu(8);
+  heuristic.tensor_on_cpu(9);
+
+  auto cmd1 = create_apply(id++, {4, 1}, {6});
+  heuristic.register_apply(cmd1);
+
+  auto cmd2 = create_apply(id++, {2, 1}, {7});
+  heuristic.register_apply(cmd2);
+
+  auto cmd3 = create_apply(id++, {3, 1}, {8});
+  heuristic.register_apply(cmd3);
+
+  auto cmd4 = create_apply(id++, {4, 5}, {9});
+  heuristic.register_apply(cmd4);
+
+  auto [k_none, dev_none] = heuristic.get_next_on_same(0);
+  EXPECT_EQ(dev_none, -1);
+
+  auto k1 = heuristic.get_next_heuristic();
+  heuristic.mark_as_scheduled(k1);
+  std::cout << "";
 }
