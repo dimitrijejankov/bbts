@@ -564,7 +564,38 @@ void gpu_heuristic_t::tensor_available_update_heuristic(tid_t id) {
 }
 
 void gpu_heuristic_t::tensor_on_cpu(tid_t id) {
-  tensors[id].on_cpu = true;
+
+  // get the tensor
+  auto &t =  tensors[id];
+  
+  // make sure the tensor was not already available
+  bool is_new = !(t.on_cpu || t.gpu_copies > 0);
+
+  // mark that is available
+  t.on_cpu = true;
+
+  // go and update the heuristic
+  auto range = tensors_to_cmds.equal_range(id);
+  for(auto it = range.first; it != range.second; ++it) {
+
+    // we just updated this command 
+    auto [command, type] = it->second;
+
+    // make sure it is the one of the two types of commands
+    assert(type == command_t::APPLY || type == command_t::REDUCE);
+    if(type == command_t::APPLY) {
+
+      // get the command and update the 
+      auto &apply_cmd = apply_cmds[command];
+
+      // if this is a new tensor make sure that is reflected and update the heuristic
+      apply_cmd.inputs_available += is_new;
+      update_heuristic_for_apply(command);
+    }
+    else {
+      update_heuristic_for_reduce(command);
+    }
+  }
 }
 
 } // namespace bbts
