@@ -30,7 +30,7 @@ using kernel_run_ptr_t = std::shared_ptr<kernel_run_t>;
 struct kernel_prep_t {
 
   // the id of the command the kernel is associated with
-  int32_t command_id;
+  command_id_t command_id;
 
   // the type of the command the kernel comes from
   bbts::command_t::op_type_t type;
@@ -47,7 +47,7 @@ struct kernel_prep_t {
   // the outputs that were created
   std::vector<tid_t> output;
 
-  // all the CPU transfers we need to preform (tid, input, num_bytes)
+  // all the CPU transfers we need to preform (tid, input index, num_bytes)
   std::vector<std::tuple<tid_t, uint32_t, size_t>> cpu_transfers;
 
   // all the GPU transfers we need to do (tensor, src_dev, input index,
@@ -99,7 +99,7 @@ struct reduce_schedule_t {
   // the function we want to run
   ud_impl_t *fn;
 
-  //
+  // the parameters of the UD function we want to run
   ud_impl_t::tensor_params_t _params;
 
   // the input meta
@@ -122,12 +122,16 @@ using delete_schedule_ptr_t = std::shared_ptr<delete_schedule_t>;
 
 struct scheduler_request_t {
 
+  // list of all the kernels since the last time the thread was woken up
   std::vector<kernel_prep_ptr_t> retired_kernels;
-
+  
+  // the finished request for freeing tensors or evicting them
   std::vector<reaper_request_ptr_t> finished_gc;
 
+  // all the applies that were scheduled since the last time the thread was woken up
   std::vector<apply_schedule_ptr_t> apply_cmds;
 
+  // all the reduces that were scheduled since the last time the thread was woken up
   std::vector<reduce_schedule_ptr_t> reduce_cmds;
 };
 using scheduler_request_ptr_t = std::shared_ptr<scheduler_request_t>;

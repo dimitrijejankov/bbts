@@ -46,6 +46,10 @@ void gpu_heuristic_t::tensor_loaded(tid_t id, int dev) {
           apply_cmds[command_id].num_inputs) {
         on_apply_single_gpu[dev].insert(command_id);
       }
+
+      // update the heuristic for the apply
+      update_heuristic_for_apply(command_id);
+
     } else if (command_type == command_t::REDUCE) {
 
       // mark that we have it now on the device
@@ -68,12 +72,10 @@ void gpu_heuristic_t::tensor_loaded(tid_t id, int dev) {
       if (cmd.inputs_on_devices[dev].size() == 2) {
         on_reduce_single_gpu[dev].insert(command_id);
       }
-    }
-  }
 
-  // update the heuristic since we got the first copy in GPU memory
-  if (t.gpu_copies == 1) {
-    // tensor_update_heuristic(id, true);
+      // update the heuristic for the reduce
+      update_heuristic_for_reduce(command_id);
+    }
   }
 };
 void gpu_heuristic_t::tensor_unloaded(tid_t id, int dev) {
@@ -188,11 +190,33 @@ void gpu_heuristic_t::update_heuristic_for_apply(command_id_t id) {
 }
 
 void gpu_heuristic_t::update_heuristic_for_reduce(command_id_t id) {
-  // TODO implement this
+
 }
 
-void gpu_heuristic_t::tensor_update_heuristic(tid_t id, bool is_loaded) {
-  // TODO implement this
+void gpu_heuristic_t::update_heuristic_for_inputs(const std::vector<tid_t> &inputs) {
+
+  // update the heuristic for the commands that share inputs with it
+  for (int32_t idx = 0; idx < inputs.size(); ++idx) {
+
+    // get the input tid
+    auto in_tid = inputs[idx];
+    auto range = tensors_to_cmds.equal_range(in_tid);
+
+    for(auto it = range.first; it != range.second; ++it) {
+
+      // we just updated this command 
+      auto [command, type] = it->second;
+
+      // make sure it is the one of the two types of commands
+      assert(type == command_t::APPLY || type == command_t::REDUCE);
+      if(type == command_t::APPLY) {
+        update_heuristic_for_apply(command);
+      }
+      else {
+        update_heuristic_for_reduce(command);
+      }
+    }
+  }
 }
 
 void gpu_heuristic_t::register_apply(bbts::apply_schedule_ptr_t &apply_sch) {
@@ -445,6 +469,10 @@ void gpu_heuristic_t::mark_as_scheduled(const kernel_prep_ptr_t &prep) {
     for (auto in : prep->input) {
       _unlink_command_from_tensor(in, cmd);
     }
+
+    // update the heuristic for all the inputs
+    update_heuristic_for_inputs(prep->input);
+
   } else {
 
     auto &reduce_op = reduce_cmds[cmd]; 
@@ -549,6 +577,11 @@ kernel_prep_ptr_t gpu_heuristic_t::get_next_heuristic() {
   auto it = goodness_heuristic.begin();
   auto [cmd, type] = it->second;
   
+  // for(auto &it : goodness_heuristic) {
+  //   std::cout << std::get<0>(it.first) << " " << std::get<1>(it.first) << "\n" << std::flush;
+  // }
+  // std::cout << "---------------\n";
+
   // check the type
   assert(type == command_t::APPLY ||  type == command_t::REDUCE);
   if(type == command_t::APPLY) { 
@@ -558,10 +591,6 @@ kernel_prep_ptr_t gpu_heuristic_t::get_next_heuristic() {
 
   return nullptr;
 };
-
-void gpu_heuristic_t::tensor_available_update_heuristic(tid_t id) {
-
-}
 
 void gpu_heuristic_t::tensor_on_cpu(tid_t id) {
 

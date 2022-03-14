@@ -15,7 +15,7 @@ public:
       : _num_gpus(num_gpus), run_queue(num_gpus), storage(std::move(storage)),
         udm(std::move(udm)), tf(std::move(tf)), heuristic(num_gpus) {
 
-    // p2p nvlink initialization
+    // TODO p2p nvlink initialization
   }
 
   // runs kernels that have the tensors in memory
@@ -80,12 +80,12 @@ public:
         prep->gpu_done = true;
         if (prep->gpu_done && prep->cpu_done) {
           run_queue[dev].enqueue(prep);
-          prep->run_me = nullptr;
         }
       }
     }
   }
 
+  // CPU RAM to GPU RAM
   void cpu_to_gpu_thread() {
 
     cudaStream_t cpy_stream;
@@ -127,7 +127,6 @@ public:
         prep->gpu_done = true;
         if (prep->gpu_done && prep->cpu_done) {
           run_queue[prep->dev].enqueue(prep);
-          prep->run_me = nullptr;
         }
       }
     }
@@ -192,11 +191,13 @@ public:
         // schedule them for execution (finish reaper_request and add to
         // execution queue)
         mem.pin(gc_req->to_run, gc_req->to_run->dev);
-        run_queue[gc_req->to_run->dev].enqueue(gc_req->to_run);
+
+        /// TODO Add if necessary to the required CPU2GPU thread and GPU2CPU thread
+        //  if not not necessary just move it to the run thread
       }
 
       // 4.1. check if we have a command that we can run immeidately (all the
-      // inputs are on the same GPU)
+      // inputs are on the same GPU) ex. APPLY 1 2 3 -> 4 | GPU 0 has 1 2 3
       auto [kernel_prep, dev] = heuristic.get_next_on_same(preffered_dev);
       if (dev != -1) {
 
@@ -206,7 +207,7 @@ public:
         run_queue[dev].enqueue(kernel_prep);
       }
       // 4.2. othwerwise check if we have commands that have inputs on at least
-      // one of the GPUs
+      // one of the GPUs ex. APPLY 1 2 3 -> 4 | GPU 0 has 1 2 | GPU 1 has 3
       else if ((kernel_prep = heuristic.get_next_on_any()) == nullptr) {
 
         // 4.2.1 check if we can preallocate the additional memory
@@ -249,6 +250,7 @@ public:
       //  we pick a command based on a 'GOODNESS' score
       kernel_prep = heuristic.get_next_heuristic();
       if (kernel_prep == nullptr) {
+        should_sleep = true;
         continue;
       }
 
@@ -451,7 +453,7 @@ public:
   gpu_heuristic_t heuristic;
 
   //
-  memory_t mem;
+  gpu_memory_t mem;
 
   // we add kernels we have finished running here so that their stuff can be
   // unpinned

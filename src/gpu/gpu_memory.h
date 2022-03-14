@@ -2,7 +2,7 @@
 
 namespace bbts {
 
-class memory_t {
+class gpu_memory_t {
 public:
   
   void mark_for_use(tid_t id) {};
@@ -16,7 +16,6 @@ public:
   void pin(kernel_prep_ptr_t kp, int dev) {};
 
   int can_preallocate(kernel_prep_ptr_t kp) { return -1; };
-
 
   // go through all the GPUs
   //   can we find enough memory on the GPU? (we find the memory in the

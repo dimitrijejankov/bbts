@@ -19,9 +19,45 @@
 namespace bbts {
 
 
-// the heuristic is GOODNESS = sum number of commands using the same input
+// the heuristic is GOODNESS = (num of inputs to copy, how many other commands need the same inputs)
 class gpu_heuristic_t {
 public:
+
+  // make a heuristic with multiple device
+  gpu_heuristic_t(uint32_t num_devices);
+
+  // returns a kernel that does not need any copies and the GPU to run it on
+  std::tuple<kernel_prep_ptr_t, int32_t>
+  get_next_on_same(int32_t preffered_dev);
+
+  // returns a kernel that needs just GPU copies
+  kernel_prep_ptr_t get_next_on_any();
+
+  // return a kernel that need CPU copies
+  kernel_prep_ptr_t get_next_heuristic();
+
+  // signal that a tensor is loaded on a GPU
+  void tensor_loaded(tid_t id, int dev);
+
+  // signal that a tensor is unloaded on a GPU
+  void tensor_unloaded(tid_t id, int dev);
+
+  // signal that a tensor is available in the CPU memory
+  void tensor_on_cpu(tid_t id);
+
+  // remove a tensor from the scheduler
+  void remove_tensor(tid_t id);
+
+  // register a new APPLY command to be scheduled
+  void register_apply(bbts::apply_schedule_ptr_t &apply_sch);
+  
+  // register a new REDUCE command to be scheduled
+  void register_reduce(bbts::reduce_schedule_ptr_t &reduce_sch);
+
+  // mark that a kernel has been scheduled
+  void mark_as_scheduled(const kernel_prep_ptr_t &prep);
+
+private:
 
   struct heuristic_map_cmp_t {
       bool operator()(const std::tuple<int32_t, int32_t> &lhs, 
@@ -35,8 +71,6 @@ public:
   };
 
   using heuristic_map_t = std::multimap<std::tuple<int32_t, int32_t>, std::tuple<command_id_t, command_t::op_type_t>, heuristic_map_cmp_t>;
-
-  gpu_heuristic_t(uint32_t num_devices);
 
   struct es_apply_command_nfo_t {
 
@@ -113,42 +147,17 @@ public:
     std::array<bool, BBTS_MAX_GPU_DEVICES> on_device;
   };
 
-  void tensor_loaded(tid_t id, int dev);
-
-  void tensor_unloaded(tid_t id, int dev);
-
   uint64_t calculate_heuristic(const std::vector<tid_t> inputs);
 
   void update_heuristic_for_apply(command_id_t id);
 
   void update_heuristic_for_reduce(command_id_t id);
 
-  void tensor_update_heuristic(tid_t id, bool is_loaded);
-
-  void tensor_available_update_heuristic(tid_t id);
-
-  void tensor_on_cpu(tid_t id);
-
-  void register_apply(bbts::apply_schedule_ptr_t &apply_sch);
-
-  void register_reduce(bbts::reduce_schedule_ptr_t &reduce_sch);
+  void update_heuristic_for_inputs(const std::vector<tid_t> &inputs);
 
   kernel_prep_ptr_t create_reduce(command_id_t cmd);
 
   kernel_prep_ptr_t create_apply(command_id_t cmd);
-
-  // returns the commands and the device to schedule it on
-  std::tuple<kernel_prep_ptr_t, int32_t>
-  get_next_on_same(int32_t preffered_dev);
-
-  // returns the commands and the device to schedule it on
-  kernel_prep_ptr_t get_next_on_any();
-
-  kernel_prep_ptr_t get_next_heuristic();
-
-  void mark_as_scheduled(const kernel_prep_ptr_t &prep);
-
-  void remove_tensor(tid_t id);
 
   void _unlink_command_from_tensor(tid_t id, command_id_t cmd);
 

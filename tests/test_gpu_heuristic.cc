@@ -366,9 +366,11 @@ TEST(TestGPUHeuristic, TestReduce1) {
   heuristic.tensor_loaded(2, 2);
   heuristic.tensor_loaded(3, 3);
 
+  // tid: 0 + tid: 1 -> tid: -1
   auto k_1 = heuristic.get_next_on_any();
   heuristic.mark_as_scheduled(k_1);
 
+  // tid: 2 + tid: 3 -> tid: -2
   auto k_2 = heuristic.get_next_on_any();
   heuristic.mark_as_scheduled(k_2);
 
@@ -382,6 +384,7 @@ TEST(TestGPUHeuristic, TestReduce1) {
   heuristic.tensor_loaded(k_1->output[0], 1);
   heuristic.tensor_loaded(k_2->output[0], 2);
 
+  // tid: -1 + tid: -2 -> tid: 4
   auto k_3 = heuristic.get_next_on_any();
   heuristic.mark_as_scheduled(k_3);
 
@@ -409,33 +412,48 @@ TEST(TestGPUHeuristic, TestApplyHeuristic1) {
   heuristic.tensor_on_cpu(5);
   heuristic.tensor_on_cpu(6);
 
-  auto cmd1 = create_apply(id++, {4, 1}, {7});
+  // needs 2 copies and 4 is used by 2 and 1 is used by 3, heuristic (2, 5)
+  auto cmd1 = create_apply(id++, {4, 1}, {7}); 
   heuristic.register_apply(cmd1);
 
-  auto cmd2 = create_apply(id++, {2, 1}, {8});
+  // needs 2 copies and 2 is used by 1 and 1 is used by 3, heuristic is (2, 4)
+  auto cmd2 = create_apply(id++, {2, 1}, {9});
   heuristic.register_apply(cmd2);
 
-  auto cmd3 = create_apply(id++, {3, 1, 6}, {9});
+  // needs 3 copes and 3 is used by 1, 1 is used by 3 and 6 is used by 1, heuristic is (3, 5)
+  auto cmd3 = create_apply(id++, {3, 1, 6}, {10});
   heuristic.register_apply(cmd3);
 
-  auto cmd4 = create_apply(id++, {4, 5}, {10});
+  // needs 2 copies and 4 is used by 2 and 5 used by 1, heuristic is (2, 3)
+  auto cmd4 = create_apply(id++, {4, 5, 6}, {11});
   heuristic.register_apply(cmd4);
 
   auto [k_none_1, dev_none_1] = heuristic.get_next_on_same(0);
   EXPECT_EQ(dev_none_1, -1);
 
+  // we expect this to be APPLY (4, 1) -> 7
   auto k1 = heuristic.get_next_heuristic();
   heuristic.mark_as_scheduled(k1);
   EXPECT_EQ(k1->command_id, 0);
 
+  // load the tensors
+  heuristic.tensor_loaded(4, 0);
+  heuristic.tensor_loaded(1, 0);
+
+  // we expect this to be APPLY (2, 1) -> 9
   auto k2 = heuristic.get_next_heuristic();
   heuristic.mark_as_scheduled(k2);
   EXPECT_EQ(k2->command_id, 1);
 
+  // load the tensors
+  heuristic.tensor_loaded(1, 0);
+
+  // we expect this to be APPLY (3, 1, 6) -> 10
   auto k3 = heuristic.get_next_heuristic();
   heuristic.mark_as_scheduled(k3);
   EXPECT_EQ(k3->command_id, 3);
 
+  // we expect this to be APPLY (4, 5, 6) -> 11
   auto k4 = heuristic.get_next_heuristic();
   heuristic.mark_as_scheduled(k4);
   EXPECT_EQ(k4->command_id, 2);
@@ -496,7 +514,5 @@ TEST(TestGPUHeuristic, TestApplyHeuristic2) {
 }
 
 TEST(TestGPUHeuristic, TestApplyHeuristic3) {
-
-  
 
 }
