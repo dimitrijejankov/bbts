@@ -119,11 +119,11 @@ private:
     // the output tid of thefinal result
     tid_t output_tid;
 
-    // list of inputs exclusively on the CPU
-    std::vector<std::tuple<tid_t, uint32_t>> cpu_inputs;
+    // list of inputs exclusively on the CPU, that means NOT on GPU
+    std::vector<tid_t> cpu_inputs;
 
     // we store here a list of all the inputs currently available on all the GPUs
-    std::vector<tid_t> loaded_inputs;
+    std::vector<tid_t> gpu_inputs;
 
     // here we store a list of all the inputs available per GPU
     std::array<std::vector<tid_t>, BBTS_MAX_GPU_DEVICES> inputs_on_devices;
@@ -147,17 +147,19 @@ private:
     std::array<bool, BBTS_MAX_GPU_DEVICES> on_device;
   };
 
-  uint64_t calculate_heuristic(const std::vector<tid_t> inputs);
+  uint32_t _calculate_heuristic_apply(const std::vector<tid_t> inputs);
 
-  void update_heuristic_for_apply(command_id_t id);
+  uint32_t _calculate_heuristic_reduce(const std::vector<tid_t> inputs);
 
-  void update_heuristic_for_reduce(command_id_t id);
+  void _update_heuristic_for_apply(command_id_t id);
 
-  void update_heuristic_for_inputs(const std::vector<tid_t> &inputs);
+  void _update_heuristic_for_reduce(command_id_t id);
 
-  kernel_prep_ptr_t create_reduce(command_id_t cmd);
+  void _update_heuristic_for_inputs(const std::vector<tid_t> &inputs);
 
-  kernel_prep_ptr_t create_apply(command_id_t cmd);
+  kernel_prep_ptr_t _create_reduce(command_id_t cmd);
+
+  kernel_prep_ptr_t _create_apply(command_id_t cmd);
 
   void _unlink_command_from_tensor(tid_t id, command_id_t cmd);
 
@@ -183,7 +185,7 @@ private:
   std::unordered_map<tid_t, es_tensor_nfo> tensors;
 
   // we assign these for anonymous 
-  tid_t inner_anon_id = -1;
+  tid_t inner_anon_id = 0;
 };
 
 } // namespace bbts

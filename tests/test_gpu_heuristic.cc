@@ -453,6 +453,10 @@ TEST(TestGPUHeuristic, TestApplyHeuristic1) {
   heuristic.mark_as_scheduled(k3);
   EXPECT_EQ(k3->command_id, 3);
 
+  // load the tensors
+  heuristic.tensor_loaded(3, 0);
+  heuristic.tensor_loaded(6, 0);
+
   // we expect this to be APPLY (4, 5, 6) -> 11
   auto k4 = heuristic.get_next_heuristic();
   heuristic.mark_as_scheduled(k4);
@@ -515,4 +519,46 @@ TEST(TestGPUHeuristic, TestApplyHeuristic2) {
 
 TEST(TestGPUHeuristic, TestApplyHeuristic3) {
 
+  command_id_t id = 0;
+  bbts::gpu_heuristic_t heuristic(4);
+
+  auto cmd1 = create_reduce(id++, {1, 2, 3, 4}, 5);
+  heuristic.register_reduce(cmd1);
+
+  // load all the tensors on the CPU
+  heuristic.tensor_on_cpu(1);
+  heuristic.tensor_on_cpu(2);
+
+  // tid: 1 + tid: 2 -> tid: -1
+  auto k_1 = heuristic.get_next_heuristic();
+
+  // load the tensors and retire
+  heuristic.tensor_loaded(k_1->input[0], 0);
+  heuristic.tensor_loaded(k_1->input[1], 0);
+  heuristic.mark_as_scheduled(k_1);
+
+  // load the output tensor
+  heuristic.tensor_loaded(k_1->output[0], 0);
+  
+  // tid: -1 + tid: 3 -> tid: -2
+  heuristic.tensor_on_cpu(3);
+  auto k_2 = heuristic.get_next_heuristic();
+
+  // load the next tensor and mark as scheduled
+  heuristic.tensor_loaded(k_2->input[0] < 0 ? k_2->input[1] : k_2->input[0], 0);
+  heuristic.mark_as_scheduled(k_2);
+
+  // load the output tensor
+  heuristic.tensor_loaded(k_2->output[0], 0);
+
+  // tid: -2 + tid: 4 -> tid: 5
+  heuristic.tensor_on_cpu(4);
+  auto k_3 = heuristic.get_next_heuristic();
+
+  // load the next tensor and mark as scheduled
+  heuristic.tensor_loaded(k_3->input[0] < 0 ? k_3->input[1] : k_3->input[0], 0);
+  heuristic.mark_as_scheduled(k_3);
+
+  auto k_none = heuristic.get_next_heuristic();
+  EXPECT_EQ(k_none, nullptr);
 }
