@@ -3,6 +3,7 @@
 #include "types.h"
 #include <array>
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
@@ -95,8 +96,14 @@ private:
     // the tensor ids of the input to the kernel
     std::vector<tid_t> input_tids;
 
+    // the size of each input tensor
+    std::vector<size_t> input_sizes;
+
     // the tensor ids of the output of the kernel
     std::vector<tid_t> output_tids;
+
+    // the size of each output tensor
+    std::vector<size_t> output_sizes;
 
     // the kernel
     kernel_run_ptr_t run_me;
@@ -124,6 +131,9 @@ private:
 
     // we store here a list of all the inputs currently available on all the GPUs
     std::vector<tid_t> gpu_inputs;
+
+    // TODO: this is not actually corrent and should be fixed in the future
+    size_t output_size;
 
     // here we store a list of all the inputs available per GPU
     std::array<std::vector<tid_t>, BBTS_MAX_GPU_DEVICES> inputs_on_devices;

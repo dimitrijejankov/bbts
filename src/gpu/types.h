@@ -5,6 +5,9 @@
 #include "../storage/storage.h"
 #include "../ud_functions/udf_manager.h"
 #include "../utils/concurent_queue.h"
+#include <cstddef>
+#include <cstdint>
+#include <memory>
 
 
 namespace bbts {
@@ -27,6 +30,46 @@ struct kernel_run_t {
 };
 using kernel_run_ptr_t = std::shared_ptr<kernel_run_t>;
 
+
+struct cpu_to_gpu_transfer_t {
+
+  // locks the cpu2gpu transfer
+  std::mutex m;
+
+  // is the transfer finished
+  bool is_finished = false;
+
+  // the tid of the tensor
+  tid_t tid;
+
+  // the size in bytes
+  size_t num_bytes;
+
+  // the destination on the GPU
+  void *dst; 
+};
+using cpu_to_gpu_transfer_ptr_t = std::shared_ptr<cpu_to_gpu_transfer_t>;
+
+
+struct gpu_to_gpu_transfer_t {
+
+  // the source device
+  uint32_t src_dev;
+
+  // the source from the CPU 
+  void *src;
+
+  // the destination on the GPU
+  void *dst; 
+
+  // the number of bytes
+  size_t num_bytes;
+
+  // this wil be set to a cpu to gpu transfer if 
+  cpu_to_gpu_transfer_ptr_t depends;
+};
+using gpu_to_gpu_transfer_ptr_t = std::shared_ptr<gpu_to_gpu_transfer_t>;
+
 struct kernel_prep_t {
 
   // the id of the command the kernel is associated with
@@ -44,15 +87,20 @@ struct kernel_prep_t {
   // the inputs
   std::vector<tid_t> input;
 
+  // the input sizes in bytes
+  std::vector<size_t> input_sizes;
+
   // the outputs that were created
   std::vector<tid_t> output;
 
-  // all the CPU transfers we need to preform (tid, input index, num_bytes)
-  std::vector<std::tuple<tid_t, uint32_t, size_t>> cpu_transfers;
+  // the output sizes in bytes
+  std::vector<size_t> output_sizes;
 
-  // all the GPU transfers we need to do (tensor, src_dev, input index,
-  // num_bytes)
-  std::vector<std::tuple<tensor_t *, int32_t, uint32_t, size_t>> gpu_transfers;
+  // all the CPU transfers we need to preform
+  std::vector<cpu_to_gpu_transfer_ptr_t> cpu_transfers;
+
+  // all the GPU transfers we need to do
+  std::vector<gpu_to_gpu_transfer_ptr_t> gpu_transfers;
 
   // lock this so we don't interfere with other scheduling the kernel
   std::mutex m;
@@ -65,7 +113,7 @@ struct kernel_prep_t {
 };
 using kernel_prep_ptr_t = std::shared_ptr<kernel_prep_t>;
 
-struct reaper_request_t {
+struct gc_request_t {
 
   // list of tensors we are supposed to free
   std::vector<tensor_t *> to_free;
@@ -76,7 +124,7 @@ struct reaper_request_t {
   // the kernel prep to run once the request is finished
   kernel_prep_ptr_t to_run;
 };
-using reaper_request_ptr_t = std::shared_ptr<reaper_request_t>;
+using gc_request_ptr_t = std::shared_ptr<gc_request_t>;
 
 struct apply_schedule_t {
 
@@ -84,10 +132,10 @@ struct apply_schedule_t {
   ud_impl_t *fn;
 
   // the number of bytes each input has
-  std::vector<size_t> input_num_bytes;
+  std::vector<size_t> input_sizes;
 
   // the number of bytes each output has
-  std::vector<size_t> output_num_bytes;
+  std::vector<size_t> output_sizes;
 
   // the command
   bbts::command_ptr_t cmd;
@@ -102,11 +150,11 @@ struct reduce_schedule_t {
   // the parameters of the UD function we want to run
   ud_impl_t::tensor_params_t _params;
 
-  // the input meta
-  bbts::ud_impl_t::meta_args_t input_meta;
+  // the number of bytes each input has
+  std::vector<size_t> input_sizes;
 
-  // the output meta
-  bbts::ud_impl_t::meta_args_t output_meta;
+  // the number of bytes each output has
+  size_t output_size;
 
   // the command
   bbts::command_ptr_t cmd;
@@ -126,13 +174,19 @@ struct scheduler_request_t {
   std::vector<kernel_prep_ptr_t> retired_kernels;
   
   // the finished request for freeing tensors or evicting them
-  std::vector<reaper_request_ptr_t> finished_gc;
+  std::vector<gc_request_ptr_t> finished_gc;
 
   // all the applies that were scheduled since the last time the thread was woken up
   std::vector<apply_schedule_ptr_t> apply_cmds;
 
   // all the reduces that were scheduled since the last time the thread was woken up
   std::vector<reduce_schedule_ptr_t> reduce_cmds;
+
+  // all the cpu to gpu transfers that were scheduled since the last time the thread was woken up
+  std::vector<cpu_to_gpu_transfer_ptr_t> cpu_transfers;
+
+  // all the gpu to gpu transfers that were scheduled since the last time the thread was woken up
+  std::vector<gpu_to_gpu_transfer_ptr_t> gpu_transfers;
 };
 using scheduler_request_ptr_t = std::shared_ptr<scheduler_request_t>;
 
@@ -146,7 +200,7 @@ public:
   }
 
   // signal reaper done
-  void signal_reaper_done(reaper_request_ptr_t req) {
+  void signal_reaper_done(gc_request_ptr_t req) {
 
     std::unique_lock<std::mutex> lck;
     finished_gc.push_back(std::move(req));
@@ -178,6 +232,26 @@ public:
     new_commands = true;
   }
 
+  void signal_cpu_to_gpu_transfer_done(std::vector<cpu_to_gpu_transfer_ptr_t> &transfer) {
+
+    std::unique_lock<std::mutex> lck;
+
+    // move them here
+    for(auto &tr : transfer) {
+      cpu_transfers.push_back(std::move(tr));
+    }
+  }
+
+  void signal_gpu_to_gpu_transfer_done(std::vector<gpu_to_gpu_transfer_ptr_t> &transfer){
+
+    std::unique_lock<std::mutex> lck;
+
+    // move the transfers here
+    for(auto &tr : transfer) {
+      gpu_transfers.push_back(std::move(tr));
+    }
+  }
+
   void wait_dequeue(scheduler_request_ptr_t &req) {
 
     // wait to get something
@@ -192,6 +266,8 @@ public:
     std::swap(req->finished_gc, finished_gc);
     std::swap(req->apply_cmds, apply_cmds);
     std::swap(req->reduce_cmds, reduce_cmds);
+    std::swap(req->cpu_transfers, cpu_transfers);
+    std::swap(req->gpu_transfers, gpu_transfers);
   }
 
   bool has_something() {
@@ -206,13 +282,17 @@ private:
 
   std::vector<kernel_prep_ptr_t> retired_kernels;
 
-  std::vector<reaper_request_ptr_t> finished_gc;
+  std::vector<gc_request_ptr_t> finished_gc;
 
   std::vector<apply_schedule_ptr_t> apply_cmds;
 
   std::vector<reduce_schedule_ptr_t> reduce_cmds;
 
   std::vector<delete_schedule_ptr_t> delete_cmds;
+
+  std::vector<cpu_to_gpu_transfer_ptr_t> cpu_transfers;
+
+  std::vector<gpu_to_gpu_transfer_ptr_t> gpu_transfers;
 
   // locks the scheduler queue
   std::mutex m;

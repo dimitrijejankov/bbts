@@ -25,8 +25,8 @@ apply_schedule_ptr_t create_apply(command_id_t id,
   apply->cmd = command_t::create_apply(id, {0, 0}, true, {}, in, out);
 
   // we don't care about this
-  apply->input_num_bytes = {};
-  apply->output_num_bytes = {};
+  apply->input_sizes.resize(inputs.size());
+  apply->output_sizes.resize(outputs.size());
   apply->fn = nullptr;
 
   return std::move(apply);
@@ -46,8 +46,8 @@ reduce_schedule_ptr_t create_reduce(command_id_t id,
   reduce->cmd = command_t::create_reduce(id, {0, 0}, true, {}, in, command_t::tid_node_id_t{.tid = output, .node = 0});
 
   // we don't care about this
-  reduce->input_meta = {};
-  reduce->output_meta = {};
+  reduce->input_sizes.resize(inputs.size());
+  reduce->output_size = 0;
   reduce->_params = {};
   reduce->fn = nullptr;
 

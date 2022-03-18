@@ -42,7 +42,7 @@ run_threads(bbts::multi_gpu_scheduler_ptr_t scheduler) {
   for (auto dev = 0; dev < scheduler->_num_gpus; ++dev) {
 
     threads.push_back(std::thread([scheduler, dev]() { 
-      scheduler->reaper_thread(dev); 
+      scheduler->gc_thread(dev); 
     }));
 
     threads.push_back(std::thread([scheduler, dev]() { 
@@ -73,7 +73,7 @@ int main() {
 
   // make the scheduler
   auto scheduler = std::make_shared<bbts::multi_gpu_scheduler_t>(
-      4, storage, manager, factory);
+      4, 16lu * 1024lu * 1024lu * 1024lu, storage, manager, factory);
 
   // try to deserialize
   // uniform 0

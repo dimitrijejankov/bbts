@@ -283,7 +283,9 @@ void gpu_heuristic_t::register_apply(bbts::apply_schedule_ptr_t &apply_sch) {
   apply_cmd.inputs_available = 0;
   apply_cmd.loaded_inputs = 0;
   apply_cmd.input_tids.reserve(cmd->get_num_inputs());
+  apply_cmd.input_sizes = apply_sch->input_sizes;
   apply_cmd.output_tids.reserve(cmd->get_num_outputs());
+  apply_cmd.output_sizes = apply_sch->output_sizes;
   apply_cmd.it = goodness_heuristic.end();
 
   for (int32_t idx = 0; idx < cmd->get_num_inputs(); ++idx) {
@@ -366,6 +368,9 @@ void gpu_heuristic_t::register_reduce(bbts::reduce_schedule_ptr_t &reduce_sch) {
   reduce_cmd.id = cmd->id;
   reduce_cmd.num_inputs = cmd->get_num_inputs();
   reduce_cmd.num_issued = 0;
+
+  // TODO: this is not corrent but it will for for testing
+  reduce_cmd.output_size = reduce_sch->output_size;
   reduce_cmd.it = goodness_heuristic.end();
 
   for (int32_t idx = 0; idx < cmd->get_num_inputs(); ++idx) {
@@ -420,6 +425,11 @@ kernel_prep_ptr_t gpu_heuristic_t::_create_reduce(command_id_t cmd) {
   ret->type = command_t::REDUCE;
   ret->cpu_done = false;
   ret->gpu_done = false;
+  
+  // TODO this is not corrent but will be fixed in the future
+  ret->input_sizes = {reduce_cmd.output_size,  reduce_cmd.output_size};
+  ret->output_sizes = {reduce_cmd.output_size};
+  
   ret->cpu_transfers = {};
   ret->gpu_transfers = {};
 
@@ -465,7 +475,9 @@ kernel_prep_ptr_t gpu_heuristic_t::_create_apply(command_id_t cmd) {
   ret->cpu_transfers = {};
   ret->gpu_transfers = {};
   ret->input = apply_cmd.input_tids;
+  ret->input_sizes = apply_cmd.input_sizes;
   ret->output = apply_cmd.output_tids;
+  ret->output_sizes = apply_cmd.output_sizes;
   ret->run_me = apply_cmd.run_me;
 
   return std::move(ret);
