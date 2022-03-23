@@ -30,8 +30,13 @@ struct kernel_run_t {
 };
 using kernel_run_ptr_t = std::shared_ptr<kernel_run_t>;
 
+// the id of both GPU2GPU and CPU2GPU transfers
+using transfer_id_t = int64_t;
 
 struct cpu_to_gpu_transfer_t {
+
+  // the id of the transfer so that we can easly match it
+  transfer_id_t id;
 
   // locks the cpu2gpu transfer
   std::mutex m;
@@ -46,27 +51,42 @@ struct cpu_to_gpu_transfer_t {
   size_t num_bytes;
 
   // the destination on the GPU
-  void *dst; 
+  tensor_t *dst; 
+
+  // the destination device
+  int32_t dst_dev;
 };
 using cpu_to_gpu_transfer_ptr_t = std::shared_ptr<cpu_to_gpu_transfer_t>;
 
 
 struct gpu_to_gpu_transfer_t {
 
+  // the id of the transfer so that we can easly match it
+  transfer_id_t id;
+
+  // the tid of the tensor we are transfering
+  tid_t tid;
+
   // the source device
-  uint32_t src_dev;
+  int32_t src_dev;
 
   // the source from the CPU 
-  void *src;
+  tensor_t *src;
 
   // the destination on the GPU
-  void *dst; 
+  tensor_t *dst; 
+
+  // the destination device
+  int32_t dst_dev;
 
   // the number of bytes
   size_t num_bytes;
 
   // this wil be set to a cpu to gpu transfer if 
   cpu_to_gpu_transfer_ptr_t depends;
+
+  // is this finished
+  bool is_finished = false;
 };
 using gpu_to_gpu_transfer_ptr_t = std::shared_ptr<gpu_to_gpu_transfer_t>;
 

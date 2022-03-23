@@ -1,8 +1,10 @@
 #include "types.h"
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <sys/types.h>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace bbts {
 
@@ -22,7 +24,7 @@ public:
   void mark_as_used(tid_t id);
 
   // mark this tensor for deletion
-  void mark_for_deletion(tid_t id);
+  void mark_for_deletion(tid_t id, size_t num_bytes);
 
   // pins all the tensors in the kernel prep
   void pin_all(kernel_prep_ptr_t kp, int dev);
@@ -31,7 +33,11 @@ public:
   void unpin_all(kernel_prep_ptr_t kp, int dev);
   
   // mark that a tensor is not loaded and on a particular device
-  void tensor_created(tid_t id, int dev);
+  // must be called when  
+  void tensor_loaded_on_gpu(tid_t id, int dev);
+
+  // mark that the tensor is loaded on the CPU
+  void tensor_loaded_on_cpu(tid_t id);
 
   // can we preallocate all the tensors that we need to run the kernel
   int can_preallocate(kernel_prep_ptr_t kp);
@@ -62,18 +68,63 @@ public:
 
 private:
   
-  // check whether the tensor is present on the device (either pinned or unpinned)
+  // check whether the tensor is present on the device (must have finished the transfer)
   bool _is_on_device(tid_t id, int32_t dev);
 
+  // is it currently transfered 
+  bool _is_transfered_to_device(tid_t id, int32_t dev);
+
+  // check whether the tensor is present on any device 
+  // the fuction will return the target_dev if it is on it otherwise it 
+  // will return the current 
+  int32_t _is_on_any(tid_t id, int32_t target_dev);
+
+  // pin the tensor
   void _pin_tensor(tid_t id, int32_t dev, size_t num_bytes);
 
   // mark that a tensor is not unpinned
   void _unpin_tensor(tid_t id, int dev, size_t num_bytes);
 
+  // used to implement both @see can_gc and @see can_preallocate
+  template<class fun>
+  int32_t _fits_memory(kernel_prep_ptr_t kp, fun f) {
+  
+    // sum all the output bytes
+    size_t output_bytes_required = 0;
+    for(auto out_size : kp->output_sizes) {
+      output_bytes_required += out_size;
+    }
+
+    // go through each device and check if we can put it there
+    for(auto dev = 0; dev < _num_devices; ++dev) {
+      size_t required = output_bytes_required; 
+      for(auto in_idx = 0; in_idx < kp->input.size(); ++in_idx) {
+        if(!_is_on_device(kp->input[in_idx], dev) &&
+           !_is_transfered_to_device(kp->input[in_idx], dev)) {
+          required += kp->input_sizes[in_idx];
+        }
+      }
+      
+      // do we have enough memory
+      if((_total_unpinned[dev] + _total_free[dev]) >= required) {
+        return dev;
+      }
+    }
+
+    // we can not preallocate
+    return -1; 
+  }
+
   // sorted by num_copies (first), num_uses (second)
   using unpinned_t = std::multimap<std::tuple<uint32_t, uint32_t>, tid_t>;
 
   struct gpu_mem_tensor_t {
+
+    // is tensor on the CPU
+    bool is_on_cpu = false;
+
+    // make sure this is set when it is marked as deleted
+    bool is_deleted = true;
     
     // the number of uses of this tensor
     uint32_t num_uses = 0;
@@ -81,8 +132,20 @@ private:
     // how many copies of this tensor are there in memory
     uint32_t num_copies = 0;
 
+    // a pointer to the tensor
+    std::array<tensor_t*, BBTS_MAX_GPU_DEVICES> data;
+
+    // is the tensor loaded on a particular device (a tensor is loaded once the transfer is finished)
+    std::array<bool, BBTS_MAX_GPU_DEVICES> is_loaded_on_gpu;
+
     // these are iterators so that we can quickly update the _unpinned_tensors
     std::array<unpinned_t::iterator, BBTS_MAX_GPU_DEVICES> unpinned_its;
+
+    // the ongoing transfers from GPU2GPU
+    std::array<gpu_to_gpu_transfer_ptr_t, BBTS_MAX_GPU_DEVICES> gpu_transfers;
+    
+    // the transfers from CPU to GPU
+    cpu_to_gpu_transfer_ptr_t cpu_transfer;
   };
 
   // how many times will this tensor be used
@@ -103,6 +166,19 @@ private:
   // the total free memory per GPU
   std::vector<size_t> _total_free;
 
+  // uniquely identifies each CPU to GPU transfer
+  transfer_id_t _cur_cpu_to_gpu_transfer_id = 0; 
+
+  // the cpu to gpu transfers we have scheduled
+  std::unordered_map<transfer_id_t, cpu_to_gpu_transfer_ptr_t> _cpu_to_gpu_transfer;
+
+  // uniquely identifies each GPU to GPU transfer
+  transfer_id_t _cur_gpu_tp_gpu_tranfer_id = 0;
+  
+  // the gpu to gpu transfers we have scheduled
+  std::unordered_map<transfer_id_t, gpu_to_gpu_transfer_ptr_t> _gpu_to_gpu_transfer;
+
+  // the number of devices
   size_t _num_devices;
 };
 

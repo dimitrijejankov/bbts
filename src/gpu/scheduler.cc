@@ -12,10 +12,31 @@ multi_gpu_scheduler_t::multi_gpu_scheduler_t(size_t num_gpus,
     : _num_gpus(num_gpus), run_queue(num_gpus), storage(std::move(storage)),
       udm(std::move(udm)), tf(std::move(tf)), heuristic(num_gpus), mem(num_gpus, gpu_mem_size) {
 
-  // TODO p2p nvlink initialization
+  // set the device
+  for(auto dev = 0; dev < _num_gpus; ++dev) {
+    cudaSetDevice(dev);
+    for (auto peer = 0; peer < _num_gpus; ++peer) {
+      if (peer != dev) {
+        cudaDeviceEnablePeerAccess(peer, 0);
+      }
+    }
+  }
 }
 void multi_gpu_scheduler_t::gpu_execution_thread(int32_t dev) {
 
+  // set the device
+  cudaSetDevice(dev);
+
+  // init the stream
+  cudaStream_t run_stream;
+  cudaStreamCreate(&run_stream);
+
+  // create the cublas handle
+  cublasHandle_t cublas_handle;
+  cublasCreate(&cublas_handle);
+  cublasSetStream(cublas_handle, run_stream);
+
+  // kick off the run process
   while (true) {
 
     // get a kernel run
@@ -30,6 +51,10 @@ void multi_gpu_scheduler_t::gpu_execution_thread(int32_t dev) {
       break;
     }
 
+    // set the cuda parameters
+    kernel->params.stream = run_stream;
+    kernel->params.cublas_handle = cublas_handle;
+
     // call the kernel
     kernel->ud->call_gpu_ud(kernel->params, kernel->inputs, kernel->outputs);
 
@@ -39,10 +64,12 @@ void multi_gpu_scheduler_t::gpu_execution_thread(int32_t dev) {
 }
 
 void multi_gpu_scheduler_t::gpu_to_gpu_thread(int32_t dev) {
-
+  
+  // init the stream
   cudaStream_t cpy_stream;
   cudaStreamCreate(&cpy_stream);
 
+  // kick off the copy process
   while (true) {
 
     // get a kernel run
@@ -181,11 +208,11 @@ void multi_gpu_scheduler_t::command_prep_thread() {
       // 1. unpin all the inputs
       mem.unpin_all(fk, fk->dev);
 
-      // 2. since a new tensor has been created update commands that can be
-      // scheduled
+      // 2. since a new tensor has been created 
+      //    update commands that can be scheduled
       for (auto &out : fk->output) {
         heuristic.tensor_loaded(out, fk->dev);
-        mem.tensor_created(out, fk->dev);
+        mem.tensor_loaded_on_gpu(out, fk->dev);
       }
     }
 
@@ -291,7 +318,7 @@ void multi_gpu_scheduler_t::command_prep_thread() {
       continue;
     }
 
-    /// 7.2.1 check if we can preallocate the required memory
+    /// 6.2.1 check if we can preallocate the required memory
     if ((dev = mem.can_preallocate(kernel_prep)) != -1) {
 
       // we can preallocate in which case we instruct the gpu2gpu threads to
@@ -307,7 +334,7 @@ void multi_gpu_scheduler_t::command_prep_thread() {
         gpu2gpu_queue[dev].enqueue(kernel_prep);
       }
     }
-    // 7.2.2 check if we can run garbage collection and then run the kernel
+    // 6.2.2 check if we can run garbage collection and then run the kernel
     else if ((dev = mem.can_gc(kernel_prep)) != -1) {
 
       // make a garbage collection request
@@ -320,6 +347,7 @@ void multi_gpu_scheduler_t::command_prep_thread() {
     }
   }
 }
+
 void multi_gpu_scheduler_t::gc_thread(int dev_id) {
 
   cudaStream_t free_stream;
