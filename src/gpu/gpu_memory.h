@@ -17,8 +17,11 @@ public:
 
   gpu_memory_t(size_t num_devixces, size_t mem_per_gpu);
 
-  // mark that we are using this tensor in the future
-  void mark_for_use(tid_t id);
+  // mark that we are going to use all the inputs from the apply
+  void mark_for_use(const apply_schedule_ptr_t &apply);
+
+  // mark that we are going to use all the inputs from the reduce
+  void mark_for_use(const reduce_schedule_ptr_t &reduce);
 
   // mark that a tensor has already been used
   void mark_as_used(tid_t id);
@@ -34,10 +37,10 @@ public:
   
   // mark that a tensor is not loaded and on a particular device
   // must be called when  
-  void tensor_loaded_on_gpu(tid_t id, int dev);
+  void tensor_loaded_on_gpu(tid_t id, int dev, size_t num_bytes);
 
   // mark that the tensor is loaded on the CPU
-  void tensor_loaded_on_cpu(tid_t id);
+  void tensor_loaded_on_cpu(tid_t id, size_t num_bytes);
 
   // can we preallocate all the tensors that we need to run the kernel
   int can_preallocate(kernel_prep_ptr_t kp);
@@ -59,6 +62,9 @@ public:
   // free memory (or based on the workload not sure)
   void preallocate(kernel_prep_ptr_t kp, int dev);
 
+  // finish the kernel prep
+  void finish_kernel_prep(kernel_prep_ptr_t kp);
+
   // can an we run garbage collection
   // if we can it returns the device othewise it returns -1
   int can_gc(kernel_prep_ptr_t kp);
@@ -66,8 +72,56 @@ public:
   // get the garbage collection request
   gc_request_ptr_t get_gc_request(kernel_prep_ptr_t kp, int dev);
 
+  // finish the garbage collection request
+  void finish_gc_request(const gc_request_ptr_t &req);
+
 private:
   
+  // sorted by num_copies (first), num_uses (second)
+  using unpinned_t = std::multimap<std::tuple<uint32_t, uint32_t>, tid_t>;
+
+  struct gpu_mem_tensor_t {
+
+    // is tensor on the CPU
+    bool is_on_cpu = false;
+
+    // make sure this is set when it is marked as deleted
+    bool is_deleted = true;
+    
+    // the number of uses of this tensor
+    uint32_t num_uses = 0;
+
+    // how many copies of this tensor are there in memory
+    uint32_t num_copies = 0;
+
+    // the size of the tensor
+    size_t num_bytes = 0;
+
+    // a pointer to the tensor
+    std::array<tensor_t*, BBTS_MAX_GPU_DEVICES> data;
+
+    // is the tensor loaded on a particular device (a tensor is loaded once the transfer is finished)
+    std::array<bool, BBTS_MAX_GPU_DEVICES> is_loaded_on_gpu;
+
+    // these are iterators so that we can quickly update the _unpinned_tensors
+    std::array<unpinned_t::iterator, BBTS_MAX_GPU_DEVICES> unpinned_its;
+
+    // the ongoing transfers from GPU2GPU
+    std::array<gpu_to_gpu_transfer_ptr_t, BBTS_MAX_GPU_DEVICES> gpu_transfers;
+    
+    // the transfers from CPU to GPU
+    cpu_to_gpu_transfer_ptr_t cpu_transfer;
+  };
+
+  // initialize the tensor
+  gpu_mem_tensor_t &_init_tensor(tid_t id, size_t num_bytes, bool &created);
+
+  // is the tensor pinned
+  bool _is_pinned(tid_t id, int32_t dev);
+
+  // is the tensor unpinned
+  bool _is_unpinned(tid_t id, int32_t dev);
+
   // check whether the tensor is present on the device (must have finished the transfer)
   bool _is_on_device(tid_t id, int32_t dev);
 
@@ -114,39 +168,6 @@ private:
     // we can not preallocate
     return -1; 
   }
-
-  // sorted by num_copies (first), num_uses (second)
-  using unpinned_t = std::multimap<std::tuple<uint32_t, uint32_t>, tid_t>;
-
-  struct gpu_mem_tensor_t {
-
-    // is tensor on the CPU
-    bool is_on_cpu = false;
-
-    // make sure this is set when it is marked as deleted
-    bool is_deleted = true;
-    
-    // the number of uses of this tensor
-    uint32_t num_uses = 0;
-
-    // how many copies of this tensor are there in memory
-    uint32_t num_copies = 0;
-
-    // a pointer to the tensor
-    std::array<tensor_t*, BBTS_MAX_GPU_DEVICES> data;
-
-    // is the tensor loaded on a particular device (a tensor is loaded once the transfer is finished)
-    std::array<bool, BBTS_MAX_GPU_DEVICES> is_loaded_on_gpu;
-
-    // these are iterators so that we can quickly update the _unpinned_tensors
-    std::array<unpinned_t::iterator, BBTS_MAX_GPU_DEVICES> unpinned_its;
-
-    // the ongoing transfers from GPU2GPU
-    std::array<gpu_to_gpu_transfer_ptr_t, BBTS_MAX_GPU_DEVICES> gpu_transfers;
-    
-    // the transfers from CPU to GPU
-    cpu_to_gpu_transfer_ptr_t cpu_transfer;
-  };
 
   // how many times will this tensor be used
   std::unordered_map<tid_t, gpu_mem_tensor_t> _tensors;

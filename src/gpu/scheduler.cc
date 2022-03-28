@@ -210,9 +210,9 @@ void multi_gpu_scheduler_t::command_prep_thread() {
 
       // 2. since a new tensor has been created 
       //    update commands that can be scheduled
-      for (auto &out : fk->output) {
-        heuristic.tensor_loaded(out, fk->dev);
-        mem.tensor_loaded_on_gpu(out, fk->dev);
+      for (auto out_idx = 0; out_idx < fk->output.size(); ++out_idx) {
+        heuristic.tensor_loaded(fk->output[out_idx], fk->dev);
+        mem.tensor_loaded_on_gpu(fk->output[out_idx], fk->dev, fk->output_sizes[out_idx]);
       }
     }
 
@@ -229,11 +229,9 @@ void multi_gpu_scheduler_t::command_prep_thread() {
     // go through them and schedule them, while doing this update the
     // 'GOODNESS'
     for (auto &nc : req->apply_cmds) {
-
+      
       // mark all the inputs for use
-      for (auto idx = 0; idx < nc->cmd->get_num_inputs(); ++idx) {
-        mem.mark_for_use(nc->cmd->get_inputs()[idx].tid);
-      }
+      mem.mark_for_use(nc);
 
       // register the apply with the heuristic
       heuristic.register_apply(nc);
@@ -241,9 +239,7 @@ void multi_gpu_scheduler_t::command_prep_thread() {
     for (auto &nc : req->reduce_cmds) {
 
       // mark all the inputs for use
-      for (auto idx = 0; idx < nc->cmd->get_num_inputs(); ++idx) {
-        mem.mark_for_use(nc->cmd->get_inputs()[idx].tid);
-      }
+      mem.mark_for_use(nc);
 
       // register the reduce with the heuristic
       heuristic.register_reduce(nc);
