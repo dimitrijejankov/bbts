@@ -202,16 +202,18 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
     bool created;
     auto tid = kp->output[out_idx];
     auto num_bytes = kp->output_sizes[out_idx];
-    _init_tensor(tid, num_bytes, created);
+    auto &t = _init_tensor(tid, num_bytes, created);
 
     // allocate it 
     cudaMalloc(&tmp, num_bytes);
     kp->run_me->outputs.set(out_idx, *tmp);
-    auto it = _tensors.find(tid); assert(it != _tensors.end());
-    it->second.data[dev] = tmp;
+    t.data[dev] = tmp;
 
-    // pin it
-    _pin_tensor(kp->output[out_idx], dev, kp->output_sizes[out_idx]);
+    // we just initialized and plan on filling it out during 
+    // the kernel call therefore we need to pin the memory
+    _total_free[dev] -= kp->output_sizes[out_idx];
+    auto num_pinned = _pinned_tensors[dev][tid]++;
+    assert(num_pinned == 0);
   }
 
   // go through each device and check if we can put it there
@@ -253,8 +255,13 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
         t.data[dev] = tmp;
         kp->run_me->inputs.set(in_idx, *tmp);
 
-        // pin both tensors as othewise there would be trouble
-        _pin_tensor(kp->input[in_idx], dev, kp->input_sizes[in_idx]);
+        // since we just created a tensor on this device
+        // we need to mark the free memory as used 
+        _total_free[dev] -= kp->input_sizes[in_idx];
+        auto num_pinned = _pinned_tensors[dev][kp->input[in_idx]]++;
+        assert(num_pinned == 0);
+
+        // pin the source tensor
         _pin_tensor(kp->input[in_idx], src_dev, kp->input_sizes[in_idx]);
 
         // if it is on any other GPU make a GPU2GPU transfer
@@ -286,8 +293,13 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
         t.data[dev] = tmp;
         kp->run_me->inputs.set(in_idx, *tmp);
 
-        // pin both tensors as othewise there would be trouble
-        _pin_tensor(kp->input[in_idx], dev, kp->input_sizes[in_idx]);
+        // since we just created a tensor on this device
+        // we need to mark the free memory as used 
+        _total_free[dev] -= kp->input_sizes[in_idx];
+        auto num_pinned = _pinned_tensors[dev][kp->input[in_idx]]++;
+        assert(num_pinned == 0);
+
+        // pin an additional time the source tensor
         _pin_tensor(kp->input[in_idx], src_dev, kp->input_sizes[in_idx]);
 
         // if it is on any other GPU make a GPU2GPU transfer
@@ -314,7 +326,11 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
         cudaMalloc(&tmp, kp->input_sizes[in_idx]);
         t.data[dev] = tmp;
         kp->run_me->inputs.set(in_idx, *tmp);
-        _pin_tensor(kp->input[in_idx], dev, kp->input_sizes[in_idx]);
+
+        // pin it since we are transfering this
+        _total_free[dev] -= kp->input_sizes[in_idx];
+        auto num_pinned = _pinned_tensors[dev][kp->input[in_idx]]++;
+        assert(num_pinned == 0);
 
         // if it is on any other GPU make a GPU2GPU transfer
         auto transfer = std::make_shared<cpu_to_gpu_transfer_t>();

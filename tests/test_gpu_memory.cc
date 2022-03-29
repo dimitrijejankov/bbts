@@ -135,3 +135,45 @@ TEST(TestGPUMemory, TestPreallocate) {
   // finish the kernel prep2
   gpu_memory.finish_kernel_prep(prep2);
 }
+
+
+TEST(TestGPUMemory, TestGC1) {
+
+  gpu_memory_t gpu_memory(1, 1024);
+
+  // we want to allocate these
+  auto prep1 = make_kernel_prep(0, {0, 1}, {256, 256}, {2}, {512});
+  auto prep2 = make_kernel_prep(0, {3, 4}, {256, 256}, {5}, {512});
+
+  // mark that these tensors are loaded on the CPU
+  gpu_memory.tensor_loaded_on_cpu(0, 256);
+  gpu_memory.tensor_loaded_on_cpu(1, 256);
+  gpu_memory.tensor_loaded_on_cpu(3, 256);
+  gpu_memory.tensor_loaded_on_cpu(4, 256);
+
+  // make sure 
+  auto dev1 = gpu_memory.can_preallocate(prep1);
+  EXPECT_EQ(dev1, 0);
+
+  // preallocate the krenel prep
+  gpu_memory.preallocate(prep1, 0);
+
+  // get the transfers
+  auto t1 = prep1->cpu_transfers[0];
+  auto t2 = prep1->cpu_transfers[1];
+
+  // mark as finished
+  t1->is_finished = true;
+  t2->is_finished = true;
+
+  // mark that it is done
+  gpu_memory.mark_transfer_done(t1);
+  gpu_memory.mark_transfer_done(t2);
+
+  // signal the kernel prep as done
+  gpu_memory.finish_kernel_prep(prep1);
+
+  // we should not be able to preallocate
+  auto dev2 = gpu_memory.can_preallocate(prep2);
+  EXPECT_EQ(dev2, -1);
+}

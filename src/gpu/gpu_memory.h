@@ -160,7 +160,7 @@ private:
       }
       
       // do we have enough memory
-      if((_total_unpinned[dev] + _total_free[dev]) >= required) {
+      if(f(dev) >= required) {
         return dev;
       }
     }
