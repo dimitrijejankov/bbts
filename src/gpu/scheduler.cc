@@ -361,7 +361,8 @@ void multi_gpu_scheduler_t::gc_thread(int dev_id) {
 
     // schedule all the free commands
     for (auto t : request->to_free) {
-      cudaFreeAsync(t, free_stream);
+      auto mem = std::get<0>(t);
+      cudaFreeAsync(mem, free_stream);
     }
 
     for (auto t : request->to_evict) {

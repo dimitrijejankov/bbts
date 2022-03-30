@@ -427,7 +427,7 @@ gc_request_ptr_t gpu_memory_t::get_gc_request(kernel_prep_ptr_t kp, int dev) {
   int64_t required = output_bytes_required; 
   for(auto in_idx = 0; in_idx < kp->input.size(); ++in_idx) {
     if(!_is_on_device(kp->input[in_idx], dev) &&
-        !_is_transfered_to_device(kp->input[in_idx], dev)) {
+       !_is_transfered_to_device(kp->input[in_idx], dev)) {
       required += kp->input_sizes[in_idx];
     }
   }
@@ -436,34 +436,78 @@ gc_request_ptr_t gpu_memory_t::get_gc_request(kernel_prep_ptr_t kp, int dev) {
   assert((_total_unpinned[dev] + _total_free[dev]) >= required);
 
   // go through all the tensors we need to free
-  for(auto free_me : _to_free_tensors[dev]) {
+  for(int64_t idx = _to_free_tensors[dev].size() - 1; idx >= 0; --idx) {
     
     // are we done?
     if(required <= 0) {
       break;
     }
+
+    // we are freeing this one
+    auto &free_me = _to_free_tensors[dev][idx]; 
     
-    // mark it as free
-    required -= _tensors[free_me].num_bytes;
-    request->to_free.push_back(_tensors[free_me].data[dev]);
+    // decrement the memory
+    auto it = _tensors.find(free_me);
+    auto &t = it->second;
+    required -= t.num_bytes;
+
+    // remove it from the structure
+    _unpinned_tensors[dev].erase(t.unpinned_its[dev]);
+    t.unpinned_its[dev] = _unpinned_tensors[dev].end();
+
+    // claim this memory
+    _total_unpinned[dev] -= t.num_bytes;
+    request->to_free.push_back({t.data[dev], free_me, t.num_bytes});
+    t.data[dev] = nullptr;
+
+    // we are killing a copy of this
+    if(--t.num_copies == 0) {
+      _tensors.erase(it);
+    }
+
+    // remove the last one
+    _to_free_tensors[dev].pop_back();
   }
 
   // go through all the tensors we need to evict
-  for(auto evict : _unpinned_tensors[dev]) {
+  while (true) {
 
     // are we done?
     if(required <= 0) {
       break;
     }
+    
+    // this is never supposed to happen because we called @see can_gc.
+    assert(!_unpinned_tensors[dev].empty());
 
-    // mark it as free
-    required -= _tensors[evict.second].num_bytes;
-    auto &t = _tensors[evict.second];
-    request->to_evict.push_back({t.data[dev], evict.second, t.num_bytes});
+    // decrement the required memory
+    auto evict = _unpinned_tensors[dev].begin();
+    auto &t = _tensors[evict->second];
+    required -= t.num_bytes;
+
+    // do we have to evict it or can we kill it
+    if(!t.is_on_cpu && t.num_copies == 1) {
+      request->to_evict.push_back({t.data[dev], evict->second, t.num_bytes});
+    }
+    else {
+      request->to_free.push_back({t.data[dev], evict->second, t.num_bytes});
+    }
+
+    // claim this memory
+    _total_unpinned[dev] -= t.num_bytes;
+    t.data[dev] = nullptr;
+
+    // we just killed a copy
+    t.num_copies--;
+
+    // remove it from the unpinned list
+    _unpinned_tensors[dev].erase(t.unpinned_its[dev]);
+    t.unpinned_its[dev] = _unpinned_tensors[dev].end();
   }
 
   // the kernel to run
   request->to_run = kp;
+  request->dev = dev;
 
   // make sure it is 
   assert(required <= 0);
@@ -472,10 +516,17 @@ gc_request_ptr_t gpu_memory_t::get_gc_request(kernel_prep_ptr_t kp, int dev) {
 
 void gpu_memory_t::finish_gc_request(const gc_request_ptr_t &req) {
 
+  // increase the free memeory for each tensor we have freed
   for(auto r : req->to_free) {
-    
+    auto [_, tid, num_bytes] = r;
+    _total_free[req->dev] += num_bytes;
   }
 
+  // increase the free memory for each tensor we have evicted
+  for(auto r : req->to_evict) {
+    auto [_, tid, num_bytes] = r;
+    _total_free[req->dev] += num_bytes;
+  }
 }
 
 gpu_memory_t::gpu_mem_tensor_t &gpu_memory_t::_init_tensor(tid_t id, 

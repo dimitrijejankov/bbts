@@ -135,8 +135,11 @@ using kernel_prep_ptr_t = std::shared_ptr<kernel_prep_t>;
 
 struct gc_request_t {
 
+  // the device for which the request is for
+  int32_t dev;
+
   // list of tensors we are supposed to free
-  std::vector<tensor_t *> to_free;
+  std::vector<std::tuple<tensor_t *, tid_t, size_t>> to_free;
 
   // list of tensors we are supposed to evict
   std::vector<std::tuple<tensor_t *, tid_t, size_t>> to_evict;
