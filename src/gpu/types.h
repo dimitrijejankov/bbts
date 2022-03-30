@@ -144,6 +144,10 @@ struct gc_request_t {
   // list of tensors we are supposed to evict
   std::vector<std::tuple<tensor_t *, tid_t, size_t>> to_evict;
 
+  // tensors that are to be unpinned once the request is finished
+  // this is unpinned by the GPU memory
+  std::vector<std::tuple<tid_t, size_t>> to_unpin;
+
   // the kernel prep to run once the request is finished
   kernel_prep_ptr_t to_run;
 };

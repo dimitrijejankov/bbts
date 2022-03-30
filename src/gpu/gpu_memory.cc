@@ -167,6 +167,7 @@ void gpu_memory_t::tensor_loaded_on_gpu(tid_t id, int dev, size_t num_bytes) {
 
   // mark that it is loaded
   t.is_loaded_on_gpu[dev] = true;
+  t.num_copies++;
 
   // if the tensor was just created we mark it as unpinned
   if(created) {
@@ -192,6 +193,9 @@ int gpu_memory_t::can_preallocate(kernel_prep_ptr_t kp) {
 };
 
 void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
+
+  // set the device in the kernel prep
+  kp->dev = dev;
 
   // sum all the output bytes
   tensor_t *tmp;
@@ -385,6 +389,7 @@ void gpu_memory_t::mark_transfer_done(cpu_to_gpu_transfer_ptr_t kp) {
   // mark that it is finished and remove the transfer
   assert(t.cpu_transfer->id == kp->id);
   t.is_loaded_on_gpu[kp->dst_dev] = true;
+  t.num_copies++;
   t.cpu_transfer = nullptr;
   _cpu_to_gpu_transfer.erase(kp->id);
 }
@@ -430,6 +435,10 @@ gc_request_ptr_t gpu_memory_t::get_gc_request(kernel_prep_ptr_t kp, int dev) {
        !_is_transfered_to_device(kp->input[in_idx], dev)) {
       required += kp->input_sizes[in_idx];
     }
+    else {
+      _pin_tensor(kp->input[in_idx], dev, kp->input_sizes[in_idx]);
+      request->to_unpin.push_back({kp->input[in_idx], kp->input_sizes[in_idx]});
+    }
   }
 
   // make sure we actually have space
@@ -461,6 +470,7 @@ gc_request_ptr_t gpu_memory_t::get_gc_request(kernel_prep_ptr_t kp, int dev) {
     t.data[dev] = nullptr;
 
     // we are killing a copy of this
+    t.is_loaded_on_gpu[dev] = false;
     if(--t.num_copies == 0) {
       _tensors.erase(it);
     }
@@ -499,6 +509,7 @@ gc_request_ptr_t gpu_memory_t::get_gc_request(kernel_prep_ptr_t kp, int dev) {
 
     // we just killed a copy
     t.num_copies--;
+    t.is_loaded_on_gpu[dev] = false;
 
     // remove it from the unpinned list
     _unpinned_tensors[dev].erase(t.unpinned_its[dev]);
@@ -526,6 +537,12 @@ void gpu_memory_t::finish_gc_request(const gc_request_ptr_t &req) {
   for(auto r : req->to_evict) {
     auto [_, tid, num_bytes] = r;
     _total_free[req->dev] += num_bytes;
+  }
+
+  // unpin all the tensors
+  for(auto u : req->to_unpin) {
+    auto [tid, num_bytes] = u;
+    _unpin_tensor(tid, req->dev, num_bytes);
   }
 }
 
@@ -579,10 +596,10 @@ bool gpu_memory_t::_is_transfered_to_device(tid_t id, int32_t dev) {
 
 int32_t gpu_memory_t::_is_on_any(tid_t id, int32_t target_dev) {
   auto it = _tensors.find(id); assert(it != _tensors.end());
-  for(int32_t dev = target_dev; dev < _num_devices; dev++) {
-    auto target_dev = (dev + 1) % _num_devices;
-    if(it->second.is_loaded_on_gpu[target_dev]) {
-      return dev;
+  for(int32_t dev = 0; dev < _num_devices; dev++) {
+    auto cur_dev = (dev + target_dev) % _num_devices;
+    if(it->second.is_loaded_on_gpu[cur_dev]) {
+      return target_dev;
     }
   }
   return -1;
@@ -594,6 +611,7 @@ void gpu_memory_t::_pin_tensor(tid_t id, int32_t dev, size_t num_bytes) {
   auto it = _tensors.find(id); assert(it != _tensors.end());
   if (it->second.unpinned_its[dev] != _unpinned_tensors[dev].end()) {
     _unpinned_tensors[dev].erase(it->second.unpinned_its[dev]);
+    it->second.unpinned_its[dev] = _unpinned_tensors[dev].end();
   }
 
   // pin it (increment the count and in the case if does not exist it will create it)
