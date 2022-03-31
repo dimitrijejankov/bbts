@@ -29,18 +29,20 @@ void gpu_memory_t::mark_for_use(const apply_schedule_ptr_t &apply) {
 
     // get the tid
     auto tid = apply->cmd->get_inputs()[in_idx].tid;
+    auto num_bytes = apply->input_sizes[in_idx];
 
     // get the tensors and update the use count
-    auto it = _tensors.find(tid); assert(it != _tensors.end());
-    it->second.num_uses++;
+    bool created;
+    auto &t = _init_tensor(tid, num_bytes, created);
+    t.num_uses++;
 
     // update the unpinned tensor so that they are sorted right
     for (auto dev = 0; dev < _num_devices; ++dev) {
 
       // check if we actually have it
-      if (it->second.unpinned_its[dev] != _unpinned_tensors[dev].end()) {
-        _unpinned_tensors[dev].erase(it->second.unpinned_its[dev]);
-        _unpinned_tensors[dev].insert({{it->second.num_copies, it->second.num_uses}, tid});
+      if (t.unpinned_its[dev] != _unpinned_tensors[dev].end()) {
+        _unpinned_tensors[dev].erase(t.unpinned_its[dev]);
+        t.unpinned_its[dev] = _unpinned_tensors[dev].insert({{t.num_copies, t.num_uses}, tid});
       }
     }
   }
@@ -63,7 +65,8 @@ void gpu_memory_t::mark_for_use(const reduce_schedule_ptr_t &reduce) {
       // check if we actually have it
       if (it->second.unpinned_its[dev] != _unpinned_tensors[dev].end()) {
         _unpinned_tensors[dev].erase(it->second.unpinned_its[dev]);
-        _unpinned_tensors[dev].insert({{it->second.num_copies, it->second.num_uses}, tid});
+        it->second.unpinned_its[dev]  = _unpinned_tensors[dev].insert({{it->second.num_copies, 
+                                                                        it->second.num_uses}, tid});
       }
     }
   }
@@ -81,7 +84,8 @@ void gpu_memory_t::mark_as_used(tid_t id) {
     // check if we actually have it
     if (it->second.unpinned_its[dev] != _unpinned_tensors[dev].end()) {
       _unpinned_tensors[dev].erase(it->second.unpinned_its[dev]);
-      _unpinned_tensors[dev].insert({{it->second.num_copies, it->second.num_uses}, id});
+      it->second.unpinned_its[dev] = _unpinned_tensors[dev].insert({{it->second.num_copies, 
+                                                                     it->second.num_uses}, id});
     }
   }
 };
@@ -171,7 +175,12 @@ void gpu_memory_t::tensor_loaded_on_gpu(tid_t id, int dev, size_t num_bytes) {
 
   // if the tensor was just created we mark it as unpinned
   if(created) {
-    // TODO
+    t.unpinned_its[dev] = _unpinned_tensors[dev].insert({{t.num_copies, t.num_uses}, id});
+  }
+  // otherwise just update the stats if it is already unpinned
+  else if(t.unpinned_its[dev] != _unpinned_tensors[dev].end()) {
+    _unpinned_tensors[dev].erase(t.unpinned_its[dev]);
+    t.unpinned_its[dev] = _unpinned_tensors[dev].insert({{t.num_copies, t.num_uses}, id});
   }
 };
 
@@ -368,6 +377,7 @@ void gpu_memory_t::finish_kernel_prep(kernel_prep_ptr_t kp) {
   // unpin input tensors
   for(auto in_idx = 0; in_idx < kp->input.size(); ++in_idx) {
     _unpin_tensor(kp->input[in_idx], kp->dev, kp->input_sizes[in_idx]);
+    mark_as_used(kp->input[in_idx]);
   }
 
   // mark each output tensor as loaded and unpin it since we are not actively using it

@@ -24,6 +24,34 @@ void fake_process_gc_request(gc_request_ptr_t gc) {
   }
 }
 
+apply_schedule_ptr_t create_apply(command_id_t id,
+                                  const std::vector<tid_t> &inputs, 
+                                  const std::vector<size_t> &inputs_size, 
+                                  const std::vector<tid_t> &outputs,
+                                  const std::vector<size_t> &outputs_size) {
+
+  std::vector<command_t::tid_node_id_t> in;
+  for(auto &i : inputs) {
+    in.push_back(command_t::tid_node_id_t{.tid = i, .node = 0});
+  }
+
+  std::vector<command_t::tid_node_id_t> out;
+  for(auto &o : outputs) {
+    out.push_back(command_t::tid_node_id_t{.tid = o, .node = 0});
+  }
+
+  // make the actual apply schedule
+  auto apply = std::make_shared<bbts::apply_schedule_t>(); 
+  apply->cmd = command_t::create_apply(id, {0, 0}, true, {}, in, out);
+
+  // we don't care about this
+  apply->input_sizes = inputs_size;
+  apply->output_sizes = outputs_size;
+  apply->fn = nullptr;
+
+  return std::move(apply);
+}
+
 kernel_prep_ptr_t make_kernel_prep(int32_t dev, 
                                    const std::vector<tid_t> &inputs,
                                    const std::vector<size_t> &input_sizes,
@@ -160,6 +188,10 @@ TEST(TestGPUMemory, TestGC1) {
   auto prep1 = make_kernel_prep(0, {0, 1}, {256, 256}, {2}, {512});
   auto prep2 = make_kernel_prep(0, {3, 4}, {256, 256}, {5}, {512});
 
+  // mark the apply for use
+  gpu_memory.mark_for_use(create_apply(0, {0, 1}, {256, 256}, {2}, {512}));
+  gpu_memory.mark_for_use(create_apply(0, {3, 4}, {256, 256}, {5}, {512}));
+
   // mark that these tensors are loaded on the CPU
   gpu_memory.tensor_loaded_on_cpu(0, 256);
   gpu_memory.tensor_loaded_on_cpu(1, 256);
@@ -277,6 +309,12 @@ TEST(TestGPUMemory, TestGC2) {
   auto prep2 = make_kernel_prep(0, {2, 3}, {256, 256}, {8}, {512});
   auto prep3 = make_kernel_prep(0, {0, 4}, {256, 256}, {9}, {512});
   auto prep4 = make_kernel_prep(0, {2, 5}, {256, 256}, {10}, {512});
+
+  // mark the apply for use
+  gpu_memory.mark_for_use(create_apply(0, {0, 1}, {256, 256}, {7}, {512}));
+  gpu_memory.mark_for_use(create_apply(0, {2, 3}, {256, 256}, {8}, {512}));
+  gpu_memory.mark_for_use(create_apply(0, {0, 4}, {256, 256}, {9}, {512}));
+  gpu_memory.mark_for_use(create_apply(0, {2, 5}, {256, 256}, {10}, {512}));
 
   // mark that these tensors are loaded on the CPU
   gpu_memory.tensor_loaded_on_cpu(0, 256);
