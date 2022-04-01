@@ -42,3 +42,16 @@ bbts::ud_func_ptr_t bbts::get_matrix_uniform_udf() {
   );
 }
 
+/// 4. Const distribution
+bbts::ud_func_ptr_t bbts::get_matrix_const_udf() {
+  return std::make_unique<bbts::ud_func_t>(
+      bbts::ud_func_t {
+          .ud_name = "const",
+          .is_ass = false,
+          .is_com = false,
+          .num_in = 0,
+          .num_out = 1,
+          .impls = {},
+      }
+  );
+}

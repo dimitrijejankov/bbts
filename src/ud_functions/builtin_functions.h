@@ -6,6 +6,7 @@
 #include "impls/dense_matrix_mult.h"
 #include "impls/dense_matrix_gpu_mult.h"
 #include "impls/dense_uniform.h"
+#include "impls/dense_const_gpu.h"
 
 namespace bbts {
 
@@ -17,5 +18,8 @@ ud_func_ptr_t get_matrix_mult_udf();
 
 /// 3. Uniform distribution
 ud_func_ptr_t get_matrix_uniform_udf();
+
+/// 4. Const initialization
+ud_func_ptr_t get_matrix_const_udf();
 
 }
