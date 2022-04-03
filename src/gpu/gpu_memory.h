@@ -43,7 +43,7 @@ public:
   void tensor_loaded_on_cpu(tid_t id, size_t num_bytes);
 
   // can we preallocate all the tensors that we need to run the kernel
-  int can_preallocate(kernel_prep_ptr_t kp);
+  int can_preallocate(kernel_prep_ptr_t kp, int32_t target_dev);
 
   // mark that a cpu transfer is done
   void mark_transfer_done(cpu_to_gpu_transfer_ptr_t kp);
@@ -67,7 +67,7 @@ public:
 
   // can an we run garbage collection
   // if we can it returns the device othewise it returns -1
-  int can_gc(kernel_prep_ptr_t kp);
+  int can_gc(kernel_prep_ptr_t kp, int32_t target_dev);
 
   // get the garbage collection request
   gc_request_ptr_t get_gc_request(kernel_prep_ptr_t kp, int dev);
@@ -141,7 +141,7 @@ private:
 
   // used to implement both @see can_gc and @see can_preallocate
   template<class fun>
-  int32_t _fits_memory(kernel_prep_ptr_t kp, fun f) {
+  int32_t _fits_memory(kernel_prep_ptr_t kp, int32_t target_dev, fun f) {
   
     // sum all the output bytes
     size_t output_bytes_required = 0;
@@ -151,17 +151,18 @@ private:
 
     // go through each device and check if we can put it there
     for(auto dev = 0; dev < _num_devices; ++dev) {
+      auto cur_dev = (dev + target_dev) % _num_devices;
       size_t required = output_bytes_required; 
       for(auto in_idx = 0; in_idx < kp->input.size(); ++in_idx) {
-        if(!_is_on_device(kp->input[in_idx], dev) &&
-           !_is_transfered_to_device(kp->input[in_idx], dev)) {
+        if(!_is_on_device(kp->input[in_idx], cur_dev) &&
+           !_is_transfered_to_device(kp->input[in_idx], cur_dev)) {
           required += kp->input_sizes[in_idx];
         }
       }
       
       // do we have enough memory
-      if(f(dev) >= required) {
-        return dev;
+      if(f(cur_dev) >= required) {
+        return cur_dev;
       }
     }
 

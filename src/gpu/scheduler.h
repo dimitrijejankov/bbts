@@ -5,6 +5,7 @@
 #include "gpu_memory.h"
 #include "../storage/storage.h"
 #include "../ud_functions/udf_manager.h"
+#include <cstdint>
 
 namespace bbts {
 
@@ -38,6 +39,8 @@ public:
   void flush();
 
   void shutdown();
+
+  bool _schedule_for_execution(kernel_prep_ptr_t prep, int32_t dev);
 
   // this schedules commands that are already known to be on the GPU
   gpu_heuristic_t heuristic;

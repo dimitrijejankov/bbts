@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 
 namespace bbts {
@@ -164,6 +165,9 @@ struct apply_schedule_t {
   // the number of bytes each output has
   std::vector<size_t> output_sizes;
 
+  // the parameters
+  bbts::ud_impl_t::tensor_params_t params;
+
   // the command
   bbts::command_ptr_t cmd;
 };
@@ -214,6 +218,16 @@ struct scheduler_request_t {
 
   // all the gpu to gpu transfers that were scheduled since the last time the thread was woken up
   std::vector<gpu_to_gpu_transfer_ptr_t> gpu_transfers;
+
+  // clear all the stuff
+  void clear() {
+    retired_kernels.clear();
+    finished_gc.clear();
+    apply_cmds.clear();
+    reduce_cmds.clear();
+    cpu_transfers.clear();
+    gpu_transfers.clear();
+  }
 };
 using scheduler_request_ptr_t = std::shared_ptr<scheduler_request_t>;
 
@@ -222,71 +236,79 @@ public:
   // mark that the kernel is done
   void signal_kernel_done(kernel_prep_ptr_t kernel) {
 
-    std::unique_lock<std::mutex> lck;
+    std::unique_lock<std::mutex> lck(m);
     retired_kernels.push_back(std::move(kernel));
+    cv.notify_all();
   }
 
   // signal reaper done
   void signal_reaper_done(gc_request_ptr_t req) {
 
-    std::unique_lock<std::mutex> lck;
+    std::unique_lock<std::mutex> lck(m);
     finished_gc.push_back(std::move(req));
+    cv.notify_all();
   }
 
   // signal new apply
   void signal_apply(apply_schedule_ptr_t apply) {
 
-    std::unique_lock<std::mutex> lck;
+    std::unique_lock<std::mutex> lck(m);
     apply_cmds.push_back(std::move(apply));
-
     new_commands = true;
+    cv.notify_all();
   }
 
   // signal new reduce
   void signal_reduce(reduce_schedule_ptr_t reduce) {
 
-    std::unique_lock<std::mutex> lck;
+    std::unique_lock<std::mutex> lck(m);
     reduce_cmds.push_back(std::move(reduce));
-
     new_commands = true;
+    cv.notify_all();
   }
 
   void signal_delete(delete_schedule_ptr_t reduce) {
 
-    std::unique_lock<std::mutex> lck;
+    std::unique_lock<std::mutex> lck(m);
     delete_cmds.push_back(std::move(reduce));
-
     new_commands = true;
+    cv.notify_all();
   }
 
   void signal_cpu_to_gpu_transfer_done(std::vector<cpu_to_gpu_transfer_ptr_t> &transfer) {
 
-    std::unique_lock<std::mutex> lck;
+    std::unique_lock<std::mutex> lck(m);
 
     // move them here
     for(auto &tr : transfer) {
       cpu_transfers.push_back(std::move(tr));
     }
+    cv.notify_all();
   }
 
   void signal_gpu_to_gpu_transfer_done(std::vector<gpu_to_gpu_transfer_ptr_t> &transfer){
 
-    std::unique_lock<std::mutex> lck;
+    std::unique_lock<std::mutex> lck(m);
 
     // move the transfers here
     for(auto &tr : transfer) {
       gpu_transfers.push_back(std::move(tr));
     }
+    cv.notify_all();
   }
 
   void wait_dequeue(scheduler_request_ptr_t &req) {
 
     // wait to get something
-    std::unique_lock<std::mutex> lck;
+    std::unique_lock<std::mutex> lck(m);
     cv.wait(lck, [&] {
       return (!retired_kernels.empty() || !finished_gc.empty() ||
               !apply_cmds.empty() || !reduce_cmds.empty());
     });
+
+
+    // clear it just in case
+    req->clear();
 
     // give the updates
     std::swap(req->retired_kernels, retired_kernels);
@@ -299,7 +321,7 @@ public:
 
   bool has_something() {
 
-    std::unique_lock<std::mutex> lck;
+    std::unique_lock<std::mutex> lck(m);
     return (!retired_kernels.empty() || !finished_gc.empty() ||
             !apply_cmds.empty() || !reduce_cmds.empty());
   }

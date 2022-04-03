@@ -195,8 +195,9 @@ void gpu_memory_t::tensor_loaded_on_cpu(tid_t id, size_t num_bytes) {
   it->second.is_on_cpu = true;
 }
 
-int gpu_memory_t::can_preallocate(kernel_prep_ptr_t kp) { 
-  return _fits_memory(kp, [&](int32_t dev){
+int gpu_memory_t::can_preallocate(kernel_prep_ptr_t kp, 
+                                  int32_t target_dev) {
+  return _fits_memory(kp, target_dev, [&](int32_t dev){
     return _total_free[dev];
   });
 };
@@ -423,8 +424,8 @@ void gpu_memory_t::mark_transfer_done(gpu_to_gpu_transfer_ptr_t kp) {
   _gpu_to_gpu_transfer.erase(kp->id);
 }
 
-int gpu_memory_t::can_gc(kernel_prep_ptr_t kp) { 
-  return _fits_memory(kp, [&](int32_t dev){
+int gpu_memory_t::can_gc(kernel_prep_ptr_t kp, int32_t target_dev) { 
+  return _fits_memory(kp, target_dev, [&](int32_t dev){
     return _total_unpinned[dev] + _total_free[dev];
   });
 };

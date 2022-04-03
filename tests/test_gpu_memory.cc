@@ -93,7 +93,7 @@ TEST(TestGPUMemory, TestCanPreallocate1) {
   gpu_memory.tensor_loaded_on_cpu(0, 256);
   gpu_memory.tensor_loaded_on_cpu(1, 256);
 
-  EXPECT_TRUE(gpu_memory.can_preallocate(prep) != -1);
+  EXPECT_TRUE(gpu_memory.can_preallocate(prep, 0) != -1);
 }
 
 TEST(TestGPUMemory, TestCanPreallocate2) {
@@ -105,7 +105,7 @@ TEST(TestGPUMemory, TestCanPreallocate2) {
   gpu_memory.tensor_loaded_on_cpu(0, 512);
   gpu_memory.tensor_loaded_on_cpu(1, 512);
 
-  EXPECT_TRUE(gpu_memory.can_preallocate(prep) == -1);
+  EXPECT_TRUE(gpu_memory.can_preallocate(prep, 0) == -1);
 }
 
 TEST(TestGPUMemory, TestPreallocate) {
@@ -119,7 +119,7 @@ TEST(TestGPUMemory, TestPreallocate) {
   gpu_memory.tensor_loaded_on_cpu(1, 128);
   gpu_memory.tensor_loaded_on_cpu(3, 256);
 
-  auto dev1 = gpu_memory.can_preallocate(prep1);
+  auto dev1 = gpu_memory.can_preallocate(prep1, 0);
   EXPECT_TRUE(dev1 != -1);
 
   // allocate the frist one
@@ -156,7 +156,7 @@ TEST(TestGPUMemory, TestPreallocate) {
   gpu_memory.finish_kernel_prep(prep1);
 
   // preallocate here
-  auto dev2 = gpu_memory.can_preallocate(prep2);
+  auto dev2 = gpu_memory.can_preallocate(prep2, 0);
   EXPECT_TRUE(dev2 != -1);
 
   // allocate the second one
@@ -199,7 +199,7 @@ TEST(TestGPUMemory, TestGC1) {
   gpu_memory.tensor_loaded_on_cpu(4, 256);
 
   // make sure 
-  auto dev1 = gpu_memory.can_preallocate(prep1);
+  auto dev1 = gpu_memory.can_preallocate(prep1, 0);
   EXPECT_EQ(dev1, 0);
 
   // preallocate the krenel prep
@@ -240,11 +240,11 @@ TEST(TestGPUMemory, TestGC1) {
   gpu_memory.finish_kernel_prep(prep1);
 
   // we should not be able to preallocate
-  auto dev2 = gpu_memory.can_preallocate(prep2);
+  auto dev2 = gpu_memory.can_preallocate(prep2, 0);
   EXPECT_EQ(dev2, -1);
 
   // check if we can garbage collect
-  dev2 = gpu_memory.can_gc(prep2);
+  dev2 = gpu_memory.can_gc(prep2, 0);
   EXPECT_EQ(dev2, 0);
 
   // get the garbage collection request
@@ -259,7 +259,7 @@ TEST(TestGPUMemory, TestGC1) {
   gpu_memory.finish_gc_request(req);
 
   // we should be able to preallocate
-  dev2 = gpu_memory.can_preallocate(prep2);
+  dev2 = gpu_memory.can_preallocate(prep2, 0);
   EXPECT_EQ(dev2, 0);
 
   // preallocate the krenel prep
@@ -325,14 +325,14 @@ TEST(TestGPUMemory, TestGC2) {
   gpu_memory.tensor_loaded_on_cpu(5, 256);
 
   // check if we can preallocate prep1 (we should be able to)
-  auto dev1 = gpu_memory.can_preallocate(prep1);
+  auto dev1 = gpu_memory.can_preallocate(prep1, 0);
   EXPECT_NE(dev1, -1);
 
   // preallocate the krenel prep1
   gpu_memory.preallocate(prep1, dev1);
 
   // check if we can preallocate prep2 (we should be able to)
-  auto dev2 = gpu_memory.can_preallocate(prep2);
+  auto dev2 = gpu_memory.can_preallocate(prep2, 0);
   EXPECT_NE(dev2, -1);
 
   // preallocate the krenel prep2
@@ -399,7 +399,7 @@ TEST(TestGPUMemory, TestGC2) {
   gpu_memory.finish_kernel_prep(prep2);
 
   // check if we can garbage collect
-  auto dev3 = gpu_memory.can_gc(prep3);
+  auto dev3 = gpu_memory.can_gc(prep3, 0);
   EXPECT_EQ(dev3, 0);
 
   // get the garbage collection request
@@ -408,7 +408,7 @@ TEST(TestGPUMemory, TestGC2) {
   EXPECT_EQ(req1->to_evict.size(), 1);
 
   // check if we can garbage collect
-  auto dev4 = gpu_memory.can_gc(prep4);
+  auto dev4 = gpu_memory.can_gc(prep4, 0);
   EXPECT_EQ(dev3, 0);
 
   // get the garbage collection request

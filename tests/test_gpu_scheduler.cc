@@ -6,7 +6,8 @@ using namespace std::chrono;
 bbts::command_ptr_t create_apply(bbts::udf_manager_ptr udm,
                                  const std::string &ud_name,
                                  const std::vector<bbts::tid_t> &inputs,
-                                 const std::vector<bbts::tid_t> &outputs) {
+                                 const std::vector<bbts::tid_t> &outputs,
+                                 const std::vector<bbts::command_param_t> &params) {
 
   std::vector<bbts::command_t::tid_node_id_t> prep_in;
   std::vector<std::string> input_types;
@@ -75,7 +76,8 @@ TEST(TestGPUScheduler, Test1) {
   auto scheduler_threads = run_threads(scheduler);
 
   // schedule the run commands
-  scheduler->schedule_apply(std::move(create_apply(udf_manager, "const", {}, {0})));
+  scheduler->schedule_apply(std::move(create_apply(udf_manager, "const", {}, {0}, { bbts::command_param_t{.i = 100}, 
+                                                                                    bbts::command_param_t{.i = 100}} )));
 
   // move all the tensors currently in the GPU back into RAM
   scheduler->flush();

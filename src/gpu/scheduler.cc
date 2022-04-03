@@ -1,5 +1,6 @@
 #include "scheduler.h"
 #include <cstddef>
+#include <cstdint>
 #include <mutex>
 
 namespace bbts {
@@ -9,7 +10,7 @@ multi_gpu_scheduler_t::multi_gpu_scheduler_t(size_t num_gpus,
                                              bbts::storage_ptr_t storage,
                                              bbts::udf_manager_ptr udm,
                                              tensor_factory_ptr_t tf)
-    : _num_gpus(num_gpus), run_queue(num_gpus), storage(std::move(storage)),
+    : _num_gpus(num_gpus), run_queue(num_gpus), storage(std::move(storage)), gpu2gpu_queue(num_gpus),
       udm(std::move(udm)), tf(std::move(tf)), heuristic(num_gpus), mem(num_gpus, gpu_mem_size) {
 
   // set the device
@@ -197,6 +198,9 @@ void multi_gpu_scheduler_t::command_prep_thread() {
   scheduler_request_ptr_t req = std::make_shared<scheduler_request_t>();
   while (true) {
 
+    // clear the request
+    req->clear();
+
     // if we don't have anything else to do or
     if (should_sleep || scheduler_queue.has_something()) {
       scheduler_queue.wait_dequeue(req);
@@ -208,11 +212,10 @@ void multi_gpu_scheduler_t::command_prep_thread() {
       // 1. unpin all the inputs
       mem.unpin_all(fk, fk->dev);
 
-      // 2. since a new tensor has been created 
-      //    update commands that can be scheduled
+      // 2. since a new tensor has been created update commands that can be scheduled
+      mem.finish_kernel_prep(fk);
       for (auto out_idx = 0; out_idx < fk->output.size(); ++out_idx) {
         heuristic.tensor_loaded(fk->output[out_idx], fk->dev);
-        mem.tensor_loaded_on_gpu(fk->output[out_idx], fk->dev, fk->output_sizes[out_idx]);
       }
     }
 
@@ -248,13 +251,25 @@ void multi_gpu_scheduler_t::command_prep_thread() {
     // 4. check for resource freed
     for (auto &gc_req : req->finished_gc) {
 
-      // schedule them for execution (finish reaper_request and add to
-      // execution queue)
-      mem.pin_all(gc_req->to_run, gc_req->to_run->dev);
+      // schedule them for execution (finish reaper_request and add to execution queue)
+      mem.finish_gc_request(gc_req);
+      mem.preallocate(gc_req->to_run, gc_req->dev);
 
-      /// TODO Add if necessary to the required CPU2GPU thread and GPU2CPU
-      /// thread
-      //  if not not necessary just move it to the run thread
+      // schedule the CPU transfers
+      if (!gc_req->to_run->cpu_transfers.empty()) {
+        cpu2gpu_queue.enqueue(gc_req->to_run);
+      }
+
+      // schedule the GPU transfers
+      if (!gc_req->to_run->gpu_transfers.empty()) {
+        gpu2gpu_queue[gc_req->dev].enqueue(gc_req->to_run);
+      }
+
+      // if there are not transfers to be scheduled we can just run it immediately 
+      if(gc_req->to_run->cpu_transfers.empty() &&
+         gc_req->to_run->gpu_transfers.empty()) {
+        run_queue[gc_req->dev].enqueue(gc_req->to_run);
+      }
     }
 
     // 5.1. check if we have a command that we can run immeidately (all the
@@ -262,48 +277,29 @@ void multi_gpu_scheduler_t::command_prep_thread() {
     auto [kernel_prep, dev] = heuristic.get_next_on_same(preffered_dev);
     if (dev != -1) {
 
-      // schedule them for execution (pin resources and add to execution
-      // queue)
-      mem.pin_all(kernel_prep, dev);
-      run_queue[dev].enqueue(kernel_prep);
+      // schedule it for execution, if it fails to schedule put it to sleep
+      bool scheduled = _schedule_for_execution(kernel_prep, dev);
+      if(scheduled) {
+        heuristic.mark_as_scheduled(kernel_prep);
+      }
+
+      // go to sleep if we did not manage to schedule anything
+      should_sleep = !scheduled;
+      continue;
     }
     // 5.2. othwerwise check if we have commands that have inputs on at least
     // one of the GPUs ex. APPLY 1 2 3 -> 4 | GPU 0 has 1 2 | GPU 1 has 3
-    else if ((kernel_prep = heuristic.get_next_on_any()) == nullptr) {
+    else if ((kernel_prep = heuristic.get_next_on_any()) != nullptr) {
 
-      // 5.2.1 check if we can preallocate the additional memory
-      // on one of the GPUs (priority should be give to the least busy GPU)
-      if ((dev = mem.can_preallocate(kernel_prep)) != -1) {
-
-        // we can preallocate in which case we instruct the gpu2gpu threads to
-        // perform the necessary copies (we don't preallocate if it is already
-        // transfering just add an additional pin)
-        mem.preallocate(kernel_prep, dev);
-
-        // we only need to setup GPU2GPU transfers as all the required tensors
-        // are already there
-        if (!kernel_prep->gpu_transfers.empty()) {
-          gpu2gpu_queue[dev].enqueue(kernel_prep);
-        }
+      // schedule them for execution, if it fails to schedule put it to sleep
+      bool scheduled = _schedule_for_execution(kernel_prep, dev);
+      if(scheduled) {
+        heuristic.mark_as_scheduled(kernel_prep);
       }
-      // 5.2.2 check if we can run garbage collection and then run the kernel
-      else if ((dev = mem.can_gc(kernel_prep)) != -1) {
 
-        // make a garbage collection request
-        gc_request_ptr_t gc_request = mem.get_gc_request(kernel_prep, dev);
-
-        // schedule the request
-        gc_queue.enqueue(gc_request);
-        should_sleep = true;
-        continue;
-      }
-      // 5.2.3 go sleep some as there is nothing to do...
-      else {
-
-        // go and sleep a bit (unless new stuff happened in the mean time)
-        should_sleep = true;
-        continue;
-      }
+      // go to sleep if we did not manage to schedule anything
+      should_sleep = !scheduled;
+      continue;
     }
 
     // 6.1 if there are not commands we can schedule immediately
@@ -314,33 +310,15 @@ void multi_gpu_scheduler_t::command_prep_thread() {
       continue;
     }
 
-    /// 6.2.1 check if we can preallocate the required memory
-    if ((dev = mem.can_preallocate(kernel_prep)) != -1) {
-
-      // we can preallocate in which case we instruct the gpu2gpu threads to
-      // perform the necessary copies (we don't preallocate if it is already
-      // transfering just add an additional pin)
-      mem.preallocate(kernel_prep, dev);
-
-      if (!kernel_prep->cpu_transfers.empty()) {
-        cpu2gpu_queue.enqueue(kernel_prep);
-      }
-
-      if (!kernel_prep->gpu_transfers.empty()) {
-        gpu2gpu_queue[dev].enqueue(kernel_prep);
-      }
+    // schedule it for execution, if it fails to schedule put it to sleep
+    bool scheduled = _schedule_for_execution(kernel_prep, dev);
+    if(scheduled) {
+      heuristic.mark_as_scheduled(kernel_prep);
     }
-    // 6.2.2 check if we can run garbage collection and then run the kernel
-    else if ((dev = mem.can_gc(kernel_prep)) != -1) {
 
-      // make a garbage collection request
-      gc_request_ptr_t gc_request = mem.get_gc_request(kernel_prep, dev);
-
-      // schedule the request
-      gc_queue.enqueue(gc_request);
-      should_sleep = true;
-      continue;
-    }
+    // go to sleep if we did not manage to schedule anything
+    should_sleep = !scheduled;
+    continue;
   }
 }
 
@@ -428,11 +406,11 @@ void multi_gpu_scheduler_t::schedule_apply(bbts::command_ptr_t cmd) {
   // figure out the number of bytes
   std::vector<size_t> out_bytes(output_meta.num_args());
   for (size_t idx = 0; idx < output_meta.num_args(); ++idx) {
-    out_bytes.push_back(tf->get_tensor_size(output_meta.get_by_idx(idx)));
+    out_bytes[idx] = tf->get_tensor_size(output_meta.get_by_idx(idx));
   }
   std::vector<size_t> in_bytes(input_meta.num_args());
   for (size_t idx = 0; idx < input_meta.num_args(); ++idx) {
-    in_bytes.push_back(tf->get_tensor_size(input_meta.get_by_idx(idx)));
+    in_bytes[idx] = tf->get_tensor_size(input_meta.get_by_idx(idx));
   }
 
   // signal that we have processed this request
@@ -440,6 +418,7 @@ void multi_gpu_scheduler_t::schedule_apply(bbts::command_ptr_t cmd) {
   apply_sch->fn = fun;
   apply_sch->input_sizes = std::move(in_bytes);
   apply_sch->output_sizes = std::move(out_bytes);
+  apply_sch->params = _params;
   apply_sch->cmd = std::move(cmd);
 
   // signal the apply
@@ -499,9 +478,54 @@ void multi_gpu_scheduler_t::mark_for_deletion(bbts::command_ptr_t cmd) {
   scheduler_queue.signal_delete(std::move(delete_sch));
 }
 void multi_gpu_scheduler_t::flush() {}
+
 void multi_gpu_scheduler_t::shutdown() {
 
   // shutdown the scheduler
   _is_running = false;
 }
+
+bool multi_gpu_scheduler_t::_schedule_for_execution(kernel_prep_ptr_t kernel_prep, int32_t target_dev) {
+  
+  int32_t dev;
+  if ((dev = mem.can_preallocate(kernel_prep, target_dev)) != -1) {
+
+    // we can preallocate in which case we instruct the gpu2gpu threads to
+    // perform the necessary copies (we don't preallocate if it is already
+    // transfering just add an additional pin)
+    mem.preallocate(kernel_prep, dev);
+
+    // we only need to setup GPU2GPU transfers as all the required tensors
+    // are already there
+    if (!kernel_prep->gpu_transfers.empty()) {
+      gpu2gpu_queue[dev].enqueue(kernel_prep);
+    }
+
+    // schedule the CPU transfers
+    if (!kernel_prep->cpu_transfers.empty()) {
+      cpu2gpu_queue.enqueue(kernel_prep);
+    }
+
+    // if there are not transfers to be scheduled we can just run it immediately 
+    if(kernel_prep->cpu_transfers.empty() &&
+       kernel_prep->gpu_transfers.empty()) {
+      run_queue[dev].enqueue(kernel_prep);
+    }
+ 
+    return true;
+  }
+  // check if we can run garbage collection and then run the kernel
+  else if ((dev = mem.can_gc(kernel_prep, target_dev)) != -1) {
+
+    // make a garbage collection request
+    gc_request_ptr_t gc_request = mem.get_gc_request(kernel_prep, dev);
+
+    // schedule the request
+    gc_queue.enqueue(gc_request);
+    return true;
+  }
+  
+  return false;
+}
+
 } // namespace bbts

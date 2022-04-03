@@ -287,6 +287,12 @@ void gpu_heuristic_t::register_apply(bbts::apply_schedule_ptr_t &apply_sch) {
   apply_cmd.output_tids.reserve(cmd->get_num_outputs());
   apply_cmd.output_sizes = apply_sch->output_sizes;
   apply_cmd.it = goodness_heuristic.end();
+  
+  apply_cmd.run_me = std::make_shared<kernel_run_t>();
+  apply_cmd.run_me->ud = apply_sch->fn;
+  apply_cmd.run_me->inputs.resize(cmd->get_num_inputs());
+  apply_cmd.run_me->outputs.resize(cmd->get_num_outputs());
+  apply_cmd.run_me->params = apply_sch->params;
 
   for (int32_t idx = 0; idx < cmd->get_num_inputs(); ++idx) {
 
@@ -354,7 +360,7 @@ void gpu_heuristic_t::register_apply(bbts::apply_schedule_ptr_t &apply_sch) {
 
   // check if we have enough inputs per GPU
   for (int32_t dev = 0; dev < num_devices; ++dev) {
-    if (apply_cmd.inputs_on_devices[dev] == num_devices) {
+    if (apply_cmd.inputs_on_devices[dev] == apply_cmd.num_inputs) {
       on_apply_single_gpu[dev].insert(apply_cmd.id);
     }
   }
