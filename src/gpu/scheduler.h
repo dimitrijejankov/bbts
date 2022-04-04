@@ -5,6 +5,7 @@
 #include "gpu_memory.h"
 #include "../storage/storage.h"
 #include "../ud_functions/udf_manager.h"
+#include <cstddef>
 #include <cstdint>
 
 namespace bbts {
@@ -38,6 +39,8 @@ public:
 
   void flush();
 
+  bool _perform_flush();
+
   void shutdown();
 
   bool _schedule_for_execution(kernel_prep_ptr_t prep, int32_t dev);
@@ -52,6 +55,9 @@ public:
   // unpinned
   scheduler_request_queue_t scheduler_queue;
 
+  // all 
+  std::vector<flush_request_ptr_t> outstanding_flush_requests;
+
   // we schedule the kernels in these queues
   std::vector<concurent_queue<kernel_prep_ptr_t>> run_queue;
 
@@ -62,7 +68,7 @@ public:
   concurent_queue<kernel_prep_ptr_t> cpu2gpu_queue;
 
   // we schedule here all the reqeusts for tensor garbage collection
-  concurent_queue<gc_request_ptr_t> gc_queue;
+  std::vector<concurent_queue<gc_request_ptr_t>> gc_queue;
 
   // the commands we can run immediately
   std::multimap<uint32_t, command_ptr_t> runnable_commands;
@@ -80,11 +86,11 @@ public:
   // the tensorr factor
   tensor_factory_ptr_t tf;
 
-  // by default the scheduler is running
-  bool _is_running = true;
-
   // the number of GPUs in the system
   size_t _num_gpus;
+
+  // the number of unfinished kernels
+  size_t num_unfinished_kernels;
 };
 using multi_gpu_scheduler_ptr_t = std::shared_ptr<multi_gpu_scheduler_t>;
 

@@ -15,6 +15,14 @@ namespace bbts {
 
 #define BBTS_MAX_GPU_DEVICES 8
 
+// the flush request
+struct flush_request_t {
+  
+  // we fill this out once the request is done
+  std::promise<bool> status;
+};
+using flush_request_ptr_t = std::shared_ptr<flush_request_t>; 
+
 struct kernel_run_t {
 
   // the ud function of the kernel we want to run
@@ -219,6 +227,12 @@ struct scheduler_request_t {
   // all the gpu to gpu transfers that were scheduled since the last time the thread was woken up
   std::vector<gpu_to_gpu_transfer_ptr_t> gpu_transfers;
 
+  // all the flush requests that were made since the last time the thread was woken up
+  std::vector<flush_request_ptr_t> flush_requests;
+
+  // is the scheduler shutdown
+  bool shutdown = false;
+
   // clear all the stuff
   void clear() {
     retired_kernels.clear();
@@ -227,12 +241,21 @@ struct scheduler_request_t {
     reduce_cmds.clear();
     cpu_transfers.clear();
     gpu_transfers.clear();
+    flush_requests.clear();
   }
 };
 using scheduler_request_ptr_t = std::shared_ptr<scheduler_request_t>;
 
 class scheduler_request_queue_t {
 public:
+
+  // mark that the scheduler is done
+  void signal_shutdown() {
+    std::unique_lock<std::mutex> lck(m);
+    shutdown = true;
+    cv.notify_all();
+  }
+
   // mark that the kernel is done
   void signal_kernel_done(kernel_prep_ptr_t kernel) {
 
@@ -286,6 +309,14 @@ public:
     cv.notify_all();
   }
 
+  std::future<bool> signal_flush_request() {
+    
+    std::unique_lock<std::mutex> lck(m);
+    flush_requests.push_back(std::make_shared<flush_request_t>());
+    cv.notify_all();
+    return flush_requests.back()->status.get_future();
+  }
+
   void signal_gpu_to_gpu_transfer_done(std::vector<gpu_to_gpu_transfer_ptr_t> &transfer){
 
     std::unique_lock<std::mutex> lck(m);
@@ -303,9 +334,8 @@ public:
     std::unique_lock<std::mutex> lck(m);
     cv.wait(lck, [&] {
       return (!retired_kernels.empty() || !finished_gc.empty() ||
-              !apply_cmds.empty() || !reduce_cmds.empty());
+              !apply_cmds.empty() || !reduce_cmds.empty() || shutdown);
     });
-
 
     // clear it just in case
     req->clear();
@@ -317,17 +347,28 @@ public:
     std::swap(req->reduce_cmds, reduce_cmds);
     std::swap(req->cpu_transfers, cpu_transfers);
     std::swap(req->gpu_transfers, gpu_transfers);
+    std::swap(req->flush_requests, flush_requests);
+
+    // forward the shutdown request if any
+    req->shutdown = shutdown;
   }
 
   bool has_something() {
 
     std::unique_lock<std::mutex> lck(m);
-    return (!retired_kernels.empty() || !finished_gc.empty() ||
-            !apply_cmds.empty() || !reduce_cmds.empty());
+    return (!retired_kernels.empty() || 
+            !finished_gc.empty() ||
+            !apply_cmds.empty() || 
+            !reduce_cmds.empty() || 
+            !flush_requests.empty() ||
+            shutdown);
   }
 
 private:
+
   bool new_commands = false;
+
+  bool shutdown = false;
 
   std::vector<kernel_prep_ptr_t> retired_kernels;
 
@@ -342,6 +383,8 @@ private:
   std::vector<cpu_to_gpu_transfer_ptr_t> cpu_transfers;
 
   std::vector<gpu_to_gpu_transfer_ptr_t> gpu_transfers;
+
+  std::vector<flush_request_ptr_t> flush_requests;
 
   // locks the scheduler queue
   std::mutex m;

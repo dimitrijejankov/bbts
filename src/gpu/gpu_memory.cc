@@ -557,6 +557,34 @@ void gpu_memory_t::finish_gc_request(const gc_request_ptr_t &req) {
   }
 }
 
+bool gpu_memory_t::get_tensors_to_flush(std::vector<std::tuple<tensor_t*, tid_t, size_t>> &to_flush) {
+
+  bool can_flush_all = true;
+  for(auto &t : _tensors) {
+
+    // this is here to make sure all the tensors are available
+    can_flush_all = can_flush_all && (t.second.num_copies > 0 || t.second.is_on_cpu); 
+
+    // if this one is just on the GPU but not on the CPU we need to flush it
+    for(auto dev = 0; dev < _num_devices; dev++) {
+      if(!t.second.is_on_cpu && t.second.is_loaded_on_gpu[dev])  {
+        to_flush.push_back({t.second.data[dev], t.first, t.second.num_bytes});
+      }
+    }
+  }
+  return can_flush_all;
+}
+
+void gpu_memory_t::mark_as_flushed(const std::vector<std::tuple<tensor_t*, tid_t, size_t>> &to_flush) {
+
+  // go and mark each tensor...
+  for(auto &t : to_flush) {
+    auto tid = std::get<1>(t);
+    auto it = _tensors.find(tid); assert(it != _tensors.end());
+    it->second.is_on_cpu = true;
+  }
+}
+
 gpu_memory_t::gpu_mem_tensor_t &gpu_memory_t::_init_tensor(tid_t id, 
                                                            size_t num_bytes, 
                                                            bool &created) {

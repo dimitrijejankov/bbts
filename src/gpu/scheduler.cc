@@ -1,4 +1,6 @@
 #include "scheduler.h"
+#include "types.h"
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
@@ -10,8 +12,10 @@ multi_gpu_scheduler_t::multi_gpu_scheduler_t(size_t num_gpus,
                                              bbts::storage_ptr_t storage,
                                              bbts::udf_manager_ptr udm,
                                              tensor_factory_ptr_t tf)
-    : _num_gpus(num_gpus), run_queue(num_gpus), storage(std::move(storage)), gpu2gpu_queue(num_gpus),
-      udm(std::move(udm)), tf(std::move(tf)), heuristic(num_gpus), mem(num_gpus, gpu_mem_size) {
+    : _num_gpus(num_gpus), run_queue(num_gpus), storage(std::move(storage)), 
+      gpu2gpu_queue(num_gpus), gc_queue(num_gpus),
+      udm(std::move(udm)), tf(std::move(tf)), heuristic(num_gpus), 
+      mem(num_gpus, gpu_mem_size), num_unfinished_kernels(0) {
 
   // set the device
   for(auto dev = 0; dev < _num_gpus; ++dev) {
@@ -44,13 +48,13 @@ void multi_gpu_scheduler_t::gpu_execution_thread(int32_t dev) {
     kernel_prep_ptr_t req{};
     run_queue[dev].wait_dequeue(req);
 
-    // get the kernel
-    auto kernel = req->run_me;
-
     // check if we are done
-    if (kernel == nullptr) {
+    if (req == nullptr) {
       break;
     }
+
+    // get the kernel
+    auto kernel = req->run_me;
 
     // set the cuda parameters
     kernel->params.stream = run_stream;
@@ -198,6 +202,21 @@ void multi_gpu_scheduler_t::command_prep_thread() {
   scheduler_request_ptr_t req = std::make_shared<scheduler_request_t>();
   while (true) {
 
+    // check if we had a flush request in the mean time
+    // if we don't have anything to run, just kick off the requested flush
+    if(!outstanding_flush_requests.empty() && 
+       !scheduler_queue.has_something() && 
+       !heuristic.has_something() &&
+       num_unfinished_kernels == 0) {
+      
+      // perform the flush this should always succeed as have nothing to do
+      bool success = _perform_flush(); assert(success);
+      for(auto &fr : outstanding_flush_requests) {
+        fr->status.set_value(success);
+      }
+      outstanding_flush_requests.clear();
+    }
+
     // clear the request
     req->clear();
 
@@ -206,6 +225,26 @@ void multi_gpu_scheduler_t::command_prep_thread() {
       scheduler_queue.wait_dequeue(req);
     }
 
+    // check if we got a shutdown request if we did propagate the shutdown
+    if(req->shutdown) {
+
+      // finish all
+      auto kp_done = kernel_prep_ptr_t(nullptr);
+      auto gc_done = gc_request_ptr_t(nullptr);
+      for(auto dev = 0; dev < _num_gpus; ++dev) {
+        gpu2gpu_queue[dev].enqueue(kp_done);
+        run_queue[dev].enqueue(kp_done);
+        gc_queue[dev].enqueue(gc_done);
+      }
+      cpu2gpu_queue.enqueue(kp_done);
+      break;
+    }
+
+    // 0. check for flush requests
+    for (auto &fr : req->flush_requests) {
+      outstanding_flush_requests.push_back(std::move(fr));
+    }
+    
     // 1. check for finished kernels
     for (auto &fk : req->retired_kernels) {
 
@@ -217,6 +256,9 @@ void multi_gpu_scheduler_t::command_prep_thread() {
       for (auto out_idx = 0; out_idx < fk->output.size(); ++out_idx) {
         heuristic.tensor_loaded(fk->output[out_idx], fk->dev);
       }
+
+      // we finished a kernel so decrement this
+      num_unfinished_kernels--;
     }
 
     // 2. check for finished transfers
@@ -270,6 +312,9 @@ void multi_gpu_scheduler_t::command_prep_thread() {
          gc_req->to_run->gpu_transfers.empty()) {
         run_queue[gc_req->dev].enqueue(gc_req->to_run);
       }
+
+      // we just scheduled a kernel
+      num_unfinished_kernels++;
     }
 
     // 5.1. check if we have a command that we can run immeidately (all the
@@ -330,7 +375,7 @@ void multi_gpu_scheduler_t::gc_thread(int dev_id) {
   while (true) {
 
     gc_request_ptr_t request;
-    gc_queue.wait_dequeue(request);
+    gc_queue[dev_id].wait_dequeue(request);
 
     // finish if the request is null
     if (request == nullptr) {
@@ -477,12 +522,47 @@ void multi_gpu_scheduler_t::mark_for_deletion(bbts::command_ptr_t cmd) {
   delete_sch->cmd = std::move(cmd);
   scheduler_queue.signal_delete(std::move(delete_sch));
 }
-void multi_gpu_scheduler_t::flush() {}
+
+void multi_gpu_scheduler_t::flush() { 
+  auto success =  scheduler_queue.signal_flush_request().get();
+  assert(success);
+
+}
+
+bool multi_gpu_scheduler_t::_perform_flush() {
+
+  std::vector<std::tuple<tensor_t*, tid_t, size_t>> to_flush;
+  if(mem.get_tensors_to_flush(to_flush)) {
+
+    // flush them all
+    for(auto t : to_flush) {
+      
+      // get the info about the tensor
+      auto mem = std::get<0>(t);
+      auto tid = std::get<1>(t);
+      auto num_bytes = std::get<2>(t);
+
+      // run the local transaction move the tensor
+      storage->local_transaction(
+          {}, {{tid, num_bytes}},
+          [&](const storage_t::reservation_result_t &res) {
+            // create the tensor
+            auto ts = res.create[0].get().tensor;
+
+            // copy the tensor from the CPU to the GPU
+            cudaMemcpy(mem, ts, num_bytes, cudaMemcpyDeviceToHost);
+          });
+    }
+    return true;
+  }
+  mem.mark_as_flushed(to_flush);
+  return false;
+}
 
 void multi_gpu_scheduler_t::shutdown() {
 
   // shutdown the scheduler
-  _is_running = false;
+  scheduler_queue.signal_shutdown();
 }
 
 bool multi_gpu_scheduler_t::_schedule_for_execution(kernel_prep_ptr_t kernel_prep, int32_t target_dev) {
@@ -511,7 +591,10 @@ bool multi_gpu_scheduler_t::_schedule_for_execution(kernel_prep_ptr_t kernel_pre
        kernel_prep->gpu_transfers.empty()) {
       run_queue[dev].enqueue(kernel_prep);
     }
- 
+
+    // we just scheduled a kernel
+    num_unfinished_kernels++;
+
     return true;
   }
   // check if we can run garbage collection and then run the kernel
@@ -521,7 +604,11 @@ bool multi_gpu_scheduler_t::_schedule_for_execution(kernel_prep_ptr_t kernel_pre
     gc_request_ptr_t gc_request = mem.get_gc_request(kernel_prep, dev);
 
     // schedule the request
-    gc_queue.enqueue(gc_request);
+    gc_queue[dev].enqueue(gc_request);
+
+    // we jusst schduled a kernel
+    num_unfinished_kernels++;
+
     return true;
   }
   

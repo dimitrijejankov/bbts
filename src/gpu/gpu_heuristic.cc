@@ -647,6 +647,10 @@ void gpu_heuristic_t::mark_as_scheduled(const kernel_prep_ptr_t &prep) {
   }
 }
 
+bool gpu_heuristic_t::has_something() {
+  return !reduce_cmds.empty() || !apply_cmds.empty();
+}
+
 void gpu_heuristic_t::remove_tensor(tid_t id) {
 
   // make sure this does not happen

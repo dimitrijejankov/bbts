@@ -75,6 +75,12 @@ public:
   // finish the garbage collection request
   void finish_gc_request(const gc_request_ptr_t &req);
 
+  // get all the tensors we can flush, returns true if all tensors can be flushed
+  bool get_tensors_to_flush(std::vector<std::tuple<tensor_t*, tid_t, size_t>> &to_flush);
+
+  // mark that all of these tensors were just flushed
+  void mark_as_flushed(const std::vector<std::tuple<tensor_t*, tid_t, size_t>> &to_flush);
+  
 private:
   
   // sorted by num_copies (first), num_uses (second)

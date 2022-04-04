@@ -58,6 +58,9 @@ public:
   // mark that a kernel has been scheduled
   void mark_as_scheduled(const kernel_prep_ptr_t &prep);
 
+  // check if the heuristic has anything to schedule
+  bool has_something();
+
 private:
 
   struct heuristic_map_cmp_t {
