@@ -68,7 +68,7 @@ void bbts::dense_const_gpu::uniform_rand(
   // get the number of rows and columns
   auto I = (uint32_t)params.get_int<0>();
   auto J = (uint32_t)params.get_int<1>();
-  auto value = (uint32_t)params.get_float_or_default<0>(0.0f);
+  auto value = (uint32_t)params.get_float_or_default<2>(0.0f);
 
   // number of threads in each thread block
   uint32_t block_size = 1024;

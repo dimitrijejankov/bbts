@@ -402,7 +402,7 @@ void multi_gpu_scheduler_t::gc_thread(int dev_id) {
             auto ts = res.create[0].get().tensor;
 
             // copy the tensor from the CPU to the GPU
-            cudaMemcpy(mem, ts, num_bytes, cudaMemcpyDeviceToHost);
+            cudaMemcpy(ts, mem, num_bytes, cudaMemcpyDeviceToHost);
           });
 
       // free this memory
@@ -550,7 +550,7 @@ bool multi_gpu_scheduler_t::_perform_flush() {
             auto ts = res.create[0].get().tensor;
 
             // copy the tensor from the CPU to the GPU
-            cudaMemcpy(mem, ts, num_bytes, cudaMemcpyDeviceToHost);
+            cudaMemcpy(ts, mem, num_bytes, cudaMemcpyDeviceToHost);
           });
     }
     return true;

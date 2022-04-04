@@ -25,7 +25,7 @@ bbts::command_ptr_t create_apply(bbts::udf_manager_ptr udm,
   auto matcher = udm->get_matcher_for(ud_name);
   auto ud = matcher->findMatch({}, {"dense"}, true);
   auto cmd = bbts::command_t::create_apply(0, ud->impl_id, true, 
-                                           {}, prep_in, prep_out);
+                                           params, prep_in, prep_out);
   return std::move(cmd);
 }
 
@@ -77,7 +77,8 @@ TEST(TestGPUScheduler, Test1) {
 
   // schedule the run commands
   scheduler->schedule_apply(std::move(create_apply(udf_manager, "const", {}, {0}, { bbts::command_param_t{.i = 100}, 
-                                                                                    bbts::command_param_t{.i = 100}} )));
+                                                                                    bbts::command_param_t{.i = 100},
+                                                                                    bbts::command_param_t{.f = 2.0f}} )));
 
   // move all the tensors currently in the GPU back into RAM
   scheduler->flush();
@@ -87,82 +88,15 @@ TEST(TestGPUScheduler, Test1) {
   for (auto &t : scheduler_threads) {
     t.join();
   }
+
+  // check the created tensor
+  storage->local_transaction(
+    {0}, {},
+    [&](const bbts::storage_t::reservation_result_t &res) {
+      auto ts = res.get[0].get().tensor;
+      auto &t = ts->as<bbts::dense_tensor_t>();
+      for(auto idx = 0; idx < 100 * 100; ++idx) {
+        EXPECT_NEAR(t.data()[idx], 2.0f, 0.001); 
+      }
+    });
 }
-
-// int main() {
-
-//   // make the storage
-//   auto config = std::make_shared<bbts::node_config_t>(0, nullptr);
-//   config->is_dev_cluster = true;
-
-//   auto storage = std::make_shared<bbts::storage_t>(nullptr, config);
-
-//   // create the tensor factory
-//   auto factory = std::make_shared<bbts::tensor_factory_t>();
-
-//   // crate the udf manager
-//   auto manager = std::make_shared<bbts::udf_manager_t>(factory, nullptr);
-
-//   // make the scheduler
-//   auto scheduler = std::make_shared<bbts::multi_gpu_scheduler_t>(
-//       4, 16lu * 1024lu * 1024lu * 1024lu, storage, manager, factory);
-
-//   // try to deserialize
-//   // uniform 0
-//   // uniform 1
-//   // ...
-//   // uniform n
-//   bbts::parsed_command_list_t gen_cmd_list;
-//   bool success = gen_cmd_list.deserialize("gen.bbts");
-
-//   // try to deserialize
-//   // mult 0 2
-//   // ...
-//   // mult 0 2
-//   // reduce ...
-//   // delete ...
-//   bbts::parsed_command_list_t run_cmd_list;
-//   success = run_cmd_list.deserialize("run.bbts");
-
-//   // compile all the commands
-//   bbts::command_loader_t compiler(*factory, *manager);
-//   auto gen_cmds = compiler.compile(gen_cmd_list);
-//   auto run_cmds = compiler.compile(gen_cmd_list);
-
-//   // schedule the apply
-//   for (auto &cmd : gen_cmds) {
-
-//     if (cmd->is_apply()) {
-//       scheduler->schedule_apply(std::move(cmd));
-//     } else {
-//       throw std::runtime_error("not supposed to happen!");
-//     }
-//   }
-
-//   // run all the scheduler threads
-//   auto scheduler_threads = run_threads(scheduler);
-
-//   // move all the tensors currently in the GPU back into RAM
-//   scheduler->flush();
-
-//   // schedule the run commands
-//   for (auto &cmd : run_cmds) {
-//     if (cmd->is_apply()) {
-//       scheduler->schedule_apply(std::move(cmd));
-//     } else if (cmd->is_reduce()) {
-//       scheduler->schedule_reduce(std::move(cmd));
-//     } else if (cmd->is_delete()) {
-//       scheduler->mark_for_deletion(std::move(cmd));
-//     } else {
-//       throw std::runtime_error("not supposed to happen!");
-//     }
-//   }
-
-//   // finish all the threads
-//   scheduler->shutdown();
-//   for (auto &t : scheduler_threads) {
-//     t.join();
-//   }
-
-//   return 0;
-// }
