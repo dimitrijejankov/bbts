@@ -188,7 +188,7 @@ struct reduce_schedule_t {
   ud_impl_t *fn;
 
   // the parameters of the UD function we want to run
-  ud_impl_t::tensor_params_t _params;
+  ud_impl_t::tensor_params_t params;
 
   // the number of bytes each input has
   std::vector<size_t> input_sizes;

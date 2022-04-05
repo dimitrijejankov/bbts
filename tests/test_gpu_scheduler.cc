@@ -5,12 +5,14 @@
 
 using namespace std::chrono;
 
-size_t init_tensor_on_cpu(const bbts::tensor_factory_ptr_t &factory,
+void init_tensor_on_cpu(const bbts::multi_gpu_scheduler_ptr_t &scheduler, 
+                        const bbts::tensor_factory_ptr_t &factory,
                         const bbts::storage_ptr_t &storage, bbts::tid_t tid,
                         uint32_t num_rows, uint32_t num_cols, float value) {
 
   // make the meta
   bbts::dense_tensor_meta_t dm{tid, num_rows, num_cols};
+  dm.fmt_id = factory->get_tensor_ftm("dense");
   auto &m = dm.as<bbts::tensor_meta_t>();
 
   // get how much we need to allocate
@@ -27,9 +29,9 @@ size_t init_tensor_on_cpu(const bbts::tensor_factory_ptr_t &factory,
           ts.data()[idx] = value;
         }
       });
-  
-  // return the created tensor size
-  return num_bytes;
+
+  // mark the that the tensor is on the CPU
+  scheduler->mark_tensor_on_cpu(tid, num_bytes, m);
 }
 
 bbts::command_ptr_t
@@ -175,17 +177,10 @@ TEST(TestGPUScheduler, Test2) {
   auto scheduler_threads = run_threads(scheduler);
 
   // create four tensors on the CPU
-  auto t0_size = init_tensor_on_cpu(factory, storage, 0, 100, 100, 1.0f);
-  auto t1_size = init_tensor_on_cpu(factory, storage, 1, 100, 100, 2.0f);
-  auto t2_size = init_tensor_on_cpu(factory, storage, 2, 100, 100, 3.0f);
-  auto t3_size = init_tensor_on_cpu(factory, storage, 3, 100, 100, 4.0f);
-
-  // mark the tensors as created on the CPU 
-  // so that the scheduler knows about them
-  scheduler->mark_tensor_on_cpu(0, t0_size);
-  scheduler->mark_tensor_on_cpu(1, t1_size);
-  scheduler->mark_tensor_on_cpu(2, t2_size);
-  scheduler->mark_tensor_on_cpu(3, t3_size);
+  init_tensor_on_cpu(scheduler, factory, storage, 0, 100, 100, 1.0f);
+  init_tensor_on_cpu(scheduler, factory, storage, 1, 100, 100, 2.0f);
+  init_tensor_on_cpu(scheduler, factory, storage, 2, 100, 100, 3.0f);
+  init_tensor_on_cpu(scheduler, factory, storage, 3, 100, 100, 4.0f);
 
   // create a reduce and schedule it
   auto cmd = create_reduce(0, udf_manager, "matrix_add", 

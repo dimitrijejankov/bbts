@@ -48,7 +48,7 @@ reduce_schedule_ptr_t create_reduce(command_id_t id,
   // we don't care about this
   reduce->input_sizes.resize(inputs.size());
   reduce->output_size = 0;
-  reduce->_params = {};
+  reduce->params = {};
   reduce->fn = nullptr;
 
   return std::move(reduce);
@@ -522,12 +522,13 @@ TEST(TestGPUHeuristic, TestApplyHeuristic3) {
   command_id_t id = 0;
   bbts::gpu_heuristic_t heuristic(4);
 
-  auto cmd1 = create_reduce(id++, {1, 2, 3, 4}, 5);
-  heuristic.register_reduce(cmd1);
-
   // load all the tensors on the CPU
   heuristic.tensor_on_cpu(1);
   heuristic.tensor_on_cpu(2);
+
+  // register the reduce
+  auto cmd1 = create_reduce(id++, {1, 2, 3, 4}, 5);
+  heuristic.register_reduce(cmd1);
 
   // tid: 1 + tid: 2 -> tid: -1
   auto k_1 = heuristic.get_next_heuristic();

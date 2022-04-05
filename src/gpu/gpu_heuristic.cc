@@ -379,6 +379,13 @@ void gpu_heuristic_t::register_reduce(bbts::reduce_schedule_ptr_t &reduce_sch) {
   reduce_cmd.output_size = reduce_sch->output_size;
   reduce_cmd.it = goodness_heuristic.end();
 
+  // fill out the kernel
+  reduce_cmd.run_me = std::make_shared<kernel_run_t>();
+  reduce_cmd.run_me->ud = reduce_sch->fn;
+  reduce_cmd.run_me->inputs.resize(cmd->get_num_inputs());
+  reduce_cmd.run_me->outputs.resize(cmd->get_num_outputs());
+  reduce_cmd.run_me->params = reduce_sch->params;
+
   for (int32_t idx = 0; idx < cmd->get_num_inputs(); ++idx) {
 
     auto in_tid = cmd->get_inputs()[idx].tid;
@@ -403,6 +410,33 @@ void gpu_heuristic_t::register_reduce(bbts::reduce_schedule_ptr_t &reduce_sch) {
 
     // add a link
     tensors_to_cmds.insert({in_tid, {reduce_cmd.id, command_t::REDUCE}});
+  }
+
+  // are all the inputs available either on CPU or GPU if so we need to add it to the heuristic
+  _update_heuristic_for_reduce(reduce_cmd.id);
+
+  // next we need to update the heuristic for each other command with same inputs
+  for (int32_t idx = 0; idx < cmd->get_num_inputs(); ++idx) {
+
+    // get the input tid
+    auto in_tid = cmd->get_inputs()[idx].tid;
+    auto range = tensors_to_cmds.equal_range(in_tid);
+
+    for(auto it = range.first; it != range.second; ++it) {
+
+      // we just updated this command 
+      auto [command, type] = it->second;
+      if(reduce_cmd.id == command) { continue; }
+
+      // make sure it is the one of the two types of commands
+      assert(type == command_t::APPLY || type == command_t::REDUCE);
+      if(type == command_t::APPLY) {
+        _update_heuristic_for_apply(command);
+      }
+      else {
+        _update_heuristic_for_reduce(command);
+      }
+    }
   }
 
   // set the output
@@ -578,7 +612,7 @@ void gpu_heuristic_t::mark_as_scheduled(const kernel_prep_ptr_t &prep) {
       reduce_op.it = goodness_heuristic.end();
     }
 
-    // 2. go through the inputs and remove them (we)
+    // 2. go through the inputs and remove them
     for (auto in : prep->input) {
       
       // find the inputs to the reduce and remove them
@@ -681,11 +715,6 @@ kernel_prep_ptr_t gpu_heuristic_t::get_next_heuristic() {
   auto it = goodness_heuristic.begin();
   auto [cmd, type] = it->second;
   
-  for(auto &it : goodness_heuristic) {
-    std::cout << std::get<0>(it.first) << " " << std::get<1>(it.first) << "\n" << std::flush;
-  }
-  std::cout << "---------------\n";
-
   // check the type
   assert(type == command_t::APPLY ||  type == command_t::REDUCE);
   if(type == command_t::APPLY) { 

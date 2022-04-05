@@ -41,7 +41,7 @@ public:
   void mark_for_deletion(bbts::command_ptr_t cmd);
 
   // mark that a tensor is created
-  void mark_tensor_on_cpu(tid_t tid, size_t num_bytes);
+  void mark_tensor_on_cpu(tid_t tid, size_t num_bytes, tensor_meta_t meta);
 
   // flush all the tensors currently residing exclusviely in the GPU memory into the CPU memory
   void flush();
@@ -94,7 +94,7 @@ private:
 
   // the meta data
   std::mutex meta_lck;
-  std::unordered_map<tid_t, bbts::tensor_meta_t> meta;
+  std::unordered_map<tid_t, bbts::tensor_meta_t> _meta;
 
   // the storage
   bbts::storage_ptr_t storage;

@@ -48,6 +48,18 @@ class concurent_queue {
     _cv.notify_all();
   }
 
+  inline void enqueue_copy(T item) {
+
+    // wait for lock
+    std::unique_lock<std::mutex> lk(_m);
+
+    // insert the element in the queue
+    _internal_queue.push(std::move(item));
+
+    // notify all the threads that are waiting
+    _cv.notify_all();
+  }
+
 };
 
 }

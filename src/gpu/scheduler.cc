@@ -133,7 +133,7 @@ void multi_gpu_scheduler_t::gpu_to_gpu_thread(int32_t dev) {
     if(!prep->gpu_transfers.empty()) {
 
       // if we did not manage to process all copy requests reschedule it
-      gpu2gpu_queue[dev].enqueue(prep);
+      gpu2gpu_queue[dev].enqueue_copy(prep);
       continue;
     }
 
@@ -141,7 +141,7 @@ void multi_gpu_scheduler_t::gpu_to_gpu_thread(int32_t dev) {
     std::unique_lock<std::mutex> lck(prep->m);
     prep->gpu_done = true;
     if (prep->gpu_done && prep->cpu_done) {
-      run_queue[dev].enqueue(prep);
+      run_queue[dev].enqueue_copy(prep);
     }
   }
 }
@@ -190,7 +190,7 @@ void multi_gpu_scheduler_t::cpu_to_gpu_thread() {
     std::unique_lock<std::mutex> lck(prep->m);
     prep->gpu_done = true;
     if (prep->gpu_done && prep->cpu_done) {
-      run_queue[prep->dev].enqueue(prep);
+      run_queue[prep->dev].enqueue_copy(prep);
     }
   }
 }
@@ -294,18 +294,18 @@ void multi_gpu_scheduler_t::command_prep_thread() {
 
       // schedule the CPU transfers
       if (!gc_req->to_run->cpu_transfers.empty()) {
-        cpu2gpu_queue.enqueue(gc_req->to_run);
+        cpu2gpu_queue.enqueue_copy(gc_req->to_run);
       }
 
       // schedule the GPU transfers
       if (!gc_req->to_run->gpu_transfers.empty()) {
-        gpu2gpu_queue[gc_req->dev].enqueue(gc_req->to_run);
+        gpu2gpu_queue[gc_req->dev].enqueue_copy(gc_req->to_run);
       }
 
       // if there are not transfers to be scheduled we can just run it immediately 
       if(gc_req->to_run->cpu_transfers.empty() &&
          gc_req->to_run->gpu_transfers.empty()) {
-        run_queue[gc_req->dev].enqueue(gc_req->to_run);
+        run_queue[gc_req->dev].enqueue_copy(gc_req->to_run);
       }
 
       // we just scheduled a kernel
@@ -427,13 +427,13 @@ void multi_gpu_scheduler_t::schedule_apply(bbts::command_ptr_t cmd) {
 
     input_meta.resize(cmd->get_inputs().size());
     for (int i = 0; i < cmd->get_inputs().size(); i++) {
-      input_meta.set(i, meta[cmd->get_inputs()[i].tid]);
+      input_meta.set(i, _meta[cmd->get_inputs()[i].tid]);
     }
 
     // prepare the outputs
     output_meta.resize(cmd->get_outputs().size());
     for (int i = 0; i < cmd->get_outputs().size(); i++) {
-      output_meta.set(i, meta[cmd->get_outputs()[i].tid]);
+      output_meta.set(i, _meta[cmd->get_outputs()[i].tid]);
     }
   }
 
@@ -483,12 +483,12 @@ void multi_gpu_scheduler_t::schedule_reduce(bbts::command_ptr_t cmd) {
     // prepare the inputs
     input_meta.resize(2);
     for (int i = 0; i < 2; i++) {
-      input_meta.set(i, meta[cmd->get_inputs()[i].tid]);
+      input_meta.set(i, _meta[cmd->get_inputs()[i].tid]);
     }
 
     // prepare the outputs
     output_meta.resize(1);
-    output_meta.set(0, meta[cmd->get_outputs()[0].tid]);
+    output_meta.set(0, _meta[cmd->get_outputs()[0].tid]);
   }
 
   // init the parameters
@@ -498,7 +498,7 @@ void multi_gpu_scheduler_t::schedule_reduce(bbts::command_ptr_t cmd) {
   fun->get_out_meta(_params, input_meta, output_meta);
 
   // make the reduce request
-  auto reduce_sch = std::shared_ptr<reduce_schedule_t>();
+  auto reduce_sch = std::make_shared<reduce_schedule_t>();
 
   // create the schedule request
   reduce_sch->cmd = std::move(cmd);
@@ -510,6 +510,7 @@ void multi_gpu_scheduler_t::schedule_reduce(bbts::command_ptr_t cmd) {
   // signal the reduce
   scheduler_queue.signal_reduce(std::move(reduce_sch));
 }
+
 void multi_gpu_scheduler_t::mark_for_deletion(bbts::command_ptr_t cmd) {
 
   // make the reduce request
@@ -518,8 +519,12 @@ void multi_gpu_scheduler_t::mark_for_deletion(bbts::command_ptr_t cmd) {
   scheduler_queue.signal_delete(std::move(delete_sch));
 }
 
-void multi_gpu_scheduler_t::mark_tensor_on_cpu(tid_t tid, size_t num_bytes) {
+void multi_gpu_scheduler_t::mark_tensor_on_cpu(tid_t tid, 
+                                               size_t num_bytes, 
+                                               tensor_meta_t meta) {
   scheduler_queue.signal_tensor_on_cpu(tid, num_bytes);
+  std::unique_lock<std::mutex> lck(meta_lck);
+  _meta[tid] = meta;
 }
 
 void multi_gpu_scheduler_t::flush() { 
@@ -570,11 +575,11 @@ void multi_gpu_scheduler_t::_perform_shutdown() {
   auto kp_done = kernel_prep_ptr_t(nullptr);
   auto gc_done = gc_request_ptr_t(nullptr);
   for(auto dev = 0; dev < _num_gpus; ++dev) {
-    gpu2gpu_queue[dev].enqueue(kp_done);
-    run_queue[dev].enqueue(kp_done);
-    gc_queue[dev].enqueue(gc_done);
+    gpu2gpu_queue[dev].enqueue_copy(kp_done);
+    run_queue[dev].enqueue_copy(kp_done);
+    gc_queue[dev].enqueue_copy(gc_done);
   }
-  cpu2gpu_queue.enqueue(kp_done);
+  cpu2gpu_queue.enqueue_copy(kp_done);
 }
 
 void multi_gpu_scheduler_t::shutdown() {
@@ -601,18 +606,18 @@ bool multi_gpu_scheduler_t::_schedule_for_execution(kernel_prep_ptr_t kernel_pre
     // we only need to setup GPU2GPU transfers as all the required tensors
     // are already there
     if (!kernel_prep->gpu_transfers.empty()) {
-      gpu2gpu_queue[dev].enqueue(kernel_prep);
+      gpu2gpu_queue[dev].enqueue_copy(kernel_prep);
     }
 
     // schedule the CPU transfers
     if (!kernel_prep->cpu_transfers.empty()) {
-      cpu2gpu_queue.enqueue(kernel_prep);
+      cpu2gpu_queue.enqueue_copy(kernel_prep);
     }
 
     // if there are not transfers to be scheduled we can just run it immediately 
     if(kernel_prep->cpu_transfers.empty() &&
        kernel_prep->gpu_transfers.empty()) {
-      run_queue[dev].enqueue(kernel_prep);
+      run_queue[dev].enqueue_copy(kernel_prep);
     }
 
     // we just scheduled a kernel
@@ -627,7 +632,7 @@ bool multi_gpu_scheduler_t::_schedule_for_execution(kernel_prep_ptr_t kernel_pre
     gc_request_ptr_t gc_request = mem.get_gc_request(kernel_prep, dev);
 
     // schedule the request
-    gc_queue[dev].enqueue(gc_request);
+    gc_queue[dev].enqueue_copy(gc_request);
 
     // we jusst schduled a kernel
     num_unfinished_kernels++;
