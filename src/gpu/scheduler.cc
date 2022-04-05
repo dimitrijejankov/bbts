@@ -518,7 +518,7 @@ void multi_gpu_scheduler_t::mark_for_deletion(bbts::command_ptr_t cmd) {
   scheduler_queue.signal_delete(std::move(delete_sch));
 }
 
-void multi_gpu_scheduler_t::mark_tensor_as_created(tid_t tid, size_t num_bytes) {
+void multi_gpu_scheduler_t::mark_tensor_on_cpu(tid_t tid, size_t num_bytes) {
   scheduler_queue.signal_tensor_on_cpu(tid, num_bytes);
 }
 
