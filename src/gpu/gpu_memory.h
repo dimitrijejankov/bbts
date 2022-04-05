@@ -17,6 +17,8 @@ public:
 
   gpu_memory_t(size_t num_devixces, size_t mem_per_gpu);
 
+  ~gpu_memory_t();
+
   // mark that we are going to use all the inputs from the apply
   void mark_for_use(const apply_schedule_ptr_t &apply);
 

@@ -23,6 +23,18 @@ gpu_memory_t::gpu_memory_t(size_t num_devices, size_t mem_per_gpu)
   }
 };
 
+gpu_memory_t::~gpu_memory_t() {
+
+  // free all the tensors
+  for(auto &t : _tensors) {
+    for(auto dev = 0; dev < _num_devices; ++dev) {
+      if(t.second.data[dev] != nullptr) {
+        cudaFree(t.second.data[dev]);
+      }
+    }
+  }
+}
+
 void gpu_memory_t::mark_for_use(const apply_schedule_ptr_t &apply) {
 
   for(auto in_idx = 0; in_idx < apply->cmd->get_num_inputs(); in_idx++) {

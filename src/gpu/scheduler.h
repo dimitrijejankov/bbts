@@ -31,31 +31,50 @@ public:
   // to the CPU or straight up deleting them
   void gc_thread(int dev_id);
 
+  // schedule an apply to be run on the GPU
   void schedule_apply(bbts::command_ptr_t cmd);
 
+  // schedule a reduce to be run on the GPU
   void schedule_reduce(bbts::command_ptr_t cmd);
 
+  // mark that this tensor is not necessary anymore and can be safely deleted
   void mark_for_deletion(bbts::command_ptr_t cmd);
 
+  // mark that a tensor is created
+  void mark_tensor_on_cpu(tid_t tid, size_t num_bytes);
+
+  // flush all the tensors currently residing exclusviely in the GPU memory into the CPU memory
   void flush();
 
-  bool _perform_flush();
-
+  // shutdown the scheduler
   void shutdown();
 
+  // returns the number of GPUs we are managing
+  int32_t num_gpus() const;
+
+private: 
+
+  // performs the actual flushing
+  void _perform_flush();
+
+  // performs the actual shutdown
+  void _perform_shutdown();
+
+  // schedule a kernel prep for execution, this could 
+  // involve preallocating memory as well as issuing a grabage collection request
   bool _schedule_for_execution(kernel_prep_ptr_t prep, int32_t dev);
 
   // this schedules commands that are already known to be on the GPU
   gpu_heuristic_t heuristic;
 
-  //
+  // the gpu memory
   gpu_memory_t mem;
 
-  // we add kernels we have finished running here so that their stuff can be
-  // unpinned
+  // we add kernels we have finished running here 
+  // so that their stuff can be unpinned
   scheduler_request_queue_t scheduler_queue;
 
-  // all 
+  // all the outstanding flush requests
   std::vector<flush_request_ptr_t> outstanding_flush_requests;
 
   // we schedule the kernels in these queues

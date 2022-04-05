@@ -210,17 +210,12 @@ void multi_gpu_scheduler_t::command_prep_thread() {
        num_unfinished_kernels == 0) {
       
       // perform the flush this should always succeed as have nothing to do
-      bool success = _perform_flush(); assert(success);
-      for(auto &fr : outstanding_flush_requests) {
-        fr->status.set_value(success);
-      }
-      outstanding_flush_requests.clear();
+      _perform_flush();
     }
 
-    // clear the request
+    // if we don't have anything else to do 
+    // or the scheduler has something that was 
     req->clear();
-
-    // if we don't have anything else to do or
     if (should_sleep || scheduler_queue.has_something()) {
       scheduler_queue.wait_dequeue(req);
     }
@@ -229,39 +224,39 @@ void multi_gpu_scheduler_t::command_prep_thread() {
     if(req->shutdown) {
 
       // finish all
-      auto kp_done = kernel_prep_ptr_t(nullptr);
-      auto gc_done = gc_request_ptr_t(nullptr);
-      for(auto dev = 0; dev < _num_gpus; ++dev) {
-        gpu2gpu_queue[dev].enqueue(kp_done);
-        run_queue[dev].enqueue(kp_done);
-        gc_queue[dev].enqueue(gc_done);
-      }
-      cpu2gpu_queue.enqueue(kp_done);
+      _perform_shutdown();
       break;
     }
 
-    // 0. check for flush requests
+    // 0. mark all the tensors that became available on the CPU
+    for(auto &t : req->cpu_created_tensors) {
+      auto [tid, num_bytes] = t;
+      mem.tensor_loaded_on_cpu(tid, num_bytes);
+      heuristic.tensor_on_cpu(tid); 
+    }
+
+    // 1. check for flush requests
     for (auto &fr : req->flush_requests) {
       outstanding_flush_requests.push_back(std::move(fr));
     }
     
-    // 1. check for finished kernels
+    // 2. check for finished kernels
     for (auto &fk : req->retired_kernels) {
 
-      // 1. unpin all the inputs
+      // 2.1. unpin all the inputs
       mem.unpin_all(fk, fk->dev);
 
-      // 2. since a new tensor has been created update commands that can be scheduled
+      // 2.2. since a new tensor has been created update commands that can be scheduled
       mem.finish_kernel_prep(fk);
       for (auto out_idx = 0; out_idx < fk->output.size(); ++out_idx) {
         heuristic.tensor_loaded(fk->output[out_idx], fk->dev);
       }
 
-      // we finished a kernel so decrement this
+      // 2.3. we finished a kernel so decrement this
       num_unfinished_kernels--;
     }
 
-    // 2. check for finished transfers
+    // 3. check for finished transfers
     for(auto &gpu_transfer : req->gpu_transfers) {
       mem.mark_transfer_done(gpu_transfer);
     }
@@ -270,7 +265,7 @@ void multi_gpu_scheduler_t::command_prep_thread() {
       mem.mark_transfer_done(cpu_transfers);
     }
 
-    // 3. did we get any new commands that were scheduled?
+    // 4. did we get any new commands that were scheduled?
     // go through them and schedule them, while doing this update the
     // 'GOODNESS'
     for (auto &nc : req->apply_cmds) {
@@ -290,7 +285,7 @@ void multi_gpu_scheduler_t::command_prep_thread() {
       heuristic.register_reduce(nc);
     }
 
-    // 4. check for resource freed
+    // 5. check for resource freed
     for (auto &gc_req : req->finished_gc) {
 
       // schedule them for execution (finish reaper_request and add to execution queue)
@@ -317,7 +312,7 @@ void multi_gpu_scheduler_t::command_prep_thread() {
       num_unfinished_kernels++;
     }
 
-    // 5.1. check if we have a command that we can run immeidately (all the
+    // 6.1. check if we have a command that we can run immeidately (all the
     // inputs are on the same GPU) ex. APPLY 1 2 3 -> 4 | GPU 0 has 1 2 3
     auto [kernel_prep, dev] = heuristic.get_next_on_same(preffered_dev);
     if (dev != -1) {
@@ -332,7 +327,7 @@ void multi_gpu_scheduler_t::command_prep_thread() {
       should_sleep = !scheduled;
       continue;
     }
-    // 5.2. othwerwise check if we have commands that have inputs on at least
+    // 6.2. othwerwise check if we have commands that have inputs on at least
     // one of the GPUs ex. APPLY 1 2 3 -> 4 | GPU 0 has 1 2 | GPU 1 has 3
     else if ((kernel_prep = heuristic.get_next_on_any()) != nullptr) {
 
@@ -347,7 +342,7 @@ void multi_gpu_scheduler_t::command_prep_thread() {
       continue;
     }
 
-    // 6.1 if there are not commands we can schedule immediately
+    // 7.1. if there are not commands we can schedule immediately
     //  we pick a command based on a 'GOODNESS' score
     kernel_prep = heuristic.get_next_heuristic();
     if (kernel_prep == nullptr) {
@@ -355,7 +350,7 @@ void multi_gpu_scheduler_t::command_prep_thread() {
       continue;
     }
 
-    // schedule it for execution, if it fails to schedule put it to sleep
+    // 7.2. schedule it for execution, if it fails to schedule put it to sleep
     bool scheduled = _schedule_for_execution(kernel_prep, dev);
     if(scheduled) {
       heuristic.mark_as_scheduled(kernel_prep);
@@ -523,14 +518,19 @@ void multi_gpu_scheduler_t::mark_for_deletion(bbts::command_ptr_t cmd) {
   scheduler_queue.signal_delete(std::move(delete_sch));
 }
 
+void multi_gpu_scheduler_t::mark_tensor_as_created(tid_t tid, size_t num_bytes) {
+  scheduler_queue.signal_tensor_on_cpu(tid, num_bytes);
+}
+
 void multi_gpu_scheduler_t::flush() { 
   auto success =  scheduler_queue.signal_flush_request().get();
   assert(success);
 
 }
 
-bool multi_gpu_scheduler_t::_perform_flush() {
+void multi_gpu_scheduler_t::_perform_flush() {
 
+  bool success = false;
   std::vector<std::tuple<tensor_t*, tid_t, size_t>> to_flush;
   if(mem.get_tensors_to_flush(to_flush)) {
 
@@ -553,16 +553,39 @@ bool multi_gpu_scheduler_t::_perform_flush() {
             cudaMemcpy(ts, mem, num_bytes, cudaMemcpyDeviceToHost);
           });
     }
-    return true;
+    success = true;
   }
   mem.mark_as_flushed(to_flush);
-  return false;
+
+  // update all the outstanding flushs requests
+  for(auto &fr : outstanding_flush_requests) {
+    fr->status.set_value(success);
+  }
+  outstanding_flush_requests.clear();
+}
+
+void multi_gpu_scheduler_t::_perform_shutdown() {
+
+  // flush everything with null pointers
+  auto kp_done = kernel_prep_ptr_t(nullptr);
+  auto gc_done = gc_request_ptr_t(nullptr);
+  for(auto dev = 0; dev < _num_gpus; ++dev) {
+    gpu2gpu_queue[dev].enqueue(kp_done);
+    run_queue[dev].enqueue(kp_done);
+    gc_queue[dev].enqueue(gc_done);
+  }
+  cpu2gpu_queue.enqueue(kp_done);
 }
 
 void multi_gpu_scheduler_t::shutdown() {
 
   // shutdown the scheduler
   scheduler_queue.signal_shutdown();
+}
+
+
+int32_t multi_gpu_scheduler_t::num_gpus() const {
+  return _num_gpus;
 }
 
 bool multi_gpu_scheduler_t::_schedule_for_execution(kernel_prep_ptr_t kernel_prep, int32_t target_dev) {

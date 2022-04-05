@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <tuple>
 #include <vector>
 
 
@@ -230,6 +231,9 @@ struct scheduler_request_t {
   // all the flush requests that were made since the last time the thread was woken up
   std::vector<flush_request_ptr_t> flush_requests;
 
+  // all the tensors that were created on the CPU in the mean time
+  std::vector<std::tuple<tid_t, size_t>> cpu_created_tensors; 
+
   // is the scheduler shutdown
   bool shutdown = false;
 
@@ -242,6 +246,7 @@ struct scheduler_request_t {
     cpu_transfers.clear();
     gpu_transfers.clear();
     flush_requests.clear();
+    cpu_created_tensors.clear();
   }
 };
 using scheduler_request_ptr_t = std::shared_ptr<scheduler_request_t>;
@@ -253,6 +258,13 @@ public:
   void signal_shutdown() {
     std::unique_lock<std::mutex> lck(m);
     shutdown = true;
+    cv.notify_all();
+  }
+
+  // signal that the tensor is on the CPU
+  void signal_tensor_on_cpu(tid_t tid, size_t num_bytes) {
+    std::unique_lock<std::mutex> lck(m);
+    cpu_created_tensors.push_back({tid, num_bytes});
     cv.notify_all();
   }
 
@@ -348,6 +360,7 @@ public:
     std::swap(req->cpu_transfers, cpu_transfers);
     std::swap(req->gpu_transfers, gpu_transfers);
     std::swap(req->flush_requests, flush_requests);
+    std::swap(req->cpu_created_tensors, cpu_created_tensors);
 
     // forward the shutdown request if any
     req->shutdown = shutdown;
@@ -385,6 +398,8 @@ private:
   std::vector<gpu_to_gpu_transfer_ptr_t> gpu_transfers;
 
   std::vector<flush_request_ptr_t> flush_requests;
+
+  std::vector<std::tuple<tid_t, size_t>> cpu_created_tensors;
 
   // locks the scheduler queue
   std::mutex m;
