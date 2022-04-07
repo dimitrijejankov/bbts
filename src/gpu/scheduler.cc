@@ -27,6 +27,7 @@ multi_gpu_scheduler_t::multi_gpu_scheduler_t(size_t num_gpus,
     }
   }
 }
+
 void multi_gpu_scheduler_t::gpu_execution_thread(int32_t dev) {
 
   // set the device
@@ -113,12 +114,16 @@ void multi_gpu_scheduler_t::gpu_to_gpu_thread(int32_t dev) {
 
       // init the copy of the tensor
       cudaMemcpyPeerAsync(
-          t->dst,             // destination
-          dev,                // destination device
-          t->src,             // source
-          t->src_dev,         // source device
-          t->num_bytes,       // the number of bytes to copy
+          t->dst->get_data_ptr<void>(),    // destination
+          dev,                             // destination device
+          t->src->get_data_ptr<void>(),    // source
+          t->src_dev,                      // source device
+          t->num_bytes - sizeof(tensor_t), // the number of bytes to copy
           cpy_stream);
+
+      // copy the meta data
+      t->dst->get_meta<tensor_meta_t>() = 
+        t->src->get_meta<tensor_meta_t>();
 
       // store it as finished and remove it from the prep
       done_transfers.push_back(std::move(t));
@@ -178,7 +183,14 @@ void multi_gpu_scheduler_t::cpu_to_gpu_thread() {
             auto ts = res.get[0].get().tensor;
 
             // copy the tensor from the CPU to the GPU
-            cudaMemcpy(t->dst, ts, t->num_bytes, cudaMemcpyHostToDevice);
+            cudaMemcpy(t->dst->get_data_ptr<void>(), 
+                       ts->get_data_ptr<void>(), 
+                       t->num_bytes - sizeof(tensor_t), 
+                       cudaMemcpyHostToDevice);
+
+            // copy the meta data
+            t->dst->get_meta<tensor_meta_t>() = 
+              ts->get_meta<tensor_meta_t>();
           });
 
       // mark that it is finished
@@ -382,13 +394,14 @@ void multi_gpu_scheduler_t::gc_thread(int dev_id) {
 
     // schedule all the free commands
     for (auto t : request->to_free) {
-      auto mem = std::get<0>(t);
+      auto mem = std::get<0>(t)->get_data_ptr<void>();
       cudaFreeAsync(mem, free_stream);
     }
 
+    // evict everything we need to
     for (auto t : request->to_evict) {
 
-      auto mem = std::get<0>(t);
+      auto src_tensor = std::get<0>(t);
       auto tid = std::get<1>(t);
       auto num_bytes = std::get<2>(t);
 
@@ -396,15 +409,26 @@ void multi_gpu_scheduler_t::gc_thread(int dev_id) {
       storage->local_transaction(
           {}, {{tid, num_bytes}},
           [&](const storage_t::reservation_result_t &res) {
+
             // create the tensor
             auto ts = res.create[0].get().tensor;
 
             // copy the tensor from the CPU to the GPU
-            cudaMemcpy(ts, mem, num_bytes, cudaMemcpyDeviceToHost);
+            cudaMemcpy(ts->get_data_ptr<void>(), 
+                       src_tensor->get_data_ptr<void>(), 
+                       num_bytes - sizeof(tensor_t), 
+                       cudaMemcpyDeviceToHost);
+
+            // copy the meta
+            ts->get_meta<tensor_meta_t>() = 
+              src_tensor->get_meta<tensor_meta_t>();
+
+            auto &dts = ts->as<dense_tensor_t>(); 
+            std::cout << dts.data()[0] << "\n";
           });
 
       // free this memory
-      cudaFree(mem);
+      cudaFree(src_tensor->get_data_ptr<void>());
     }
 
     // sync free
@@ -546,7 +570,7 @@ void multi_gpu_scheduler_t::_perform_flush() {
     for(auto t : to_flush) {
       
       // get the info about the tensor
-      auto mem = std::get<0>(t);
+      auto flush_me = std::get<0>(t);
       auto tid = std::get<1>(t);
       auto num_bytes = std::get<2>(t);
 
@@ -554,11 +578,15 @@ void multi_gpu_scheduler_t::_perform_flush() {
       storage->local_transaction(
           {}, {{tid, num_bytes}},
           [&](const storage_t::reservation_result_t &res) {
+            
             // create the tensor
             auto ts = res.create[0].get().tensor;
 
             // copy the tensor from the CPU to the GPU
-            cudaMemcpy(ts->get_data_ptr<class T>(), mem, num_bytes, cudaMemcpyDeviceToHost);
+            cudaMemcpy(ts->get_data_ptr<void>(), 
+                       flush_me->get_data_ptr<void>(), 
+                       num_bytes - sizeof(tensor_t), 
+                       cudaMemcpyDeviceToHost);
 
             // set the meta data
             ts->get_meta<bbts::tensor_meta_t>() = _meta[tid];

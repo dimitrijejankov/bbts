@@ -79,4 +79,7 @@ void bbts::dense_const_gpu::uniform_rand(
 
   // execute the kernel
   dense_uniform_fun<<<grid_size, block_size, 0, params.stream>>>(out.data(), n, value);
+
+  // set the meta
+  out.meta().m() = {I, J};
 }

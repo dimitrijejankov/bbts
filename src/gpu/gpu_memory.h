@@ -2,6 +2,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <sys/types.h>
 #include <unordered_map>
 #include <unordered_set>
@@ -106,7 +107,7 @@ private:
     size_t num_bytes = 0;
 
     // a pointer to the tensor
-    std::array<tensor_t*, BBTS_MAX_GPU_DEVICES> data;
+    std::array<std::shared_ptr<tensor_t>, BBTS_MAX_GPU_DEVICES> data;
 
     // is the tensor loaded on a particular device (a tensor is loaded once the transfer is finished)
     std::array<bool, BBTS_MAX_GPU_DEVICES> is_loaded_on_gpu;
@@ -123,6 +124,9 @@ private:
 
   // initialize the tensor
   gpu_mem_tensor_t &_init_tensor(tid_t id, size_t num_bytes, bool &created);
+
+  // allocate the tensor
+  std::shared_ptr<tensor_t> _allocate_tensor(size_t num_bytes);
 
   // is the tensor pinned
   bool _is_pinned(tid_t id, int32_t dev);

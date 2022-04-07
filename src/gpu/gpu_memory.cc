@@ -29,7 +29,7 @@ gpu_memory_t::~gpu_memory_t() {
   for(auto &t : _tensors) {
     for(auto dev = 0; dev < _num_devices; ++dev) {
       if(t.second.data[dev] != nullptr) {
-        cudaFree(t.second.data[dev]);
+        cudaFree(t.second.data[dev]->get_data_ptr<void>());
       }
     }
   }
@@ -220,7 +220,6 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
   kp->dev = dev;
 
   // sum all the output bytes
-  tensor_t *tmp;
   size_t output_bytes_required = 0;
   for(auto out_idx = 0; out_idx < kp->output.size(); ++out_idx) {
 
@@ -231,9 +230,8 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
     auto &t = _init_tensor(tid, num_bytes, created);
 
     // allocate it 
-    cudaMalloc(&tmp, num_bytes);
-    kp->run_me->outputs.set(out_idx, *tmp);
-    t.data[dev] = tmp;
+    t.data[dev] = _allocate_tensor(num_bytes);
+    kp->run_me->outputs.set(out_idx, *t.data[dev]);
 
     // we just initialized and plan on filling it out during 
     // the kernel call therefore we need to pin the memory
@@ -277,9 +275,8 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
       else if (src_dev != -1) {
 
         // allocate the memory 
-        cudaMalloc(&tmp, kp->input_sizes[in_idx]);
-        t.data[dev] = tmp;
-        kp->run_me->inputs.set(in_idx, *tmp);
+        t.data[dev] = _allocate_tensor(kp->input_sizes[in_idx]);
+        kp->run_me->inputs.set(in_idx, *t.data[dev]);
 
         // since we just created a tensor on this device
         // we need to mark the free memory as used 
@@ -296,9 +293,9 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
         // init the transfer
         transfer->id = _cur_gpu_tp_gpu_tranfer_id++;
         transfer->tid = kp->input[in_idx];
-        transfer->src = _tensors[kp->input[in_idx]].data[src_dev];
+        transfer->src = _tensors[kp->input[in_idx]].data[src_dev].get();
         transfer->src_dev = src_dev;
-        transfer->dst = tmp;
+        transfer->dst = t.data[dev].get();
         transfer->dst_dev = dev;
         transfer->num_bytes = kp->input_sizes[in_idx];
         transfer->depends = nullptr;
@@ -315,9 +312,8 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
       else if (_tensors[kp->input[in_idx]].cpu_transfer != nullptr) {
         
         // we need to latch onto the CPU transfer
-        cudaMalloc(&tmp, kp->input_sizes[in_idx]);
-        t.data[dev] = tmp;
-        kp->run_me->inputs.set(in_idx, *tmp);
+        t.data[dev] = _allocate_tensor(kp->input_sizes[in_idx]);
+        kp->run_me->inputs.set(in_idx, *t.data[dev]);
 
         // since we just created a tensor on this device
         // we need to mark the free memory as used 
@@ -333,9 +329,9 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
 
         // init the transfer
         transfer->id = _cur_gpu_tp_gpu_tranfer_id++;
-        transfer->src = _tensors[kp->input[in_idx]].data[src_dev];
+        transfer->src = _tensors[kp->input[in_idx]].data[src_dev].get();
         transfer->src_dev = src_dev;
-        transfer->dst = tmp;
+        transfer->dst = t.data[dev].get();
         transfer->num_bytes = kp->input_sizes[in_idx];
         transfer->depends = _tensors[kp->input[in_idx]].cpu_transfer;
 
@@ -349,9 +345,8 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
       else {
 
         // allocate and pin the tensor
-        cudaMalloc(&tmp, kp->input_sizes[in_idx]);
-        t.data[dev] = tmp;
-        kp->run_me->inputs.set(in_idx, *tmp);
+        t.data[dev] = _allocate_tensor(kp->input_sizes[in_idx]);
+        kp->run_me->inputs.set(in_idx, *t.data[dev]);
 
         // pin it since we are transfering this
         _total_free[dev] -= kp->input_sizes[in_idx];
@@ -364,7 +359,7 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
         // init the transfer
         transfer->id = _cur_cpu_to_gpu_transfer_id++;
         transfer->tid = kp->input[in_idx];
-        transfer->dst = tmp;
+        transfer->dst = t.data[dev].get();
         transfer->dst_dev = dev;
         transfer->is_finished = false;
         transfer->num_bytes = kp->input_sizes[in_idx];
@@ -489,7 +484,7 @@ gc_request_ptr_t gpu_memory_t::get_gc_request(kernel_prep_ptr_t kp, int dev) {
 
     // claim this memory
     _total_unpinned[dev] -= t.num_bytes;
-    request->to_free.push_back({t.data[dev], free_me, t.num_bytes});
+    request->to_free.push_back({t.data[dev].get(), free_me, t.num_bytes});
     t.data[dev] = nullptr;
 
     // we are killing a copy of this
@@ -520,10 +515,10 @@ gc_request_ptr_t gpu_memory_t::get_gc_request(kernel_prep_ptr_t kp, int dev) {
 
     // do we have to evict it or can we kill it
     if(!t.is_on_cpu && t.num_copies == 1) {
-      request->to_evict.push_back({t.data[dev], evict->second, t.num_bytes});
+      request->to_evict.push_back({t.data[dev].get(), evict->second, t.num_bytes});
     }
     else {
-      request->to_free.push_back({t.data[dev], evict->second, t.num_bytes});
+      request->to_free.push_back({t.data[dev].get(), evict->second, t.num_bytes});
     }
 
     // claim this memory
@@ -580,7 +575,7 @@ bool gpu_memory_t::get_tensors_to_flush(std::vector<std::tuple<tensor_t*, tid_t,
     // if this one is just on the GPU but not on the CPU we need to flush it
     for(auto dev = 0; dev < _num_devices; dev++) {
       if(!t.second.is_on_cpu && t.second.is_loaded_on_gpu[dev])  {
-        to_flush.push_back({t.second.data[dev], t.first, t.second.num_bytes});
+        to_flush.push_back({t.second.data[dev].get(), t.first, t.second.num_bytes});
       }
     }
   }
@@ -623,6 +618,12 @@ gpu_memory_t::gpu_mem_tensor_t &gpu_memory_t::_init_tensor(tid_t id,
   }
   created = true;
   return t;
+}
+
+std::shared_ptr<tensor_t> gpu_memory_t::_allocate_tensor(size_t num_bytes) {
+  void *tmp;
+  cudaMalloc(&tmp, num_bytes - sizeof(tensor_t));
+  return std::move(std::make_shared<tensor_t>(tmp));
 }
 
 bool gpu_memory_t::_is_pinned(tid_t id, int32_t dev) {
