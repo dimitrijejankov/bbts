@@ -1,7 +1,9 @@
 #include "gpu_heuristic.h"
+#include "types.h"
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
+#include <memory>
 #include <tuple>
 
 namespace bbts {
@@ -497,7 +499,13 @@ kernel_prep_ptr_t gpu_heuristic_t::_create_reduce(command_id_t cmd) {
     ret->output = {inner_anon_id - 1};
   }
 
-  ret->run_me = reduce_cmd.run_me;
+  // setup the kernel run... the tensors will be filled out later in the gpu_memory
+  ret->run_me = std::make_shared<kernel_run_t>(*reduce_cmd.run_me);
+  ret->run_me->inputs.resize(reduce_cmd.run_me->inputs.num_args());
+  ret->run_me->outputs.resize(reduce_cmd.run_me->outputs.num_args());
+  ret->run_me->params = reduce_cmd.run_me->params;
+  ret->run_me->ud = reduce_cmd.run_me->ud;
+
   return std::move(ret);
 }
 kernel_prep_ptr_t gpu_heuristic_t::_create_apply(command_id_t cmd) {

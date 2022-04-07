@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
+#include <ostream>
 
 namespace bbts {
 
@@ -62,9 +63,13 @@ void multi_gpu_scheduler_t::gpu_execution_thread(int32_t dev) {
     kernel->params.cublas_handle = cublas_handle;
 
     // call the kernel
+    std::cout << "kernel tid : " << req->output.front() << " "  << &req->run_me->outputs.get<0>() << '\n' << std::flush;
     kernel->ud->call_gpu_ud(kernel->params, 
                             kernel->inputs, 
                             kernel->outputs);
+
+    // sync the stream
+    cudaStreamSynchronize(run_stream);
 
     // mark that the kernels is retired now
     scheduler_queue.signal_kernel_done(req);
@@ -256,16 +261,14 @@ void multi_gpu_scheduler_t::command_prep_thread() {
     
     // 2. check for finished kernels
     for (auto &fk : req->retired_kernels) {
-      // 2.1. unpin all the inputs
-      mem.unpin_all(fk, fk->dev);
 
-      // 2.2. since a new tensor has been created update commands that can be scheduled
+      // 2.1. since a new tensor has been created update commands that can be scheduled
       mem.finish_kernel_prep(fk);
       for (auto out_idx = 0; out_idx < fk->output.size(); ++out_idx) {
         heuristic.tensor_loaded(fk->output[out_idx], fk->dev);
       }
 
-      // 2.3. we finished a kernel so decrement this
+      // 2.2. we finished a kernel so decrement this
       num_unfinished_kernels--;
     }
 

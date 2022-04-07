@@ -170,7 +170,7 @@ void gpu_memory_t::unpin_all(kernel_prep_ptr_t kp, int dev) {
   }
 
   // this takes care of pinning all the output tensors
-  for (auto out_idx = 0; out_idx < kp->input.size(); ++out_idx) {
+  for (auto out_idx = 0; out_idx < kp->output.size(); ++out_idx) {
     _unpin_tensor(kp->output[out_idx], dev, kp->output_sizes[out_idx]);
   }
 }
