@@ -32,12 +32,12 @@ struct dense_tensor_t : public tensor_t {
 
   // return the meta data of the dense tensor
   dense_tensor_meta_t &meta() const {
-    return *((dense_tensor_meta_t*) &_meta);
+    return get_meta<dense_tensor_meta_t>();
   }
 
   // returns the payload of the tensor
   float *data() const {
-    return (float*) _blob;
+    return &get_data<float>();
   }
 
   // return creation functions

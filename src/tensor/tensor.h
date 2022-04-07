@@ -34,6 +34,10 @@ namespace bbts {
 
   // the tensor class in our system
   struct tensor_t {
+    
+    // the constructors
+    tensor_t() = default;
+    tensor_t(void *data) { data_ptr = data; }
 
     // we can not copy a tensor as it will have the blob after
     tensor_t(const tensor_t&) = delete;
@@ -43,8 +47,29 @@ namespace bbts {
     template<class T>
     T& as() const { return *((T*) this); }
 
+    // returns the actual data
+    template<class T> 
+    T& get_data() const { 
+      return *get_data_ptr<T>();  
+    }
+
+    // returns the point to the data
+    template<class T> 
+    T* get_data_ptr() const { 
+      return (T*) (data_ptr == nullptr ? _blob : data_ptr);  
+    }
+
+    // returns the meta data
+    template<class T> 
+    T& get_meta() const { return _meta.as<T>(); }
+
+  private:
+
     // the meta of the tensor
     tensor_meta_t _meta;
+    
+    // if the data pointer is set 
+    void *data_ptr = nullptr;
 
     // after this tensor header is all the
     char _blob[0];

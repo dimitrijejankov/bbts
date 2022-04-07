@@ -273,7 +273,7 @@ std::vector<std::tuple<bbts::tid_t, bbts::tensor_meta_t>> memory_storage_t::extr
   std::size_t idx = 0;
   std::vector<std::tuple<bbts::tid_t, bbts::tensor_meta_t>> out(_tensor_nfo.size());
   for(auto nfo : _tensor_nfo) {
-    out[idx++] = {nfo.first, nfo.second.address->_meta};
+    out[idx++] = {nfo.first, nfo.second.address->get_meta<tensor_meta_t>()};
   }
 
   return std::move(out);

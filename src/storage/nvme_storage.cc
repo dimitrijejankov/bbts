@@ -623,7 +623,7 @@ std::vector<std::tuple<bbts::tid_t, bbts::tensor_meta_t>> nvme_storage_t::extrac
 
       // the get the tensor
       auto ts = res.get[0].get().tensor;
-      out.push_back({t.first, ts->_meta});
+      out.push_back({t.first, ts->get_meta<tensor_meta_t>()});
     });
   }
 

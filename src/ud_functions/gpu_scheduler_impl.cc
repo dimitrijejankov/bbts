@@ -162,11 +162,11 @@ void gpu_scheduler_impl_t::_run(int device) {
       for (std::size_t i = 0; i < specs[FRONT].inputs->num_args(); ++i) {
 
         // get the tensor and the number of bytes
-        auto &ts = specs[FRONT].inputs->get_by_idx(i)._blob;
+        auto ts = specs[FRONT].inputs->get_by_idx(i).get_data_ptr<void>();
         auto num_bytes = _factory->get_tensor_size(
-                             specs[FRONT].inputs->get_by_idx(i)._meta) -
+                             specs[FRONT].inputs->get_by_idx(i).get_meta<tensor_meta_t>()) -
                          sizeof(bbts::tensor_meta_t);
-        cudaMemPrefetchAsync(&ts, num_bytes, 0, streams[FRONT]);
+        cudaMemPrefetchAsync(ts, num_bytes, 0, streams[FRONT]);
       }
       cudaEventRecord(events[FRONT], streams[FRONT]);
       has_something[FRONT] = true;
@@ -182,9 +182,9 @@ void gpu_scheduler_impl_t::_run(int device) {
       for (std::size_t i = 0; i < specs[BACK].outputs->num_args(); ++i) {
 
         // get the tensor and the number of bytes
-        auto &ts = specs[BACK].outputs->get_by_idx(i)._blob;
+        auto ts = specs[BACK].outputs->get_by_idx(i).get_data_ptr<void>();
         auto num_bytes = _factory->get_tensor_size(
-                             specs[BACK].outputs->get_by_idx(i)._meta) -
+                         specs[BACK].outputs->get_by_idx(i).get_meta<tensor_meta_t>()) -
                          sizeof(bbts::tensor_meta_t);
 
         // load out on back

@@ -558,10 +558,10 @@ void multi_gpu_scheduler_t::_perform_flush() {
             auto ts = res.create[0].get().tensor;
 
             // copy the tensor from the CPU to the GPU
-            cudaMemcpy(ts, mem, num_bytes, cudaMemcpyDeviceToHost);
+            cudaMemcpy(ts->get_data_ptr<class T>(), mem, num_bytes, cudaMemcpyDeviceToHost);
 
             // set the meta data
-            ts->_meta = _meta[tid];
+            ts->get_meta<bbts::tensor_meta_t>() = _meta[tid];
           });
     }
     success = true;

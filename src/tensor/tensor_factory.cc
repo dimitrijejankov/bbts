@@ -21,7 +21,7 @@ bbts::tensor_t &bbts::tensor_factory_t::init_tensor(tensor_t *here, const bbts::
   // find the function to initialize the tensor, run it and set the right fmt_id
   if(_meta.fmt_id < _fmt_fs.size()) {
     bbts::tensor_t &out = _fmt_fs[_meta.fmt_id].init_tensor(here, _meta);
-    out._meta.fmt_id = _meta.fmt_id;
+    out.as<bbts::tensor_meta_t>().fmt_id = _meta.fmt_id;
     return out;
   }
 
@@ -43,12 +43,12 @@ size_t bbts::tensor_factory_t::get_tensor_size(const bbts::tensor_meta_t &_meta)
 void bbts::tensor_factory_t::print_tensor(tensor_t* here, std::stringstream &ss) {
 
   // find the function to initialize the tensor, run it and set the right fmt_id
-  if(here->_meta.fmt_id < _fmt_fs.size()) {
-    _fmt_fs[here->_meta.fmt_id].print(here, ss);
+  if(here->as<bbts::tensor_meta_t>().fmt_id < _fmt_fs.size()) {
+    _fmt_fs[here->as<bbts::tensor_meta_t>().fmt_id].print(here, ss);
     return;
   }
 
-  throw std::runtime_error("Requested init_tensor for a format " + std::to_string(here->_meta.fmt_id) + " not registered with the system.");
+  throw std::runtime_error("Requested init_tensor for a format " + std::to_string(here->as<bbts::tensor_meta_t>().fmt_id) + " not registered with the system.");
 }
 
 bbts::tensor_factory_t::tensor_factory_t() {

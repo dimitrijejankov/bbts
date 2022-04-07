@@ -95,8 +95,8 @@ void reduce_op_t::apply() {
           }
 
           // how much do we need to allocated
-          _input_meta.set<0>(l->_meta);
-          _input_meta.set<1>(r->_meta);
+          _input_meta.set<0>(l->get_meta<tensor_meta_t>());
+          _input_meta.set<1>(r->get_meta<tensor_meta_t>());
 
           // get the meta data
           _reduce_op.get_out_meta(_params, _input_meta, _output_meta);
@@ -219,8 +219,8 @@ bbts::tid_t reduce_op_t::apply_preagg() {
       auto r = res.get[1].get();
 
       // how much do we need to allocated
-      _input_meta.set<0>(l.tensor->_meta);
-      _input_meta.set<1>(r.tensor->_meta);
+      _input_meta.set<0>(l.tensor->get_meta<tensor_meta_t>());
+      _input_meta.set<1>(r.tensor->get_meta<tensor_meta_t>());
 
       // get the meta data
       _reduce_op.get_out_meta(_params, _input_meta, _output_meta);

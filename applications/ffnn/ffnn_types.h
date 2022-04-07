@@ -42,14 +42,14 @@ struct ffnn_dense_meta_t : public tensor_meta_t {
 struct ffnn_dense_t : public tensor_t {
 
   // return the meta data of the dense tensor
-  ffnn_dense_meta_t &meta() const { return *((ffnn_dense_meta_t *)&_meta); }
+  ffnn_dense_meta_t &meta() const { return get_meta<ffnn_dense_meta_t>(); }
 
   // return the
-  float *data() const { return (float *)_blob; }
+  float *data() const { return &get_data<float>(); }
 
   // returns the bias
   float *bias() const {
-    return ((float *)_blob) + meta().m().num_rows * meta().m().num_cols;
+    return (data() + meta().m().num_rows * meta().m().num_cols);
   }
 
   // return creation functions
@@ -96,10 +96,10 @@ struct ffnn_sparse_t : public tensor_t {
   };
 
   // return the meta data of the dense tensor
-  ffnn_sparse_meta_t &meta() const { return *((ffnn_sparse_meta_t *)&_meta); }
+  ffnn_sparse_meta_t &meta() const { return get_meta<ffnn_sparse_meta_t>(); }
 
   // return the
-  ffnn_sparse_value_t *data() const { return (ffnn_sparse_value_t *)_blob; }
+  ffnn_sparse_value_t *data() const { return &get_data<ffnn_sparse_value_t>(); }
 
   // return creation functions
   static tensor_creation_fs_t get_creation_fs();

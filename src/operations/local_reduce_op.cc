@@ -37,8 +37,8 @@ void bbts::local_reduce_op_t::apply() {
       auto r = res.get[1].get();
 
       // how much do we need to allocated
-      _input_meta.set<0>(l.tensor->_meta);
-      _input_meta.set<1>(r.tensor->_meta);
+      _input_meta.set<0>(l.tensor->as<bbts::tensor_meta_t>());
+      _input_meta.set<1>(r.tensor->as<bbts::tensor_meta_t>());
 
       // get the meta data
       _reduce_op.get_out_meta(_params, _input_meta, _output_meta);

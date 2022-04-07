@@ -115,7 +115,7 @@ void bbts::command_runner_t::local_apply_command_runner() {
         // store it
         auto t = res.get[idx].get().tensor;
         assert(t != nullptr);
-        input_meta_args.set(idx, t->_meta);
+        input_meta_args.set(idx, t->get_meta<tensor_meta_t>());
       }
 
       // figure out the output arguments
@@ -166,7 +166,7 @@ void bbts::command_runner_t::local_apply_command_runner() {
 
         // get the type of the output
         auto &type = ud->outputTypes[idx];
-        t->_meta.fmt_id = _tf->get_tensor_ftm(type);
+        t->get_meta<tensor_meta_t>().fmt_id = _tf->get_tensor_ftm(type);
 
         // set the output arg
         output_args.set(idx, *t);
