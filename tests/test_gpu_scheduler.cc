@@ -110,52 +110,52 @@ run_threads(bbts::multi_gpu_scheduler_ptr_t scheduler) {
   return std::move(threads);
 }
 
-// TEST(TestGPUScheduler, Test1) {
+TEST(TestGPUScheduler, Test1) {
 
-//   // make the storage
-//   auto config = std::make_shared<bbts::node_config_t>(0, nullptr);
-//   config->is_dev_cluster = true;
+  // make the storage
+  auto config = std::make_shared<bbts::node_config_t>(0, nullptr);
+  config->is_dev_cluster = true;
 
-//   auto storage = std::make_shared<bbts::storage_t>(nullptr, config);
+  auto storage = std::make_shared<bbts::storage_t>(nullptr, config);
 
-//   // create the tensor factory
-//   auto factory = std::make_shared<bbts::tensor_factory_t>();
+  // create the tensor factory
+  auto factory = std::make_shared<bbts::tensor_factory_t>();
 
-//   // crate the udf manager
-//   auto udf_manager = std::make_shared<bbts::udf_manager_t>(factory, nullptr);
+  // crate the udf manager
+  auto udf_manager = std::make_shared<bbts::udf_manager_t>(factory, nullptr);
 
-//   // make the scheduler
-//   auto scheduler = std::make_shared<bbts::multi_gpu_scheduler_t>(
-//       4, 16lu * 1024lu * 1024lu * 1024lu, storage, udf_manager, factory);
+  // make the scheduler
+  auto scheduler = std::make_shared<bbts::multi_gpu_scheduler_t>(
+      4, 16lu * 1024lu * 1024lu * 1024lu, storage, udf_manager, factory);
 
-//   // run all the scheduler threads
-//   auto scheduler_threads = run_threads(scheduler);
+  // run all the scheduler threads
+  auto scheduler_threads = run_threads(scheduler);
 
-//   // schedule the run commands
-//   scheduler->schedule_apply(std::move(create_apply(
-//       0, udf_manager, "const", {}, {0},
-//       {bbts::command_param_t{.i = 100}, bbts::command_param_t{.i = 100},
-//        bbts::command_param_t{.f = 2.0f}})));
+  // schedule the run commands
+  scheduler->schedule_apply(std::move(create_apply(
+      0, udf_manager, "const", {}, {0},
+      {bbts::command_param_t{.i = 100}, bbts::command_param_t{.i = 100},
+       bbts::command_param_t{.f = 2.0f}})));
 
-//   // move all the tensors currently in the GPU back into RAM
-//   scheduler->flush();
+  // move all the tensors currently in the GPU back into RAM
+  scheduler->flush();
 
-//   // finish all the threads
-//   scheduler->shutdown();
-//   for (auto &t : scheduler_threads) {
-//     t.join();
-//   }
+  // finish all the threads
+  scheduler->shutdown();
+  for (auto &t : scheduler_threads) {
+    t.join();
+  }
 
-//   // check the created tensor
-//   storage->local_transaction(
-//       {0}, {}, [&](const bbts::storage_t::reservation_result_t &res) {
-//         auto ts = res.get[0].get().tensor;
-//         auto &t = ts->as<bbts::dense_tensor_t>();
-//         for (auto idx = 0; idx < 100 * 100; ++idx) {
-//           EXPECT_NEAR(t.data()[idx], 2.0f, 0.001);
-//         }
-//       });
-// }
+  // check the created tensor
+  storage->local_transaction(
+      {0}, {}, [&](const bbts::storage_t::reservation_result_t &res) {
+        auto ts = res.get[0].get().tensor;
+        auto &t = ts->as<bbts::dense_tensor_t>();
+        for (auto idx = 0; idx < 100 * 100; ++idx) {
+          EXPECT_NEAR(t.data()[idx], 2.0f, 0.001);
+        }
+      });
+}
 
 TEST(TestGPUScheduler, Test2) {
 
@@ -198,12 +198,12 @@ TEST(TestGPUScheduler, Test2) {
     t.join();
   }
 
-  // storage->local_transaction(
-  //     {4}, {}, [&](const bbts::storage_t::reservation_result_t &res) {
-  //       auto ts = res.get[0].get().tensor;
-  //       auto &t = ts->as<bbts::dense_tensor_t>();
-  //       for (auto idx = 0; idx < 100 * 100; ++idx) {
-  //         EXPECT_NEAR(t.data()[idx], 10.0f, 0.001);
-  //       }
-  //     });
+  storage->local_transaction(
+      {4}, {}, [&](const bbts::storage_t::reservation_result_t &res) {
+        auto ts = res.get[0].get().tensor;
+        auto &t = ts->as<bbts::dense_tensor_t>();
+        for (auto idx = 0; idx < 100 * 100; ++idx) {
+          EXPECT_NEAR(t.data()[idx], 10.0f, 0.001);
+        }
+      });
 }

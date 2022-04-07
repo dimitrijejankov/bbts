@@ -63,7 +63,6 @@ void multi_gpu_scheduler_t::gpu_execution_thread(int32_t dev) {
     kernel->params.cublas_handle = cublas_handle;
 
     // call the kernel
-    std::cout << "kernel tid : " << req->output.front() << " "  << &req->run_me->outputs.get<0>() << '\n' << std::flush;
     kernel->ud->call_gpu_ud(kernel->params, 
                             kernel->inputs, 
                             kernel->outputs);
