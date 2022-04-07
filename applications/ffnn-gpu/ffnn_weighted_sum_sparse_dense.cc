@@ -77,15 +77,18 @@ void bbts::ffnn_weighted_sum_sparse_dense::add(const bbts::ud_impl_t::tensor_par
   auto &m_out = out.meta().m();
 
   // add a and b
+  auto out_data = out.data();
+  auto a_data = a.data();
+  auto b_data = b.data();
   for (auto idx = 0; idx < m_a.nnz; ++idx) {
     
     // get the row and column
-    auto row = a.data()[idx].row;
-    auto col = a.data()[idx].col;
+    auto row = a_data[idx].row;
+    auto col = a_data[idx].col;
 
     // sum the value
-    out.data()[row * m_a.num_cols + col] = ca * a.data()[idx].val +
-                                           cb * b.data()[row * m_b.num_cols + col];
+    out_data[row * m_a.num_cols + col] = ca * a_data[idx].val +
+                                         cb * b_data[row * m_b.num_cols + col];
   }
 
   // set the new meta data

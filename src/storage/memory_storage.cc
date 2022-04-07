@@ -118,7 +118,7 @@ tensor_t *memory_storage_t::_allocate_tensor(size_t num_bytes) {
 
     // allocate the host pinned memory
     auto offset = _allocator->allocate(num_bytes);
-    ts = (tensor_t*) (_mem + offset);
+    ts = new (_mem + offset) tensor_t();
   #else
     // we can not do this
     ts = (tensor_t*) malloc(num_bytes);
@@ -237,8 +237,7 @@ void memory_storage_t::clear() {
   _tensor_nfo.clear();
 }
 
-memory_storage_t::reservation_result_t memory_storage_t::_create_reserved(const std::vector<tid_t> &get,
-                                                                         const std::vector<std::tuple<tid_t, size_t>> &create) {
+memory_storage_t::reservation_result_t memory_storage_t::_create_reserved(const std::vector<tid_t> &get,                                                                       const std::vector<std::tuple<tid_t, size_t>> &create) {
 
   // get all the tensors
   std::vector<tensor_ref_t> out_get;

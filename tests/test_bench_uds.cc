@@ -41,9 +41,9 @@ int main() {
     auto num_bytes = factory->get_tensor_size(m);
 
     // the memory
-    std::unique_ptr<char[]> a_mem(new char[num_bytes]);
-    std::unique_ptr<char[]> b_mem(new char[num_bytes]);
-    std::unique_ptr<char[]> c_mem(new char[num_bytes]);
+    std::unique_ptr<char[]> a_mem(new char[num_bytes]); new (a_mem.get()) tensor_t();
+    std::unique_ptr<char[]> b_mem(new char[num_bytes]); new (b_mem.get()) tensor_t();
+    std::unique_ptr<char[]> c_mem(new char[num_bytes]); new (c_mem.get()) tensor_t();
 
     // init the two tensors
     auto &a =

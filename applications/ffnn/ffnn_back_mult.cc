@@ -99,9 +99,11 @@ void bbts::ffnn_back_mult::mult(const bbts::ud_impl_t::tensor_params_t &params,
            .num_aggregated = 1};
 
   // add the bias
+  float *out_bias = out.bias();
+  float *b_bias = b.bias();
   for (auto row = 0; row < m_b.num_rows; ++row) {
     for (auto col = 0; col < m_b.num_cols; ++col) {
-      out.bias()[col] += b.data()[row * m_b.num_cols + col];
+      out_bias[col] += b_bias[row * m_b.num_cols + col];
     }
   }
 }

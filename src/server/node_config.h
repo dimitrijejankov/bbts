@@ -14,7 +14,10 @@ using node_id_t = int32_t;
 // this structure information on how the node is configured
 struct node_config_t {
 
-  node_config_t(int32_t argc, char **argv) {
+  node_config_t(int32_t argc, char **argv, bool is_dev = false) {
+
+    // mark this is a dev cusluter if set
+    is_dev_cluster = is_dev;
 
     // check if we have something to parse
     if(argc == 0) { return; }

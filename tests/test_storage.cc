@@ -8,12 +8,11 @@
 namespace bbts {
 
 // make the configuration
-auto config = std::make_shared<bbts::node_config_t>(0, nullptr);
+auto config = std::make_shared<bbts::node_config_t>(0, nullptr, true);
 
 TEST(TestStorage, TestTwoTransactionSingleThreaded) {
 
-
-  // 
+  // init the storage
   storage_ptr_t storage;
   if constexpr(static_config::enable_storage) {
    storage = std::make_shared<storage_t>(nullptr, 1024 * 1024, "tmp.sto");

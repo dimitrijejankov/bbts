@@ -1,4 +1,5 @@
 #include "builtin_formats.h"
+#include "tensor.h"
 #include <iostream>
 #include <sstream>
 
@@ -17,7 +18,7 @@ tensor_creation_fs_t bbts::dense_tensor_t::get_creation_fs() {
   // return the size
   auto size = [](const tensor_meta_t &_meta) {
     auto &m = *(dense_tensor_meta_t *) &_meta;
-    return sizeof(tensor_meta_t) + m.m().num_cols * m.m().num_rows * sizeof(float);
+    return sizeof(tensor_t) + m.m().num_cols * m.m().num_rows * sizeof(float);
   };
 
   auto pnt = [](const void *here, std::stringstream &ss) {

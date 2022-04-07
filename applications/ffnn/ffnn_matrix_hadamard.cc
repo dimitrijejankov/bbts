@@ -97,9 +97,12 @@ void bbts::ffnn_matrix_hadamard::mult(const bbts::ud_impl_t::tensor_params_t &pa
   }
 
   // multiply the bias
+  auto out_bias = out.bias();
+  auto out_a = a.bias();
+  auto out_b = b.bias();
   if(m_a.has_bias) {
     for (auto col = 0; col < m_a.num_cols; ++col) {
-      out.bias()[col] = a.bias()[col] * b.bias()[col];
+      out_bias[col] = out_a[col] * out_b[col];
     }
   }
 }

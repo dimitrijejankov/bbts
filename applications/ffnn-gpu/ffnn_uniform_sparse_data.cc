@@ -72,9 +72,10 @@ void bbts::ffnn_uniform_sparse_data::uniform_rand(const bbts::ud_impl_t::tensor_
   std::uniform_real_distribution<float> val_dist(left, right);
 
   // fill in the data
+  auto out_data = out.data();
   for(auto row = 0; row < m_out.num_rows; ++row) {
-    out.data()[row].val = val_dist(generator);
-    out.data()[row].row = row;
-    out.data()[row].col = col_dist(generator);
+    out_data[row].val = val_dist(generator);
+    out_data[row].row = row;
+    out_data[row].col = col_dist(generator);
   }
 }

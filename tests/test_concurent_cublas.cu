@@ -49,10 +49,10 @@ int main() {
   auto num_bytes = factory->get_tensor_size(m);
 
   bbts::tensor_t* a[split]; 
-  checkCudaErrors(cudaMallocManaged(&a[0], num_bytes));
-  checkCudaErrors(cudaMallocManaged(&a[1], num_bytes));
-  checkCudaErrors(cudaMallocManaged(&a[2], num_bytes));
-  checkCudaErrors(cudaMallocManaged(&a[3], num_bytes));
+  checkCudaErrors(cudaMallocManaged(&a[0], num_bytes)); new (a[0]) bbts::tensor_t();
+  checkCudaErrors(cudaMallocManaged(&a[1], num_bytes)); new (a[1]) bbts::tensor_t();
+  checkCudaErrors(cudaMallocManaged(&a[2], num_bytes)); new (a[2]) bbts::tensor_t();
+  checkCudaErrors(cudaMallocManaged(&a[3], num_bytes)); new (a[3]) bbts::tensor_t();
 
   bbts::tensor_t* b[split][split];
   for(int r = 0; r < split; r++) {

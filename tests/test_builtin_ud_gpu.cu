@@ -56,9 +56,9 @@ TEST(TestBuiltinMatrix, TestDenseMatrixAdditonInplace) {
         auto size = factory->get_tensor_size(m);
 
         // the memory
-        char *a_mem; cudaMallocManaged(&a_mem, size);
-        char *b_mem; cudaMallocManaged(&b_mem, size);
-        char *c_mem; cudaMallocManaged(&c_mem, size);
+        char *a_mem; cudaMallocManaged(&a_mem, size); new (a_mem) tensor_t();
+        char *b_mem; cudaMallocManaged(&b_mem, size); new (b_mem) tensor_t();
+        char *c_mem; cudaMallocManaged(&c_mem, size); new (c_mem) tensor_t();
 
         // init the two tensors
         auto &a = factory->init_tensor((tensor_t*) a_mem, m).as<dense_tensor_t>();

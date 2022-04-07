@@ -36,8 +36,8 @@ TEST(TestBuiltinMatrix, TestDenseMatrixAdditonInplace) {
   auto size = factory->get_tensor_size(m);
 
   // the memory
-  std::unique_ptr<char[]> a_mem(new char[size]);
-  std::unique_ptr<char[]> b_mem(new char[size]);
+  std::unique_ptr<char[]> a_mem(new char[size]); new (a_mem.get()) tensor_t();
+  std::unique_ptr<char[]> b_mem(new char[size]); new (b_mem.get()) tensor_t();
 
   // init the two tensors
   auto &a = factory->init_tensor((tensor_t*) a_mem.get(), m).as<dense_tensor_t>();
