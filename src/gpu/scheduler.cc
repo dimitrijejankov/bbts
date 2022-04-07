@@ -61,7 +61,9 @@ void multi_gpu_scheduler_t::gpu_execution_thread(int32_t dev) {
     kernel->params.cublas_handle = cublas_handle;
 
     // call the kernel
-    kernel->ud->call_gpu_ud(kernel->params, kernel->inputs, kernel->outputs);
+    kernel->ud->call_gpu_ud(kernel->params, 
+                            kernel->inputs, 
+                            kernel->outputs);
 
     // mark that the kernels is retired now
     scheduler_queue.signal_kernel_done(req);
@@ -188,7 +190,7 @@ void multi_gpu_scheduler_t::cpu_to_gpu_thread() {
 
     // mark that we are done and possibly shedule for execution
     std::unique_lock<std::mutex> lck(prep->m);
-    prep->gpu_done = true;
+    prep->cpu_done = true;
     if (prep->gpu_done && prep->cpu_done) {
       run_queue[prep->dev].enqueue_copy(prep);
     }
@@ -242,7 +244,6 @@ void multi_gpu_scheduler_t::command_prep_thread() {
     
     // 2. check for finished kernels
     for (auto &fk : req->retired_kernels) {
-
       // 2.1. unpin all the inputs
       mem.unpin_all(fk, fk->dev);
 
@@ -293,11 +294,13 @@ void multi_gpu_scheduler_t::command_prep_thread() {
       mem.preallocate(gc_req->to_run, gc_req->dev);
 
       // schedule the CPU transfers
+      gc_req->to_run->cpu_done = gc_req->to_run->cpu_transfers.empty();
       if (!gc_req->to_run->cpu_transfers.empty()) {
         cpu2gpu_queue.enqueue_copy(gc_req->to_run);
       }
 
       // schedule the GPU transfers
+      gc_req->to_run->gpu_done = gc_req->to_run->gpu_transfers.empty();
       if (!gc_req->to_run->gpu_transfers.empty()) {
         gpu2gpu_queue[gc_req->dev].enqueue_copy(gc_req->to_run);
       }
@@ -556,6 +559,9 @@ void multi_gpu_scheduler_t::_perform_flush() {
 
             // copy the tensor from the CPU to the GPU
             cudaMemcpy(ts, mem, num_bytes, cudaMemcpyDeviceToHost);
+
+            // set the meta data
+            ts->_meta = _meta[tid];
           });
     }
     success = true;
@@ -605,11 +611,13 @@ bool multi_gpu_scheduler_t::_schedule_for_execution(kernel_prep_ptr_t kernel_pre
 
     // we only need to setup GPU2GPU transfers as all the required tensors
     // are already there
+    kernel_prep->gpu_done = kernel_prep->gpu_transfers.empty();
     if (!kernel_prep->gpu_transfers.empty()) {
       gpu2gpu_queue[dev].enqueue_copy(kernel_prep);
     }
 
     // schedule the CPU transfers
+    kernel_prep->cpu_done = kernel_prep->cpu_transfers.empty();
     if (!kernel_prep->cpu_transfers.empty()) {
       cpu2gpu_queue.enqueue_copy(kernel_prep);
     }

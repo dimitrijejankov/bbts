@@ -615,13 +615,27 @@ void gpu_heuristic_t::mark_as_scheduled(const kernel_prep_ptr_t &prep) {
     // 2. go through the inputs and remove them
     for (auto in : prep->input) {
       
-      // find the inputs to the reduce and remove them
+      // try to find the inputs in the GPU if it is there remove it
       auto it = std::find(reduce_op.gpu_inputs.begin(),
                           reduce_op.gpu_inputs.end(), in);
-      assert(it != reduce_op.gpu_inputs.end());
+      if(it != reduce_op.gpu_inputs.end()) {
+        std::iter_swap(reduce_op.gpu_inputs.end() - 1, it);
+        reduce_op.gpu_inputs.pop_back();
+        continue;
+      }
+      
+      // try to find the inputs in the CPU if it is there remove it
+      auto jt = std::find(reduce_op.cpu_inputs.begin(),
+                          reduce_op.cpu_inputs.end(), in);
+      if(jt != reduce_op.cpu_inputs.end()) {
+        std::iter_swap(reduce_op.cpu_inputs.end() - 1, jt);
+        reduce_op.cpu_inputs.pop_back();
+        continue;
+      }
 
-      std::iter_swap(reduce_op.gpu_inputs.end() - 1, it);
-      reduce_op.gpu_inputs.pop_back();
+      // this should not happen
+      assert(it != reduce_op.gpu_inputs.end() || 
+             jt != reduce_op.cpu_inputs.end());
     }
 
     // 3.1. if we don't have anything else to run unschedule it
