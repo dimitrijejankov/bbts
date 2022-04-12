@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
+#include <iterator>
 #include <memory>
 #include <tuple>
 
@@ -694,6 +695,9 @@ void gpu_heuristic_t::mark_as_scheduled(const kernel_prep_ptr_t &prep) {
       assert(tensors.find(prep->output.front()) == tensors.end());
       tensors[prep->output.front()] = {};
 
+      // delete the intermediate result once it is not necessart
+      tensors[prep->output.front()].should_delete = true;
+
       // 6.3. update the heuristic if necessary
       _update_heuristic_for_reduce(reduce_op.id);
 
@@ -709,19 +713,33 @@ bool gpu_heuristic_t::has_something() {
 
 void gpu_heuristic_t::remove_tensor(tid_t id) {
 
-  // make sure this does not happen
-  assert(tensors_to_cmds.find(id) == tensors_to_cmds.end());
-  
-  // remove the tensor
+  //  if we can delete it immediately we do
+  auto range = tensors_to_cmds.equal_range(id);
+  if(std::distance(range.first, range.second) == 0) {
+    tensors.erase(id);
+    return;
+  }
+
+  // otherwise just mark it for removal
   auto it = tensors.find(id);
-  tensors.erase(it);
+  it->second.should_delete = true;
 }
 
 void gpu_heuristic_t::_unlink_command_from_tensor(tid_t id, command_id_t cmd) {
+
+  // go through all of them
   auto range = tensors_to_cmds.equal_range(id);
-  for (auto it = range.first; it != range.second; ++it) {
+  auto num_left = std::distance(range.first, range.second);
+  for (auto it = range.first; it != range.second; it++) {
     if (std::get<0>(it->second) == cmd) {
+
+      // unlink it here
       tensors_to_cmds.erase(it);
+
+      // remove the tensor if there is no other command using it
+      // and we were tasked with removing it as soon as it is not used anymore
+      auto t = tensors.find(id); assert(t != tensors.end());
+      if(num_left == 1 && t->second.should_delete) { tensors.erase(t); }
       return;
     }
   }

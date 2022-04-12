@@ -150,6 +150,9 @@ private:
 
   struct es_tensor_nfo {
 
+    // should delete
+    bool should_delete = false;
+
     // is this tensor on the CPU
     bool on_cpu = false;
 

@@ -222,6 +222,9 @@ struct scheduler_request_t {
   // all the reduces that were scheduled since the last time the thread was woken up
   std::vector<reduce_schedule_ptr_t> reduce_cmds;
 
+  // all the delete commands that were scheduled since
+  std::vector<delete_schedule_ptr_t> delete_cmds;
+
   // all the cpu to gpu transfers that were scheduled since the last time the thread was woken up
   std::vector<cpu_to_gpu_transfer_ptr_t> cpu_transfers;
 
@@ -242,6 +245,7 @@ struct scheduler_request_t {
     retired_kernels.clear();
     finished_gc.clear();
     apply_cmds.clear();
+    delete_cmds.clear();
     reduce_cmds.clear();
     cpu_transfers.clear();
     gpu_transfers.clear();
@@ -360,6 +364,7 @@ public:
     std::swap(req->cpu_transfers, cpu_transfers);
     std::swap(req->gpu_transfers, gpu_transfers);
     std::swap(req->flush_requests, flush_requests);
+    std::swap(req->delete_cmds, delete_cmds);
     std::swap(req->cpu_created_tensors, cpu_created_tensors);
 
     // forward the shutdown request if any

@@ -299,6 +299,14 @@ void multi_gpu_scheduler_t::command_prep_thread() {
       // register the reduce with the heuristic
       heuristic.register_reduce(nc);
     }
+    for(auto &dc : req->delete_cmds) {
+
+      // mark all the tensor for deletion
+      for(auto idx = 0; idx < req->delete_cmds[idx]->cmd->get_num_inputs(); ++idx) {
+        mem.mark_for_deletion(req->delete_cmds[idx]->cmd->get_inputs()[idx].tid);
+        heuristic.remove_tensor(req->delete_cmds[idx]->cmd->get_inputs()[idx].tid);
+      }
+    }
 
     // 5. check for resource freed
     for (auto &gc_req : req->finished_gc) {

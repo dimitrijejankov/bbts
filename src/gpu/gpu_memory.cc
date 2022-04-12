@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cuda.h>
 #include <memory>
+#include <vector>
 
 namespace bbts {
 
@@ -90,6 +91,13 @@ void gpu_memory_t::mark_as_used(tid_t id) {
   auto it = _tensors.find(id); assert(it != _tensors.end());
   it->second.num_uses--;
 
+  // check if we have it if we do just remove it
+  if(it->second.num_uses == 0 &&
+     it->second.should_delete) {
+    _remove(id, it->second.num_bytes);
+    return;
+  }
+
   // update the unpinned tensor so that they are sorted right
   for (auto dev = 0; dev < _num_devices; ++dev) {
 
@@ -102,29 +110,19 @@ void gpu_memory_t::mark_as_used(tid_t id) {
   }
 };
 
-void gpu_memory_t::mark_for_deletion(tid_t id, size_t num_bytes) {
+void gpu_memory_t::mark_for_deletion(tid_t id) {
 
-  for(int32_t dev = 0; dev < _num_devices; ++dev) {
-    auto it = _tensors.find(id); assert(it != _tensors.end());
-    if(it->second.unpinned_its[dev] != _unpinned_tensors[dev].end()) {
-      
-      // remove it from the unpinned tensors
-      _unpinned_tensors[dev].erase(it->second.unpinned_its[dev]);
+  // find the tensor and make sure it was initialized previously
+  auto it = _tensors.find(id);
+  assert(it != _tensors.end() && it->second.num_bytes != 0);
 
-      // make sure we don't have a ongoing transfer
-      assert(it->second.cpu_transfer != nullptr);
-      for(auto &t : it->second.gpu_transfers) { assert(t != nullptr); }
-
-      // add it to the free
-      _to_free_tensors[dev].push_back(id);
-
-      // update the numbers
-      _total_free[dev] += num_bytes;
-      _total_unpinned[dev] -= num_bytes;
-    }
-
-    // make sure it is not pinned anywhere
-    assert(_pinned_tensors[dev].find(id) == _pinned_tensors[dev].end()); 
+  // if we are not using this tensor anymore we are free to delete it
+  if(it->second.num_uses == 0) {
+    _remove(id, it->second.num_bytes);
+  }
+  else {
+    // mark that we should delete this tensor as soon as can
+    it->second.should_delete = true;
   }
 };
 
@@ -386,6 +384,11 @@ void gpu_memory_t::finish_kernel_prep(kernel_prep_ptr_t kp) {
   for(auto in_idx = 0; in_idx < kp->input.size(); ++in_idx) {
     _unpin_tensor(kp->input[in_idx], kp->dev, kp->input_sizes[in_idx]);
     mark_as_used(kp->input[in_idx]);
+
+    // check if this was an anonymous tensor
+    if(kp->input[in_idx] < 0) {
+      mark_for_deletion(kp->input[in_idx]);
+    }
   }
 
   // mark each output tensor as loaded and unpin it since we are not actively using it
@@ -592,6 +595,33 @@ void gpu_memory_t::mark_as_flushed(const std::vector<std::tuple<tensor_t*, tid_t
   }
 }
 
+void gpu_memory_t::_remove(tid_t id, size_t num_bytes) {
+
+  // free this tensor now as it is not needed anymore
+  for(int32_t dev = 0; dev < _num_devices; ++dev) {
+    auto it = _tensors.find(id); assert(it != _tensors.end());
+    if(it->second.unpinned_its[dev] != _unpinned_tensors[dev].end()) {
+      
+      // remove it from the unpinned tensors
+      _unpinned_tensors[dev].erase(it->second.unpinned_its[dev]);
+
+      // make sure we don't have a ongoing transfer
+      assert(it->second.cpu_transfer == nullptr);
+      for(auto &t : it->second.gpu_transfers) { assert(t == nullptr); }
+
+      // add it to the free
+      _to_free_tensors[dev].push_back(id);
+
+      // update the numbers
+      _total_free[dev] += num_bytes;
+      _total_unpinned[dev] -= num_bytes;
+    }
+
+    // make sure it is not pinned anywhere
+    assert(_pinned_tensors[dev].find(id) == _pinned_tensors[dev].end()); 
+  }
+}
+
 gpu_memory_t::gpu_mem_tensor_t &gpu_memory_t::_init_tensor(tid_t id, 
                                                            size_t num_bytes, 
                                                            bool &created) {
@@ -606,10 +636,12 @@ gpu_memory_t::gpu_mem_tensor_t &gpu_memory_t::_init_tensor(tid_t id,
 
   // init the rest and return
   auto &t = _tensors[id];
-  t.is_deleted = false;
+  t.should_delete = false;
   t.num_bytes = num_bytes;
   t.num_copies = 0;
-  t.num_uses = 0;
+
+  // anonymous tensors will always used once
+  t.num_uses = id < 0 ? 1 : 0;
   t.cpu_transfer = nullptr;
   for(auto dev = 0; dev < _num_devices; ++dev) {
     t.unpinned_its[dev] = _unpinned_tensors[dev].end();

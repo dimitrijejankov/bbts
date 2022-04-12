@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 namespace bbts {
 
@@ -30,7 +31,7 @@ public:
   void mark_as_used(tid_t id);
 
   // mark this tensor for deletion
-  void mark_for_deletion(tid_t id, size_t num_bytes);
+  void mark_for_deletion(tid_t id);
 
   // pins all the tensors in the kernel prep
   void pin_all(kernel_prep_ptr_t kp, int dev);
@@ -62,7 +63,7 @@ public:
   //   - is there any unpinned memory that we can
   // if there are multiple GPUs with resources we pick the one that needs to
   // transfer the least, if they need to transfer the same we pick the most
-  // free memory (or based on the workload not sure)
+  // free memory (or based on the workload not sure) 
   void preallocate(kernel_prep_ptr_t kp, int dev);
 
   // finish the kernel prep
@@ -85,6 +86,9 @@ public:
   void mark_as_flushed(const std::vector<std::tuple<tensor_t*, tid_t, size_t>> &to_flush);
   
 private:
+
+  // performs the actual remove
+  void _remove(tid_t id, size_t num_bytes);
   
   // sorted by num_copies (first), num_uses (second)
   using unpinned_t = std::multimap<std::tuple<uint32_t, uint32_t>, tid_t>;
@@ -95,7 +99,7 @@ private:
     bool is_on_cpu = false;
 
     // make sure this is set when it is marked as deleted
-    bool is_deleted = true;
+    bool should_delete = true;
     
     // the number of uses of this tensor
     uint32_t num_uses = 0;
