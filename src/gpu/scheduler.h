@@ -15,6 +15,21 @@ public:
   multi_gpu_scheduler_t(size_t num_gpus, size_t gpu_mem_size, bbts::storage_ptr_t storage,
                         bbts::udf_manager_ptr udm, tensor_factory_ptr_t tf);
 
+  // mark that a tensor is created
+  void mark_tensor_on_cpu(tid_t tid, size_t num_bytes, tensor_meta_t meta);
+
+  // flush all the tensors currently residing exclusviely in the GPU memory into the CPU memory
+  void flush();
+
+  // shutdown the scheduler
+  void shutdown();
+
+  // returns the number of GPUs we are managing
+  int32_t num_gpus() const;
+
+  // schedule a bunch of commands
+  void schedule(std::vector<bbts::command_ptr_t> &to_schedule);
+
   // runs kernels that have the tensors in memory
   void gpu_execution_thread(int32_t dev);
 
@@ -31,28 +46,16 @@ public:
   // to the CPU or straight up deleting them
   void gc_thread(int dev_id);
 
+private: 
+
   // schedule an apply to be run on the GPU
-  void schedule_apply(bbts::command_ptr_t cmd);
+  gpu_command_schedule_ptr_t _prepare_apply(bbts::command_ptr_t &cmd);
 
   // schedule a reduce to be run on the GPU
-  void schedule_reduce(bbts::command_ptr_t cmd);
+  gpu_command_schedule_ptr_t _prepare_reduce(bbts::command_ptr_t &cmd);
 
   // mark that this tensor is not necessary anymore and can be safely deleted
-  void schedule_delete(bbts::command_ptr_t cmd);
-
-  // mark that a tensor is created
-  void mark_tensor_on_cpu(tid_t tid, size_t num_bytes, tensor_meta_t meta);
-
-  // flush all the tensors currently residing exclusviely in the GPU memory into the CPU memory
-  void flush();
-
-  // shutdown the scheduler
-  void shutdown();
-
-  // returns the number of GPUs we are managing
-  int32_t num_gpus() const;
-
-private: 
+  gpu_command_schedule_ptr_t _prepare_delete(bbts::command_ptr_t &cmd);
 
   // performs the actual flushing
   void _perform_flush();

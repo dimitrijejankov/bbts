@@ -163,7 +163,7 @@ struct gc_request_t {
 };
 using gc_request_ptr_t = std::shared_ptr<gc_request_t>;
 
-struct apply_schedule_t {
+struct gpu_command_schedule_t {
 
   // the function we want to run
   ud_impl_t *fn;
@@ -180,33 +180,7 @@ struct apply_schedule_t {
   // the command
   bbts::command_ptr_t cmd;
 };
-using apply_schedule_ptr_t = std::shared_ptr<apply_schedule_t>;
-
-struct reduce_schedule_t {
-
-  // the function we want to run
-  ud_impl_t *fn;
-
-  // the parameters of the UD function we want to run
-  ud_impl_t::tensor_params_t params;
-
-  // the number of bytes each input has
-  std::vector<size_t> input_sizes;
-
-  // the number of bytes each output has
-  size_t output_size;
-
-  // the command
-  bbts::command_ptr_t cmd;
-};
-using reduce_schedule_ptr_t = std::shared_ptr<reduce_schedule_t>;
-
-struct delete_schedule_t {
-
-  // the command
-  bbts::command_ptr_t cmd;
-};
-using delete_schedule_ptr_t = std::shared_ptr<delete_schedule_t>;
+using gpu_command_schedule_ptr_t = std::shared_ptr<gpu_command_schedule_t>;
 
 struct scheduler_request_t {
 
@@ -216,14 +190,8 @@ struct scheduler_request_t {
   // the finished request for freeing tensors or evicting them
   std::vector<gc_request_ptr_t> finished_gc;
 
-  // all the applies that were scheduled since the last time the thread was woken up
-  std::vector<apply_schedule_ptr_t> apply_cmds;
-
-  // all the reduces that were scheduled since the last time the thread was woken up
-  std::vector<reduce_schedule_ptr_t> reduce_cmds;
-
-  // all the delete commands that were scheduled since
-  std::vector<delete_schedule_ptr_t> delete_cmds;
+  // all the commands that were scheduled since the last time the thread was woken up
+  std::vector<gpu_command_schedule_ptr_t> to_schedule;
 
   // all the cpu to gpu transfers that were scheduled since the last time the thread was woken up
   std::vector<cpu_to_gpu_transfer_ptr_t> cpu_transfers;
@@ -244,9 +212,7 @@ struct scheduler_request_t {
   void clear() {
     retired_kernels.clear();
     finished_gc.clear();
-    apply_cmds.clear();
-    delete_cmds.clear();
-    reduce_cmds.clear();
+    to_schedule.clear();
     cpu_transfers.clear();
     gpu_transfers.clear();
     flush_requests.clear();
@@ -288,28 +254,13 @@ public:
     cv.notify_all();
   }
 
-  // signal new apply
-  void signal_apply(apply_schedule_ptr_t apply) {
+  // signal that new commands have arrived
+  void signal_cmds_scheduled(std::vector<gpu_command_schedule_ptr_t> cmds) {
 
     std::unique_lock<std::mutex> lck(m);
-    apply_cmds.push_back(std::move(apply));
-    new_commands = true;
-    cv.notify_all();
-  }
-
-  // signal new reduce
-  void signal_reduce(reduce_schedule_ptr_t reduce) {
-
-    std::unique_lock<std::mutex> lck(m);
-    reduce_cmds.push_back(std::move(reduce));
-    new_commands = true;
-    cv.notify_all();
-  }
-
-  void signal_delete(delete_schedule_ptr_t reduce) {
-
-    std::unique_lock<std::mutex> lck(m);
-    delete_cmds.push_back(std::move(reduce));
+    for(auto &cmd : cmds) {
+      to_schedule.push_back(std::move(cmd));
+    }
     new_commands = true;
     cv.notify_all();
   }
@@ -349,8 +300,10 @@ public:
     // wait to get something
     std::unique_lock<std::mutex> lck(m);
     cv.wait(lck, [&] {
-      return (!retired_kernels.empty() || !finished_gc.empty() ||
-              !apply_cmds.empty() || !reduce_cmds.empty() || shutdown);
+      return (!retired_kernels.empty() || 
+              !finished_gc.empty() ||
+              !to_schedule.empty() ||
+              shutdown);
     });
 
     // clear it just in case
@@ -359,12 +312,10 @@ public:
     // give the updates
     std::swap(req->retired_kernels, retired_kernels);
     std::swap(req->finished_gc, finished_gc);
-    std::swap(req->apply_cmds, apply_cmds);
-    std::swap(req->reduce_cmds, reduce_cmds);
+    std::swap(req->to_schedule, to_schedule);
     std::swap(req->cpu_transfers, cpu_transfers);
     std::swap(req->gpu_transfers, gpu_transfers);
     std::swap(req->flush_requests, flush_requests);
-    std::swap(req->delete_cmds, delete_cmds);
     std::swap(req->cpu_created_tensors, cpu_created_tensors);
 
     // forward the shutdown request if any
@@ -376,8 +327,7 @@ public:
     std::unique_lock<std::mutex> lck(m);
     return (!retired_kernels.empty() || 
             !finished_gc.empty() ||
-            !apply_cmds.empty() || 
-            !reduce_cmds.empty() || 
+            !to_schedule.empty() || 
             !flush_requests.empty() ||
             shutdown);
   }
@@ -392,11 +342,7 @@ private:
 
   std::vector<gc_request_ptr_t> finished_gc;
 
-  std::vector<apply_schedule_ptr_t> apply_cmds;
-
-  std::vector<reduce_schedule_ptr_t> reduce_cmds;
-
-  std::vector<delete_schedule_ptr_t> delete_cmds;
+  std::vector<gpu_command_schedule_ptr_t> to_schedule;
 
   std::vector<cpu_to_gpu_transfer_ptr_t> cpu_transfers;
 

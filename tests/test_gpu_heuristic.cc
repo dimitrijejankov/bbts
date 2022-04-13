@@ -21,7 +21,7 @@ apply_schedule_ptr_t create_apply(command_id_t id,
   }
 
   // make the actual apply schedule
-  auto apply = std::make_shared<bbts::apply_schedule_t>(); 
+  auto apply = std::make_shared<bbts::command_schedule_t>(); 
   apply->cmd = command_t::create_apply(id, {0, 0}, true, {}, in, out);
 
   // we don't care about this

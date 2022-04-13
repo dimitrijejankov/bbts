@@ -21,14 +21,11 @@ public:
 
   ~gpu_memory_t();
 
-  // mark that we are going to use all the inputs from the apply
-  void mark_for_use(const apply_schedule_ptr_t &apply);
-
-  // mark that we are going to use all the inputs from the reduce
-  void mark_for_use(const reduce_schedule_ptr_t &reduce);
-
   // mark that a tensor has already been used
   void mark_as_used(tid_t id);
+
+  // mark the gpu command for use
+  void mark_for_use(const gpu_command_schedule_ptr_t &cmd_sch);
 
   // mark this tensor for deletion
   void mark_for_deletion(tid_t id);
@@ -86,6 +83,12 @@ public:
   void mark_as_flushed(const std::vector<std::tuple<tensor_t*, tid_t, size_t>> &to_flush);
   
 private:
+
+  // mark that we are going to use all the inputs from the apply
+  void _mark_apply_for_use(const gpu_command_schedule_ptr_t &apply);
+
+  // mark that we are going to use all the inputs from the reduce
+  void _mark_reduce_for_use(const gpu_command_schedule_ptr_t &reduce);
 
   // performs the actual remove
   void _remove(tid_t id, size_t num_bytes);

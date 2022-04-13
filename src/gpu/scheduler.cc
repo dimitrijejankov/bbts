@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <ostream>
 
@@ -281,30 +282,32 @@ void multi_gpu_scheduler_t::command_prep_thread() {
     }
 
     // 4. did we get any new commands that were scheduled?
-    // go through them and schedule them, while doing this update the
-    // 'GOODNESS'
-    for (auto &nc : req->apply_cmds) {
+    // go through them and schedule them, while doing this update the 'GOODNESS'
+    for (auto &nc : req->to_schedule) {
       
-      // mark all the inputs for use
-      mem.mark_for_use(nc);
+      if(nc->cmd->type == command_t::APPLY) {
 
-      // register the apply with the heuristic
-      heuristic.register_apply(nc);
-    }
-    for (auto &nc : req->reduce_cmds) {
+        // mark all the inputs for use
+        mem.mark_for_use(nc);
 
-      // mark all the inputs for use
-      mem.mark_for_use(nc);
+        // register the apply with the heuristic
+        heuristic.register_apply(nc);
+      }
+      else if (nc->cmd->type == command_t::REDUCE) {
 
-      // register the reduce with the heuristic
-      heuristic.register_reduce(nc);
-    }
-    for(auto &dc : req->delete_cmds) {
+        // mark all the inputs for use
+        mem.mark_for_use(nc);
 
-      // mark all the tensor for deletion
-      for(auto idx = 0; idx < req->delete_cmds[idx]->cmd->get_num_inputs(); ++idx) {
-        mem.mark_for_deletion(req->delete_cmds[idx]->cmd->get_inputs()[idx].tid);
-        heuristic.remove_tensor(req->delete_cmds[idx]->cmd->get_inputs()[idx].tid);
+        // register the reduce with the heuristic
+        heuristic.register_reduce(nc);
+      }
+      else if (nc->cmd->type == command_t::DELETE) {
+
+        // mark all the tensor for deletion
+        for(auto idx = 0; idx < nc->cmd->get_num_inputs(); ++idx) {
+          mem.mark_for_deletion(nc->cmd->get_inputs()[idx].tid);
+          heuristic.remove_tensor(nc->cmd->get_inputs()[idx].tid);
+        }
       }
     }
 
@@ -448,7 +451,8 @@ void multi_gpu_scheduler_t::gc_thread(int dev_id) {
     scheduler_queue.signal_reaper_done(request);
   }
 }
-void multi_gpu_scheduler_t::schedule_apply(bbts::command_ptr_t cmd) {
+
+gpu_command_schedule_ptr_t multi_gpu_scheduler_t::_prepare_apply(bbts::command_ptr_t &cmd) {
 
   assert(cmd->type == bbts::command_t::APPLY);
   auto fun = udm->get_fn_impl(cmd->fun_id);
@@ -491,7 +495,7 @@ void multi_gpu_scheduler_t::schedule_apply(bbts::command_ptr_t cmd) {
   }
 
   // signal that we have processed this request
-  auto apply_sch = std::make_shared<apply_schedule_t>();
+  auto apply_sch = std::make_shared<gpu_command_schedule_t>();
   apply_sch->fn = fun;
   apply_sch->input_sizes = std::move(in_bytes);
   apply_sch->output_sizes = std::move(out_bytes);
@@ -499,10 +503,10 @@ void multi_gpu_scheduler_t::schedule_apply(bbts::command_ptr_t cmd) {
   apply_sch->cmd = std::move(cmd);
 
   // signal the apply
-  scheduler_queue.signal_apply(std::move(apply_sch));
+  return std::move(apply_sch);
 }
 
-void multi_gpu_scheduler_t::schedule_reduce(bbts::command_ptr_t cmd) {
+gpu_command_schedule_ptr_t multi_gpu_scheduler_t::_prepare_reduce(bbts::command_ptr_t &cmd) {
 
   assert(cmd->type == bbts::command_t::REDUCE);
   auto fun = udm->get_fn_impl(cmd->fun_id);
@@ -535,25 +539,25 @@ void multi_gpu_scheduler_t::schedule_reduce(bbts::command_ptr_t cmd) {
   fun->get_out_meta(_params, input_meta, output_meta);
 
   // make the reduce request
-  auto reduce_sch = std::make_shared<reduce_schedule_t>();
+  auto reduce_sch = std::make_shared<gpu_command_schedule_t>();
 
   // create the schedule request
   reduce_sch->cmd = std::move(cmd);
   reduce_sch->fn = fun;
   reduce_sch->input_sizes = { tf->get_tensor_size(input_meta.get_by_idx(0)),
                               tf->get_tensor_size(input_meta.get_by_idx(1)) };
-  reduce_sch->output_size = { tf->get_tensor_size(output_meta.get_by_idx(0)) };
+  reduce_sch->output_sizes = { tf->get_tensor_size(output_meta.get_by_idx(0)) };
 
   // signal the reduce
-  scheduler_queue.signal_reduce(std::move(reduce_sch));
+  return std::move(reduce_sch);
 }
 
-void multi_gpu_scheduler_t::schedule_delete(bbts::command_ptr_t cmd) {
+gpu_command_schedule_ptr_t multi_gpu_scheduler_t::_prepare_delete(bbts::command_ptr_t &cmd) {
 
   // make the reduce request
-  auto delete_sch = std::shared_ptr<delete_schedule_t>();
+  auto delete_sch = std::make_shared<gpu_command_schedule_t>();
   delete_sch->cmd = std::move(cmd);
-  scheduler_queue.signal_delete(std::move(delete_sch));
+  return std::move(delete_sch);
 }
 
 void multi_gpu_scheduler_t::mark_tensor_on_cpu(tid_t tid, 
@@ -636,6 +640,26 @@ void multi_gpu_scheduler_t::shutdown() {
 int32_t multi_gpu_scheduler_t::num_gpus() const {
   return _num_gpus;
 }
+
+void multi_gpu_scheduler_t::schedule(std::vector<bbts::command_ptr_t> &to_schedule) {
+
+  std::vector<bbts::gpu_command_schedule_ptr_t> prep;
+  for(auto &cmd : to_schedule) {
+    
+    assert(cmd->is_apply() || cmd->is_reduce() || cmd->is_delete());
+    if(cmd->is_apply()) {
+      prep.push_back(_prepare_apply(cmd));
+    }
+    else if(cmd->is_reduce()) {
+      prep.push_back(_prepare_reduce(cmd));
+    }
+    else if(cmd->is_delete()) {
+      prep.push_back(_prepare_delete(cmd));
+    }
+  }
+  scheduler_queue.signal_cmds_scheduled(prep);
+}
+
 
 bool multi_gpu_scheduler_t::_schedule_for_execution(kernel_prep_ptr_t kernel_prep, int32_t target_dev) {
   

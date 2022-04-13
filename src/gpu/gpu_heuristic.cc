@@ -276,7 +276,7 @@ void gpu_heuristic_t::_update_heuristic_for_inputs(const std::vector<tid_t> &inp
   }
 }
 
-void gpu_heuristic_t::register_apply(bbts::apply_schedule_ptr_t &apply_sch) {
+void gpu_heuristic_t::register_apply(bbts::gpu_command_schedule_ptr_t &apply_sch) {
 
   auto &cmd = apply_sch->cmd;
   auto &apply_cmd = apply_cmds[cmd->id];
@@ -369,7 +369,7 @@ void gpu_heuristic_t::register_apply(bbts::apply_schedule_ptr_t &apply_sch) {
   }
 };
 
-void gpu_heuristic_t::register_reduce(bbts::reduce_schedule_ptr_t &reduce_sch) {
+void gpu_heuristic_t::register_reduce(bbts::gpu_command_schedule_ptr_t &reduce_sch) {
 
   auto &cmd = reduce_sch->cmd;
   auto &reduce_cmd = reduce_cmds[cmd->id];
@@ -379,7 +379,7 @@ void gpu_heuristic_t::register_reduce(bbts::reduce_schedule_ptr_t &reduce_sch) {
   reduce_cmd.num_issued = 0;
 
   // TODO: this is not corrent but it will for for testing
-  reduce_cmd.output_size = reduce_sch->output_size;
+  reduce_cmd.output_size = reduce_sch->output_sizes.front();
   reduce_cmd.it = goodness_heuristic.end();
 
   // fill out the kernel

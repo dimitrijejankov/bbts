@@ -50,10 +50,10 @@ public:
   void remove_tensor(tid_t id);
 
   // register a new APPLY command to be scheduled
-  void register_apply(bbts::apply_schedule_ptr_t &apply_sch);
+  void register_apply(bbts::gpu_command_schedule_ptr_t &apply_sch);
   
   // register a new REDUCE command to be scheduled
-  void register_reduce(bbts::reduce_schedule_ptr_t &reduce_sch);
+  void register_reduce(bbts::gpu_command_schedule_ptr_t &reduce_sch);
 
   // mark that a kernel has been scheduled
   void mark_as_scheduled(const kernel_prep_ptr_t &prep);

@@ -2,6 +2,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <gtest/gtest.h>
+#include <vector>
 
 using namespace std::chrono;
 
@@ -143,10 +144,12 @@ TEST(TestGPUScheduler, Test1) {
   auto scheduler_threads = run_threads(scheduler);
 
   // schedule the run commands
-  scheduler->schedule_apply(std::move(create_apply(
-      0, udf_manager, "const", {}, {0},
-      {bbts::command_param_t{.i = 100}, bbts::command_param_t{.i = 100},
-       bbts::command_param_t{.f = 2.0f}})));
+  std::vector<bbts::command_ptr_t> to_schedule(1);
+  to_schedule[0] = std::move(create_apply(0, udf_manager, "const", {}, {0},
+                                          { bbts::command_param_t{.i = 100}, 
+                                            bbts::command_param_t{.i = 100}, 
+                                            bbts::command_param_t{.f = 2.0f} }));
+  scheduler->schedule(to_schedule);
 
   // move all the tensors currently in the GPU back into RAM
   scheduler->flush();
@@ -196,9 +199,10 @@ TEST(TestGPUScheduler, Test2) {
   init_tensor_on_cpu(scheduler, factory, storage, 3, 100, 100, 4.0f);
 
   // create a reduce and schedule it
-  auto cmd = create_reduce(0, udf_manager, "matrix_add", 
-                           {0, 1, 2, 3}, 4, {});
-  scheduler->schedule_reduce(std::move(cmd));
+  std::vector<bbts::command_ptr_t> to_schedule(1);
+  auto cmd = create_reduce(0, udf_manager, "matrix_add", {0, 1, 2, 3}, 4, {});
+  to_schedule[0] = std::move(cmd);
+  scheduler->schedule(to_schedule);
 
   // move all the tensors currently in the GPU back into RAM
   scheduler->flush();
@@ -253,44 +257,43 @@ TEST(TestGPUScheduler, Test3) {
   init_tensor_on_cpu(scheduler, factory, storage, 6, 100, 100, 4.0f); // B(0, 1)
   init_tensor_on_cpu(scheduler, factory, storage, 7, 100, 100, 5.0f); // B(1, 1)
 
-  // create a numch of matrix multiplies
-  scheduler->schedule_apply(std::move(create_apply(0, udf_manager, "const", {}, {0}, {})));
-
   // create a reduce and schedule it
-  auto cmd1 = create_apply(0, udf_manager, "matrix_mult",  {0, 4}, {8}, {});   // C_0(0, 0) = A(0, 0) * B(0, 0)
-  auto cmd2 = create_apply(1, udf_manager, "matrix_mult",  {2, 5}, {9}, {});   // C_1(0, 0) = A(0, 1) * B(1, 0)
+  auto cmd1 = create_apply(0, udf_manager, "matrix_mult",  {0, 4}, {8}, {});    // C_0(0, 0) = A(0, 0) * B(0, 0)
+  auto cmd2 = create_apply(1, udf_manager, "matrix_mult",  {2, 5}, {9}, {});    // C_1(0, 0) = A(0, 1) * B(1, 0)
 
-  auto cmd3 = create_apply(2, udf_manager, "matrix_mult",  {1, 4}, {10}, {});  // C_0(1, 0) = A(1, 0) * B(0, 0)
-  auto cmd4 = create_apply(3, udf_manager, "matrix_mult",  {2, 5}, {11}, {});  // C_1(1, 0) = A(0, 1) * B(1, 0)
+  auto cmd3 = create_apply(2, udf_manager, "matrix_mult",  {1, 4}, {10}, {});   // C_0(1, 0) = A(1, 0) * B(0, 0)
+  auto cmd4 = create_apply(3, udf_manager, "matrix_mult",  {2, 5}, {11}, {});   // C_1(1, 0) = A(0, 1) * B(1, 0)
 
-  auto cmd5 = create_apply(4, udf_manager, "matrix_mult",  {0, 6}, {12}, {});  // C_0(0, 1) = A(0, 0) * B(0, 1)
-  auto cmd6 = create_apply(5, udf_manager, "matrix_mult",  {2, 7}, {13}, {});  // C_1(0, 1) = A(0, 1) * B(1, 1)
+  auto cmd5 = create_apply(4, udf_manager, "matrix_mult",  {0, 6}, {12}, {});   // C_0(0, 1) = A(0, 0) * B(0, 1)
+  auto cmd6 = create_apply(5, udf_manager, "matrix_mult",  {2, 7}, {13}, {});   // C_1(0, 1) = A(0, 1) * B(1, 1)
 
-  auto cmd7 = create_apply(6, udf_manager, "matrix_mult",  {1, 6}, {14}, {});  // C_0(1, 1) = A(1, 0) * B(0, 1)
-  auto cmd8 = create_apply(7, udf_manager, "matrix_mult",  {3, 7}, {15}, {});  // C_1(1, 1) = A(1, 1) * B(1, 1)
+  auto cmd7 = create_apply(6, udf_manager, "matrix_mult",  {1, 6}, {14}, {});   // C_0(1, 1) = A(1, 0) * B(0, 1)
+  auto cmd8 = create_apply(7, udf_manager, "matrix_mult",  {3, 7}, {15}, {});   // C_1(1, 1) = A(1, 1) * B(1, 1)
 
-  auto cmd9  = create_reduce(8,  udf_manager, "matrix_mult", {0, 1}, 16, {});  // C(0, 0) = C_0(0, 0) + C_1(0, 0)
-  auto cmd10 = create_reduce(9,  udf_manager, "matrix_mult", {2, 3}, 17, {});  // C(1, 0) = C_0(1, 0) + C_1(1, 0)
-  auto cmd11 = create_reduce(10, udf_manager, "matrix_mult", {4, 5}, 18, {});  // C(0, 1) = C_0(0, 1) + C_1(0, 1)
-  auto cmd12 = create_reduce(11, udf_manager, "matrix_mult", {6, 7}, 19, {});  // C(1, 1) = C_0(1, 1) + C_1(1, 1)
+  auto cmd9  = create_reduce(8,  udf_manager, "matrix_add", {8, 9}, 16, {});    // C(0, 0) = C_0(0, 0) + C_1(0, 0)
+  auto cmd10 = create_reduce(9,  udf_manager, "matrix_add", {10, 11}, 17, {});  // C(1, 0) = C_0(1, 0) + C_1(1, 0)
+  auto cmd11 = create_reduce(10, udf_manager, "matrix_add", {12, 13}, 18, {});  // C(0, 1) = C_0(0, 1) + C_1(0, 1)
+  auto cmd12 = create_reduce(11, udf_manager, "matrix_add", {14, 15}, 19, {});  // C(1, 1) = C_0(1, 1) + C_1(1, 1)
 
   auto cmd13 = create_delete(12, {8, 9, 10, 11, 12, 13, 14, 15}); // remove the intermedite results
 
-  scheduler->schedule_apply(std::move(cmd1));
-  scheduler->schedule_apply(std::move(cmd2));
-  scheduler->schedule_apply(std::move(cmd3));
-  scheduler->schedule_apply(std::move(cmd4));
-  scheduler->schedule_apply(std::move(cmd5));
-  scheduler->schedule_apply(std::move(cmd6));
-  scheduler->schedule_apply(std::move(cmd7));
-  scheduler->schedule_apply(std::move(cmd8));
+  // move them to a vector and schedule them all
+  std::vector<bbts::command_ptr_t> to_schedule(13);
+  to_schedule[0] = std::move(cmd1);
+  to_schedule[1] = std::move(cmd2);
+  to_schedule[2] = std::move(cmd3);
+  to_schedule[3] = std::move(cmd4);
+  to_schedule[4] = std::move(cmd5);
+  to_schedule[5] = std::move(cmd6);
+  to_schedule[6] = std::move(cmd7);
+  to_schedule[7] = std::move(cmd8);
+  to_schedule[8] = std::move(cmd9);
+  to_schedule[9] = std::move(cmd10);
+  to_schedule[10] = std::move(cmd11);
+  to_schedule[11] = std::move(cmd12);
+  to_schedule[12] = std::move(cmd13);
 
-  scheduler->schedule_reduce(std::move(cmd9));
-  scheduler->schedule_reduce(std::move(cmd10));
-  scheduler->schedule_reduce(std::move(cmd11));
-  scheduler->schedule_reduce(std::move(cmd12));
-
-  scheduler->schedule_delete(std::move(cmd13));
+  scheduler->schedule(to_schedule);
 
   // move all the tensors currently in the GPU back into RAM
   scheduler->flush();

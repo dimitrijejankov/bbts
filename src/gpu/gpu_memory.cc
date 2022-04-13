@@ -36,7 +36,7 @@ gpu_memory_t::~gpu_memory_t() {
   }
 }
 
-void gpu_memory_t::mark_for_use(const apply_schedule_ptr_t &apply) {
+void gpu_memory_t::_mark_apply_for_use(const gpu_command_schedule_ptr_t &apply) {
 
   for(auto in_idx = 0; in_idx < apply->cmd->get_num_inputs(); in_idx++) {
 
@@ -61,7 +61,7 @@ void gpu_memory_t::mark_for_use(const apply_schedule_ptr_t &apply) {
   }
 };
 
-void gpu_memory_t::mark_for_use(const reduce_schedule_ptr_t &reduce) {
+void gpu_memory_t::_mark_reduce_for_use(const gpu_command_schedule_ptr_t &reduce) {
 
   for(auto in_idx = 0; in_idx < reduce->cmd->get_num_inputs(); in_idx++) {
 
@@ -109,6 +109,16 @@ void gpu_memory_t::mark_as_used(tid_t id) {
     }
   }
 };
+
+void gpu_memory_t::mark_for_use(const gpu_command_schedule_ptr_t &cmd_sch) {
+  assert(cmd_sch->cmd->is_apply() || cmd_sch->cmd->is_reduce());
+  if(cmd_sch->cmd->is_apply()) {
+    _mark_apply_for_use(cmd_sch);
+  }
+  else if(cmd_sch->cmd->is_reduce()){
+    _mark_reduce_for_use(cmd_sch);
+  }
+}
 
 void gpu_memory_t::mark_for_deletion(tid_t id) {
 
