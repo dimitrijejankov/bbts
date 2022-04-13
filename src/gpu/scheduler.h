@@ -38,7 +38,7 @@ public:
   void schedule_reduce(bbts::command_ptr_t cmd);
 
   // mark that this tensor is not necessary anymore and can be safely deleted
-  void mark_for_deletion(bbts::command_ptr_t cmd);
+  void schedule_delete(bbts::command_ptr_t cmd);
 
   // mark that a tensor is created
   void mark_tensor_on_cpu(tid_t tid, size_t num_bytes, tensor_meta_t meta);

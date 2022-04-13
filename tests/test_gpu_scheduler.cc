@@ -85,6 +85,17 @@ create_reduce(bbts::command_id_t id,
   return std::move(cmd);
 }
 
+bbts::command_ptr_t
+create_delete(bbts::command_id_t id, const std::vector<bbts::tid_t> &inputs) {
+
+  std::vector<bbts::command_t::tid_node_id_t> prep_in;
+  for (auto in : inputs) {
+    prep_in.push_back(bbts::command_t::tid_node_id_t{.tid = in, .node = 0});
+  }
+  auto cmd = bbts::command_t::create_delete(id, prep_in);
+  return std::move(cmd);
+}
+
 std::vector<std::thread>
 run_threads(bbts::multi_gpu_scheduler_ptr_t scheduler) {
 
@@ -188,6 +199,98 @@ TEST(TestGPUScheduler, Test2) {
   auto cmd = create_reduce(0, udf_manager, "matrix_add", 
                            {0, 1, 2, 3}, 4, {});
   scheduler->schedule_reduce(std::move(cmd));
+
+  // move all the tensors currently in the GPU back into RAM
+  scheduler->flush();
+
+  // finish all the threads
+  scheduler->shutdown();
+  for (auto &t : scheduler_threads) {
+    t.join();
+  }
+
+  storage->local_transaction(
+      {4}, {}, [&](const bbts::storage_t::reservation_result_t &res) {
+        auto ts = res.get[0].get().tensor;
+        auto &t = ts->as<bbts::dense_tensor_t>();
+        for (auto idx = 0; idx < 100 * 100; ++idx) {
+          EXPECT_NEAR(t.data()[idx], 10.0f, 0.001);
+        }
+      });
+}
+
+
+TEST(TestGPUScheduler, Test3) {
+
+  // make the storage
+  auto config = std::make_shared<bbts::node_config_t>(0, nullptr);
+  config->is_dev_cluster = true;
+
+  auto storage = std::make_shared<bbts::storage_t>(nullptr, config);
+
+  // create the tensor factory
+  auto factory = std::make_shared<bbts::tensor_factory_t>();
+
+  // crate the udf manager
+  auto udf_manager = std::make_shared<bbts::udf_manager_t>(factory, nullptr);
+
+  // make the scheduler
+  auto scheduler = std::make_shared<bbts::multi_gpu_scheduler_t>(
+      4, 16lu * 1024lu * 1024lu * 1024lu, storage, udf_manager, factory);
+
+  // run all the scheduler threads
+  auto scheduler_threads = run_threads(scheduler);
+
+  // create four tensors on the CPU for matrix A
+  init_tensor_on_cpu(scheduler, factory, storage, 0, 100, 100, 1.0f); // A(0, 0)
+  init_tensor_on_cpu(scheduler, factory, storage, 1, 100, 100, 2.0f); // A(1, 0)
+  init_tensor_on_cpu(scheduler, factory, storage, 2, 100, 100, 3.0f); // A(0, 1)
+  init_tensor_on_cpu(scheduler, factory, storage, 3, 100, 100, 4.0f); // A(1, 1)
+
+  // create four tensors on the CPU for matrix B
+  init_tensor_on_cpu(scheduler, factory, storage, 4, 100, 100, 2.0f); // B(0, 0)
+  init_tensor_on_cpu(scheduler, factory, storage, 5, 100, 100, 3.0f); // B(1, 0)
+  init_tensor_on_cpu(scheduler, factory, storage, 6, 100, 100, 4.0f); // B(0, 1)
+  init_tensor_on_cpu(scheduler, factory, storage, 7, 100, 100, 5.0f); // B(1, 1)
+
+  // create a numch of matrix multiplies
+  scheduler->schedule_apply(std::move(create_apply(0, udf_manager, "const", {}, {0}, {})));
+
+  // create a reduce and schedule it
+  auto cmd1 = create_apply(0, udf_manager, "matrix_mult",  {0, 4}, {8}, {});   // C_0(0, 0) = A(0, 0) * B(0, 0)
+  auto cmd2 = create_apply(1, udf_manager, "matrix_mult",  {2, 5}, {9}, {});   // C_1(0, 0) = A(0, 1) * B(1, 0)
+
+  auto cmd3 = create_apply(2, udf_manager, "matrix_mult",  {1, 4}, {10}, {});  // C_0(1, 0) = A(1, 0) * B(0, 0)
+  auto cmd4 = create_apply(3, udf_manager, "matrix_mult",  {2, 5}, {11}, {});  // C_1(1, 0) = A(0, 1) * B(1, 0)
+
+  auto cmd5 = create_apply(4, udf_manager, "matrix_mult",  {0, 6}, {12}, {});  // C_0(0, 1) = A(0, 0) * B(0, 1)
+  auto cmd6 = create_apply(5, udf_manager, "matrix_mult",  {2, 7}, {13}, {});  // C_1(0, 1) = A(0, 1) * B(1, 1)
+
+  auto cmd7 = create_apply(6, udf_manager, "matrix_mult",  {1, 6}, {14}, {});  // C_0(1, 1) = A(1, 0) * B(0, 1)
+  auto cmd8 = create_apply(7, udf_manager, "matrix_mult",  {3, 7}, {15}, {});  // C_1(1, 1) = A(1, 1) * B(1, 1)
+
+  auto cmd9  = create_reduce(8,  udf_manager, "matrix_mult", {0, 1}, 16, {});  // C(0, 0) = C_0(0, 0) + C_1(0, 0)
+  auto cmd10 = create_reduce(9,  udf_manager, "matrix_mult", {2, 3}, 17, {});  // C(1, 0) = C_0(1, 0) + C_1(1, 0)
+  auto cmd11 = create_reduce(10, udf_manager, "matrix_mult", {4, 5}, 18, {});  // C(0, 1) = C_0(0, 1) + C_1(0, 1)
+  auto cmd12 = create_reduce(11, udf_manager, "matrix_mult", {6, 7}, 19, {});  // C(1, 1) = C_0(1, 1) + C_1(1, 1)
+
+  auto cmd13 = create_delete(12, {8, 9, 10, 11, 12, 13, 14, 15}); // remove the intermedite results
+
+  scheduler->schedule_apply(std::move(cmd1));
+  scheduler->schedule_apply(std::move(cmd2));
+  scheduler->schedule_apply(std::move(cmd3));
+  scheduler->schedule_apply(std::move(cmd4));
+  scheduler->schedule_apply(std::move(cmd5));
+  scheduler->schedule_apply(std::move(cmd6));
+  scheduler->schedule_apply(std::move(cmd7));
+  scheduler->schedule_apply(std::move(cmd8));
+
+  scheduler->schedule_reduce(std::move(cmd9));
+  scheduler->schedule_reduce(std::move(cmd10));
+  scheduler->schedule_reduce(std::move(cmd11));
+  scheduler->schedule_reduce(std::move(cmd12));
+
+  scheduler->schedule_delete(std::move(cmd13));
 
   // move all the tensors currently in the GPU back into RAM
   scheduler->flush();

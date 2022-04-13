@@ -548,7 +548,7 @@ void multi_gpu_scheduler_t::schedule_reduce(bbts::command_ptr_t cmd) {
   scheduler_queue.signal_reduce(std::move(reduce_sch));
 }
 
-void multi_gpu_scheduler_t::mark_for_deletion(bbts::command_ptr_t cmd) {
+void multi_gpu_scheduler_t::schedule_delete(bbts::command_ptr_t cmd) {
 
   // make the reduce request
   auto delete_sch = std::shared_ptr<delete_schedule_t>();
