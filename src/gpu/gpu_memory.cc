@@ -67,19 +67,21 @@ void gpu_memory_t::_mark_reduce_for_use(const gpu_command_schedule_ptr_t &reduce
 
     // get the tid
     auto tid = reduce->cmd->get_inputs()[in_idx].tid;
+    auto num_bytes = reduce->input_sizes[in_idx];
 
     // get the tensors and update the use count
-    auto it = _tensors.find(tid); assert(it != _tensors.end());
-    it->second.num_uses++;
+    bool created;
+    auto t = _init_tensor(tid, num_bytes, created);
+    t.num_uses++;
 
     // update the unpinned tensor so that they are sorted right
     for (auto dev = 0; dev < _num_devices; ++dev) {
 
       // check if we actually have it
-      if (it->second.unpinned_its[dev] != _unpinned_tensors[dev].end()) {
-        _unpinned_tensors[dev].erase(it->second.unpinned_its[dev]);
-        it->second.unpinned_its[dev]  = _unpinned_tensors[dev].insert({{it->second.num_copies, 
-                                                                        it->second.num_uses}, tid});
+      if (t.unpinned_its[dev] != _unpinned_tensors[dev].end()) {
+        _unpinned_tensors[dev].erase(t.unpinned_its[dev]);
+        t.unpinned_its[dev]  = _unpinned_tensors[dev].insert({{t.num_copies, 
+                                                               t.num_uses}, tid});
       }
     }
   }

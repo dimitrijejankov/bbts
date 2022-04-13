@@ -6,6 +6,7 @@
 #include <memory>
 #include <mutex>
 #include <ostream>
+#include <utility>
 
 namespace bbts {
 
@@ -163,6 +164,7 @@ void multi_gpu_scheduler_t::cpu_to_gpu_thread() {
   cudaStream_t cpy_stream;
   cudaStreamCreate(&cpy_stream);
 
+  std::vector<cpu_to_gpu_transfer_ptr_t> done_transfers;
   while (true) {
 
     // get a kernel run
@@ -175,35 +177,41 @@ void multi_gpu_scheduler_t::cpu_to_gpu_thread() {
     }
 
     // schedule all the copies
+    done_transfers.clear();
     for (auto &t : prep->cpu_transfers) {
 
       // lock so that we can perform the copy
       std::unique_lock<std::mutex> lck(t->m);
 
       // run the local transaction move the tensor
-      storage->local_transaction(
-          {t->tid}, {}, [&](const storage_t::reservation_result_t &res) {
+      if(!t->is_finished) {
 
-            // create the tensor
-            auto ts = res.get[0].get().tensor;
+        // process the local transaction
+        storage->local_transaction(
+            {t->tid}, {}, [&](const storage_t::reservation_result_t &res) {
 
-            // copy the tensor from the CPU to the GPU
-            cudaMemcpy(t->dst->get_data_ptr<void>(), 
-                       ts->get_data_ptr<void>(), 
-                       t->num_bytes - sizeof(tensor_t), 
-                       cudaMemcpyHostToDevice);
+              // create the tensor
+              auto ts = res.get[0].get().tensor;
 
-            // copy the meta data
-            t->dst->get_meta<tensor_meta_t>() = 
-              ts->get_meta<tensor_meta_t>();
-          });
+              // copy the tensor from the CPU to the GPU
+              cudaMemcpy(t->dst->get_data_ptr<void>(), 
+                        ts->get_data_ptr<void>(), 
+                        t->num_bytes - sizeof(tensor_t), 
+                        cudaMemcpyHostToDevice);
 
-      // mark that it is finished
-      t->is_finished = true;
+              // copy the meta data
+              t->dst->get_meta<tensor_meta_t>() = 
+                ts->get_meta<tensor_meta_t>();
+        });
+
+        // mark that it is finished
+        t->is_finished = true;
+        done_transfers.push_back(std::move(t));
+      }
     }
 
     // signal that the CPU transfers are done
-    scheduler_queue.signal_cpu_to_gpu_transfer_done(prep->cpu_transfers);
+    scheduler_queue.signal_cpu_to_gpu_transfer_done(done_transfers);
 
     // mark that we are done and possibly shedule for execution
     std::unique_lock<std::mutex> lck(prep->m);
@@ -513,6 +521,7 @@ gpu_command_schedule_ptr_t multi_gpu_scheduler_t::_prepare_reduce(bbts::command_
 
   // the parameters
   ud_impl_t::tensor_params_t _params;
+  bbts::ud_impl_t::meta_args_t input_meta_for_size;
   bbts::ud_impl_t::meta_args_t input_meta;
   bbts::ud_impl_t::meta_args_t output_meta;
 
@@ -521,9 +530,15 @@ gpu_command_schedule_ptr_t multi_gpu_scheduler_t::_prepare_reduce(bbts::command_
   {
     std::unique_lock<std::mutex> lck(meta_lck);
 
-    // prepare the inputs
-    input_meta.resize(2);
+    // prepare the inputs for the kernel meta run
+    input_meta_for_size.resize(2);
     for (int i = 0; i < 2; i++) {
+      input_meta_for_size.set(i, _meta[cmd->get_inputs()[i].tid]);
+    }
+
+    // perpare the inputs for the scheduler
+    input_meta.resize(cmd->get_num_inputs());
+    for (int i = 0; i < cmd->get_num_inputs(); i++) {
       input_meta.set(i, _meta[cmd->get_inputs()[i].tid]);
     }
 
@@ -536,7 +551,7 @@ gpu_command_schedule_ptr_t multi_gpu_scheduler_t::_prepare_reduce(bbts::command_
   _params = ud_impl_t::tensor_params_t{._params = cmd->get_parameters()};
 
   // run the function to generate the metadata
-  fun->get_out_meta(_params, input_meta, output_meta);
+  fun->get_out_meta(_params, input_meta_for_size, output_meta);
 
   // make the reduce request
   auto reduce_sch = std::make_shared<gpu_command_schedule_t>();
@@ -544,8 +559,9 @@ gpu_command_schedule_ptr_t multi_gpu_scheduler_t::_prepare_reduce(bbts::command_
   // create the schedule request
   reduce_sch->cmd = std::move(cmd);
   reduce_sch->fn = fun;
-  reduce_sch->input_sizes = { tf->get_tensor_size(input_meta.get_by_idx(0)),
-                              tf->get_tensor_size(input_meta.get_by_idx(1)) };
+  for (int i = 0; i < input_meta.num_args(); i++) {
+    reduce_sch->input_sizes.push_back(tf->get_tensor_size(input_meta.get_by_idx(i)));
+  }
   reduce_sch->output_sizes = { tf->get_tensor_size(output_meta.get_by_idx(0)) };
 
   // signal the reduce

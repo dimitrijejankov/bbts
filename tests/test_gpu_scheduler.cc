@@ -223,7 +223,6 @@ TEST(TestGPUScheduler, Test2) {
       });
 }
 
-
 TEST(TestGPUScheduler, Test3) {
 
   // make the storage
@@ -262,7 +261,7 @@ TEST(TestGPUScheduler, Test3) {
   auto cmd2 = create_apply(1, udf_manager, "matrix_mult",  {2, 5}, {9}, {});    // C_1(0, 0) = A(0, 1) * B(1, 0)
 
   auto cmd3 = create_apply(2, udf_manager, "matrix_mult",  {1, 4}, {10}, {});   // C_0(1, 0) = A(1, 0) * B(0, 0)
-  auto cmd4 = create_apply(3, udf_manager, "matrix_mult",  {2, 5}, {11}, {});   // C_1(1, 0) = A(0, 1) * B(1, 0)
+  auto cmd4 = create_apply(3, udf_manager, "matrix_mult",  {3, 5}, {11}, {});   // C_1(1, 0) = A(1, 1) * B(1, 0)
 
   auto cmd5 = create_apply(4, udf_manager, "matrix_mult",  {0, 6}, {12}, {});   // C_0(0, 1) = A(0, 0) * B(0, 1)
   auto cmd6 = create_apply(5, udf_manager, "matrix_mult",  {2, 7}, {13}, {});   // C_1(0, 1) = A(0, 1) * B(1, 1)
@@ -304,12 +303,15 @@ TEST(TestGPUScheduler, Test3) {
     t.join();
   }
 
-  storage->local_transaction(
-      {4}, {}, [&](const bbts::storage_t::reservation_result_t &res) {
+  std::vector<float> check_vals = {1100.0f, 1600.0f, 1900.0f, 2800.0f};
+  for(auto val_idx = 0; val_idx < check_vals.size(); ++val_idx) {
+    storage->local_transaction(
+      {16 + val_idx}, {}, [&](const bbts::storage_t::reservation_result_t &res) {
         auto ts = res.get[0].get().tensor;
         auto &t = ts->as<bbts::dense_tensor_t>();
         for (auto idx = 0; idx < 100 * 100; ++idx) {
-          EXPECT_NEAR(t.data()[idx], 10.0f, 0.001);
+          EXPECT_NEAR(t.data()[idx], check_vals[val_idx], 0.001);
         }
-      });
+    });
+  }
 }
