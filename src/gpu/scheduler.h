@@ -67,6 +67,9 @@ private:
   // involve preallocating memory as well as issuing a grabage collection request
   bool _schedule_for_execution(kernel_prep_ptr_t prep, int32_t dev);
 
+  // the device where we prefer for the kernel to be launched
+  int preffered_dev = 0;
+
   // this schedules commands that are already known to be on the GPU
   gpu_heuristic_t heuristic;
 

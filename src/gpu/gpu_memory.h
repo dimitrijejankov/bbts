@@ -17,7 +17,7 @@ namespace bbts {
 class gpu_memory_t {
 public:
 
-  gpu_memory_t(size_t num_devixces, size_t mem_per_gpu);
+  gpu_memory_t(size_t num_devices, size_t mem_per_gpu);
 
   ~gpu_memory_t();
 

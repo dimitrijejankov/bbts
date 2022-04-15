@@ -101,10 +101,16 @@ void multi_gpu_scheduler_t::gpu_to_gpu_thread(int32_t dev) {
 
     // schedule all the copies
     auto num_transfers = prep->gpu_transfers.size();
-    for (auto idx = num_transfers - 1; idx >= 0; --idx) {
+    for (int32_t idx = num_transfers - 1; idx >= 0; --idx) {
 
       // are there any CPU transfers that we need to wait for
       auto &t = prep->gpu_transfers[idx];
+
+      if(t->is_finished) {
+        prep->gpu_transfers.pop_back();
+        continue;
+      }
+
       if(t->depends != nullptr) {
 
         // try to lock access to the 
@@ -139,6 +145,11 @@ void multi_gpu_scheduler_t::gpu_to_gpu_thread(int32_t dev) {
     // sync all the copies
     cudaStreamSynchronize(cpy_stream);
 
+    // mark that it is finished
+    for(auto &t : done_transfers) {
+      t->is_finished = true;
+    }
+ 
     // signal that all the gpu transfers are done
     scheduler_queue.signal_gpu_to_gpu_transfer_done(done_transfers);
     
@@ -224,7 +235,6 @@ void multi_gpu_scheduler_t::cpu_to_gpu_thread() {
 
 void multi_gpu_scheduler_t::command_prep_thread() {
 
-  int preffered_dev = 0;
   bool should_sleep = false;
   scheduler_request_ptr_t req = std::make_shared<scheduler_request_t>();
   while (true) {
@@ -266,7 +276,16 @@ void multi_gpu_scheduler_t::command_prep_thread() {
     for (auto &fr : req->flush_requests) {
       outstanding_flush_requests.push_back(std::move(fr));
     }
-    
+
+    // 3. check for finished transfers
+    for(auto &gpu_transfer : req->gpu_transfers) {
+      mem.mark_transfer_done(gpu_transfer);
+    }
+
+    for(auto &cpu_transfers : req->cpu_transfers) {
+      mem.mark_transfer_done(cpu_transfers);
+    }
+
     // 2. check for finished kernels
     for (auto &fk : req->retired_kernels) {
 
@@ -278,15 +297,6 @@ void multi_gpu_scheduler_t::command_prep_thread() {
 
       // 2.2. we finished a kernel so decrement this
       num_unfinished_kernels--;
-    }
-
-    // 3. check for finished transfers
-    for(auto &gpu_transfer : req->gpu_transfers) {
-      mem.mark_transfer_done(gpu_transfer);
-    }
-
-    for(auto &cpu_transfers : req->cpu_transfers) {
-      mem.mark_transfer_done(cpu_transfers);
     }
 
     // 4. did we get any new commands that were scheduled?
@@ -368,7 +378,7 @@ void multi_gpu_scheduler_t::command_prep_thread() {
     else if ((kernel_prep = heuristic.get_next_on_any()) != nullptr) {
 
       // schedule them for execution, if it fails to schedule put it to sleep
-      bool scheduled = _schedule_for_execution(kernel_prep, dev);
+      bool scheduled = _schedule_for_execution(kernel_prep, preffered_dev);
       if(scheduled) {
         heuristic.mark_as_scheduled(kernel_prep);
       }
@@ -387,7 +397,7 @@ void multi_gpu_scheduler_t::command_prep_thread() {
     }
 
     // 7.2. schedule it for execution, if it fails to schedule put it to sleep
-    bool scheduled = _schedule_for_execution(kernel_prep, dev);
+    bool scheduled = _schedule_for_execution(kernel_prep, preffered_dev);
     if(scheduled) {
       heuristic.mark_as_scheduled(kernel_prep);
     }
@@ -708,6 +718,9 @@ bool multi_gpu_scheduler_t::_schedule_for_execution(kernel_prep_ptr_t kernel_pre
 
     // we just scheduled a kernel
     num_unfinished_kernels++;
+    
+    // go to the next device
+    preffered_dev = (preffered_dev + 1) % _num_gpus;
 
     return true;
   }
@@ -722,6 +735,9 @@ bool multi_gpu_scheduler_t::_schedule_for_execution(kernel_prep_ptr_t kernel_pre
 
     // we jusst schduled a kernel
     num_unfinished_kernels++;
+    
+    // 
+    preffered_dev = (preffered_dev + 1) % _num_gpus;
 
     return true;
   }

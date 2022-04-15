@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cuda.h>
 #include <memory>
+#include <ostream>
 #include <vector>
 
 namespace bbts {
@@ -193,6 +194,7 @@ void gpu_memory_t::tensor_loaded_on_gpu(tid_t id, int dev, size_t num_bytes) {
 
   // mark that it is loaded
   t.is_loaded_on_gpu[dev] = true;
+  assert(t.data[dev] != nullptr);
   t.num_copies++;
 
   // if the tensor was just created we mark it as unpinned
@@ -267,6 +269,7 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
         // set the input from the transfer
         kp->run_me->inputs.set(in_idx, *t.gpu_transfers[dev]->dst);
         _pin_tensor(kp->input[in_idx], dev, kp->input_sizes[in_idx]);
+        assert(t.gpu_transfers[dev]->dst != nullptr);
 
         // set the transfer to the kernel prep
         kp->gpu_transfers.push_back(t.gpu_transfers[dev]);
@@ -277,6 +280,7 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
         // set the input from the transfer
         kp->run_me->inputs.set(in_idx, *t.cpu_transfer->dst);
         _pin_tensor(kp->input[in_idx], dev, kp->input_sizes[in_idx]);
+        assert(t.cpu_transfer->dst != nullptr);
 
         // set the transfer to the kernel prep
         kp->cpu_transfers.push_back(t.cpu_transfer);
@@ -287,6 +291,7 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
         // allocate the memory 
         t.data[dev] = _allocate_tensor(kp->input_sizes[in_idx]);
         kp->run_me->inputs.set(in_idx, *t.data[dev]);
+        assert(t.data[dev] != nullptr);
 
         // since we just created a tensor on this device
         // we need to mark the free memory as used 
@@ -322,8 +327,10 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
       else if (_tensors[kp->input[in_idx]].cpu_transfer != nullptr) {
         
         // we need to latch onto the CPU transfer
+        src_dev = _tensors[kp->input[in_idx]].cpu_transfer->dst_dev;
         t.data[dev] = _allocate_tensor(kp->input_sizes[in_idx]);
         kp->run_me->inputs.set(in_idx, *t.data[dev]);
+        assert(t.data[dev] != nullptr);
 
         // since we just created a tensor on this device
         // we need to mark the free memory as used 
@@ -339,9 +346,11 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
 
         // init the transfer
         transfer->id = _cur_gpu_tp_gpu_tranfer_id++;
+        transfer->tid = kp->input[in_idx];
         transfer->src = _tensors[kp->input[in_idx]].data[src_dev].get();
         transfer->src_dev = src_dev;
         transfer->dst = t.data[dev].get();
+        transfer->dst_dev = dev;
         transfer->num_bytes = kp->input_sizes[in_idx];
         transfer->depends = _tensors[kp->input[in_idx]].cpu_transfer;
 
@@ -357,6 +366,7 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
         // allocate and pin the tensor
         t.data[dev] = _allocate_tensor(kp->input_sizes[in_idx]);
         kp->run_me->inputs.set(in_idx, *t.data[dev]);
+        assert(t.data[dev] != nullptr);
 
         // pin it since we are transfering this
         _total_free[dev] -= kp->input_sizes[in_idx];
@@ -386,6 +396,7 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
       // set is in the krenel prep add another pin on this tensor
       kp->run_me->inputs.set(in_idx, *_tensors[kp->input[in_idx]].data[dev]);
       _pin_tensor(kp->input[in_idx], dev, kp->input_sizes[in_idx]);
+      assert(_tensors[kp->input[in_idx]].data[dev] != nullptr);
     }
   }
 };
@@ -422,6 +433,7 @@ void gpu_memory_t::mark_transfer_done(cpu_to_gpu_transfer_ptr_t kp) {
   // mark that it is finished and remove the transfer
   assert(t.cpu_transfer->id == kp->id);
   t.is_loaded_on_gpu[kp->dst_dev] = true;
+  assert(t.data[kp->dst_dev] != nullptr);
   t.num_copies++;
   t.cpu_transfer = nullptr;
   _cpu_to_gpu_transfer.erase(kp->id);
@@ -432,8 +444,8 @@ void gpu_memory_t::mark_transfer_done(gpu_to_gpu_transfer_ptr_t kp) {
   // make sure it is actually finished
   assert(kp->is_finished);
 
-  // unpin the destination tensor
-  _unpin_tensor(kp->tid, kp->dst_dev, kp->num_bytes);
+  // unpin the source tensor
+  _unpin_tensor(kp->tid, kp->src_dev, kp->num_bytes);
 
   // get the tensor
   auto &t = _tensors[kp->tid];
@@ -504,6 +516,7 @@ gc_request_ptr_t gpu_memory_t::get_gc_request(kernel_prep_ptr_t kp, int dev) {
 
     // we are killing a copy of this
     t.is_loaded_on_gpu[dev] = false;
+    assert(t.data[dev] != nullptr);
     if(--t.num_copies == 0) {
       _tensors.erase(it);
     }
@@ -543,6 +556,7 @@ gc_request_ptr_t gpu_memory_t::get_gc_request(kernel_prep_ptr_t kp, int dev) {
     // we just killed a copy
     t.num_copies--;
     t.is_loaded_on_gpu[dev] = false;
+    assert(t.data[dev] != nullptr);
 
     // remove it from the unpinned list
     _unpinned_tensors[dev].erase(t.unpinned_its[dev]);
@@ -695,7 +709,7 @@ int32_t gpu_memory_t::_is_on_any(tid_t id, int32_t target_dev) {
   for(int32_t dev = 0; dev < _num_devices; dev++) {
     auto cur_dev = (dev + target_dev) % _num_devices;
     if(it->second.is_loaded_on_gpu[cur_dev]) {
-      return target_dev;
+      return cur_dev;
     }
   }
   return -1;
