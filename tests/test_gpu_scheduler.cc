@@ -2,6 +2,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <gtest/gtest.h>
+#include <utility>
 #include <vector>
 
 using namespace std::chrono;
@@ -311,6 +312,163 @@ TEST(TestGPUScheduler, Test3) {
         auto &t = ts->as<bbts::dense_tensor_t>();
         for (auto idx = 0; idx < 100 * 100; ++idx) {
           EXPECT_NEAR(t.data()[idx], check_vals[val_idx], 0.001);
+        }
+    });
+  }
+}
+
+using matrix_index_t = std::map<std::tuple<int32_t, int32_t>, std::tuple<bbts::tid_t, float>>;
+using matrix_reduce_index_t = std::map<std::tuple<int32_t, int32_t>, std::tuple<float, std::vector<bbts::tid_t>>>;
+
+
+void init_blocked_matrix(float &val,
+                         bbts::tid_t &cur_idx,
+                         matrix_index_t &index, 
+                         const bbts::multi_gpu_scheduler_ptr_t &scheduler, 
+                         const bbts::tensor_factory_ptr_t &factory,
+                         const bbts::storage_ptr_t &storage,
+                         size_t matrix_blocking, 
+                         size_t matrix_block_size) {
+  
+  for(auto row_idx = 0; row_idx < matrix_blocking; ++row_idx) {
+    for(auto col_idx = 0; col_idx < matrix_blocking; ++col_idx) {
+      
+      init_tensor_on_cpu(scheduler, factory, storage, cur_idx,
+                         matrix_block_size, matrix_block_size, val);
+      std::get<0>(index[{row_idx, col_idx}]) = cur_idx++;
+      std::get<1>(index[{row_idx, col_idx}]) = val;
+      val += 1.0f;
+    }
+  }
+}
+
+std::vector<bbts::command_ptr_t> make_multiply(bbts::tid_t &cur_tid,
+                                               bbts::udf_manager_ptr udf_manager,
+                                               matrix_index_t &a_index, 
+                                               matrix_index_t &b_index, 
+                                               matrix_index_t &c_index, 
+                                               size_t matrix_blocking, 
+                                               size_t matrix_block_size) {
+
+  bbts::command_id_t cmd_id = 0;
+  matrix_reduce_index_t reduce_idx;
+  auto total = matrix_blocking * matrix_blocking * matrix_blocking + 
+               2 * matrix_blocking * matrix_blocking;
+  std::vector<bbts::command_ptr_t> to_schedule(total);
+
+  for(auto i = 0; i < matrix_blocking; ++i) {
+    for(auto j = 0; j < matrix_blocking; ++j) {
+      for(auto k = 0; k < matrix_blocking; ++k) {
+
+        // make the multiply
+        std::get<1>(reduce_idx[{i, j}]).push_back(cur_tid);
+        to_schedule[cmd_id] = create_apply(cmd_id, 
+                                           udf_manager, 
+                                           "matrix_mult",  
+                                           {std::get<0>(a_index[{i, k}]), 
+                                            std::get<0>(b_index[{k, j}])}, 
+                                           {cur_tid++}, 
+                                           {});
+        std::get<0>(reduce_idx[{i, j}]) += std::get<0>(a_index[{i, k}]) * 
+                                           std::get<0>(b_index[{k, j}]) *
+                                           matrix_block_size;
+        cmd_id++;
+      }
+    }
+  }
+
+  for(auto i = 0; i < matrix_blocking; ++i) {
+    for(auto j = 0; j < matrix_blocking; ++j) {
+
+      // reduce tensors
+      std::get<0>(c_index[{i, j}]) = cur_tid;
+      std::get<1>(c_index[{i, j}]) = std::get<0>(reduce_idx[{i, j}]);
+      to_schedule[cmd_id] = create_reduce(cmd_id,  
+                                          udf_manager, 
+                                          "matrix_add", 
+                                          std::get<1>(reduce_idx[{i, j}]), 
+                                          cur_tid++, 
+                                          {});
+      cmd_id++;
+
+      // delete intermediate
+      to_schedule[cmd_id] = create_delete(cmd_id, std::get<1>(reduce_idx[{i, j}]));
+      cmd_id++;
+    }
+  }
+
+  return std::move(to_schedule);
+}
+
+TEST(TestGPUScheduler, Test4) {
+
+  float cur_val = 0.0f;
+  bbts::tid_t cur_tid = 0;
+  const size_t matrix_size = 200;
+  const size_t matrix_blocking = 2;
+  const size_t matrix_block_size = matrix_size / matrix_blocking;
+
+  // make the storage
+  auto config = std::make_shared<bbts::node_config_t>(0, nullptr);
+  config->is_dev_cluster = true;
+
+  auto storage = std::make_shared<bbts::storage_t>(nullptr, config);
+
+  // create the tensor factory
+  auto factory = std::make_shared<bbts::tensor_factory_t>();
+
+  // crate the udf manager
+  auto udf_manager = std::make_shared<bbts::udf_manager_t>(factory, nullptr);
+
+  // make the scheduler
+  auto scheduler = std::make_shared<bbts::multi_gpu_scheduler_t>(
+      4, 128lu * 1024lu * 1024lu, storage, udf_manager, factory);
+
+  // run all the scheduler threads
+  auto scheduler_threads = run_threads(scheduler);
+
+  // create tensors on the CPU for matrix A
+  matrix_index_t a_index;
+  init_blocked_matrix(cur_val, cur_tid, a_index, 
+                      scheduler, factory, storage,
+                      matrix_blocking, matrix_block_size);
+
+  // create four tensors on the CPU for matrix B
+  matrix_index_t b_index;
+  init_blocked_matrix(cur_val, cur_tid, b_index, 
+                      scheduler, factory, storage,
+                      matrix_blocking, matrix_block_size);
+
+  // move them to a vector and schedule them all
+  matrix_index_t c_index;
+  std::vector<bbts::command_ptr_t> to_schedule = make_multiply(cur_tid,
+                                                               udf_manager,
+                                                               a_index, 
+                                                               b_index, 
+                                                               c_index,
+                                                               matrix_blocking, 
+                                                               matrix_block_size);
+
+  scheduler->schedule(to_schedule);
+
+  // move all the tensors currently in the GPU back into RAM
+  scheduler->flush();
+
+  // finish all the threads
+  scheduler->shutdown();
+  for (auto &t : scheduler_threads) {
+    t.join();
+  }
+
+  for(auto &c_blk : c_index) {
+    bbts::tid_t tid = std::get<0>(c_blk.second);
+    float value = std::get<1>(c_blk.second);
+    storage->local_transaction(
+      {tid}, {}, [value](const bbts::storage_t::reservation_result_t &res) {
+        auto ts = res.get[0].get().tensor;
+        auto &t = ts->as<bbts::dense_tensor_t>();
+        for (auto idx = 0; idx < 100 * 100; ++idx) {
+          EXPECT_NEAR(t.data()[idx], value, 0.001);
         }
     });
   }
