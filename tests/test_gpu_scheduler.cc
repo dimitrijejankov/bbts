@@ -404,7 +404,7 @@ TEST(TestGPUScheduler, Test4) {
 
   float cur_val = 0.0f;
   bbts::tid_t cur_tid = 0;
-  const size_t matrix_size = 200;
+  const size_t matrix_size = 6000;
   const size_t matrix_blocking = 2;
   const size_t matrix_block_size = matrix_size / matrix_blocking;
 

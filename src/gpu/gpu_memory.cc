@@ -551,12 +551,12 @@ gc_request_ptr_t gpu_memory_t::get_gc_request(kernel_prep_ptr_t kp, int dev) {
 
     // claim this memory
     _total_unpinned[dev] -= t.num_bytes;
+    assert(t.data[dev] != nullptr);
     t.data[dev] = nullptr;
 
     // we just killed a copy
     t.num_copies--;
     t.is_loaded_on_gpu[dev] = false;
-    assert(t.data[dev] != nullptr);
 
     // remove it from the unpinned list
     _unpinned_tensors[dev].erase(t.unpinned_its[dev]);

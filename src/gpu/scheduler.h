@@ -102,6 +102,11 @@ private:
   std::mutex meta_lck;
   std::unordered_map<tid_t, bbts::tensor_meta_t> _meta;
 
+  // the anon tensor mapping from the GPU memory to RAM
+  std::mutex anon_lck;
+  std::unordered_map<tid_t, tid_t> _anon_gpu_cpu;
+  std::unordered_map<tid_t, tid_t> _anon_cpu_gpu;
+
   // the storage
   bbts::storage_ptr_t storage;
 
