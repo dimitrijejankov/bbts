@@ -81,7 +81,7 @@ public:
 
   // mark that all of these tensors were just flushed
   void mark_as_flushed(const std::vector<std::tuple<tensor_t*, tid_t, size_t>> &to_flush);
-  
+
 private:
 
   // mark that we are going to use all the inputs from the apply
@@ -112,6 +112,9 @@ private:
 
     // the size of the tensor
     size_t num_bytes = 0;
+
+    // the number of tensors left to remove
+    uint32_t num_left_to_remove = 0;
 
     // a pointer to the tensor
     std::array<std::shared_ptr<tensor_t>, BBTS_MAX_GPU_DEVICES> data;
@@ -159,8 +162,11 @@ private:
   void _unpin_tensor(tid_t id, int dev, size_t num_bytes);
 
   // used to implement both @see can_gc and @see can_preallocate
-  template<class fun>
-  int32_t _fits_memory(kernel_prep_ptr_t kp, int32_t target_dev, fun f) {
+  template<class mem_pool_fun_t, class criteria_fun_t>
+  int32_t _fits_memory(kernel_prep_ptr_t kp, 
+                       int32_t target_dev, 
+                       mem_pool_fun_t mem_pool_fun, 
+                       criteria_fun_t criteria_fun) {
   
     // sum all the output bytes
     size_t output_bytes_required = 0;
@@ -173,14 +179,14 @@ private:
       auto cur_dev = (dev + target_dev) % _num_devices;
       size_t required = output_bytes_required; 
       for(auto in_idx = 0; in_idx < kp->input.size(); ++in_idx) {
-        if(!_is_on_device(kp->input[in_idx], cur_dev) &&
-           !_is_transfered_to_device(kp->input[in_idx], cur_dev)) {
+        if(criteria_fun(kp->input[in_idx], cur_dev)) {
           required += kp->input_sizes[in_idx];
         }
       }
       
       // do we have enough memory
-      if(f(cur_dev) >= required) {
+      auto mem_available = mem_pool_fun(cur_dev);
+      if(mem_available >= required) {
         return cur_dev;
       }
     }
@@ -207,6 +213,9 @@ private:
   // the total free memory per GPU
   std::vector<size_t> _total_free;
 
+  // the total memory to free
+  std::vector<size_t> _total_to_free;
+
   // uniquely identifies each CPU to GPU transfer
   transfer_id_t _cur_cpu_to_gpu_transfer_id = 0; 
 
@@ -221,6 +230,9 @@ private:
 
   // the number of devices
   size_t _num_devices;
+
+  // how much memory is there per GPU
+  size_t _mem_per_gpu;
 };
 
 }

@@ -149,10 +149,10 @@ void multi_gpu_scheduler_t::gpu_to_gpu_thread(int32_t dev) {
     for(auto &t : done_transfers) {
       t->is_finished = true;
     }
- 
+
     // signal that all the gpu transfers are done
     scheduler_queue.signal_gpu_to_gpu_transfer_done(done_transfers);
-    
+
     // did we manage to do all the transfers
     if(!prep->gpu_transfers.empty()) {
 
@@ -207,16 +207,16 @@ void multi_gpu_scheduler_t::cpu_to_gpu_thread() {
 
         // process the local transaction
         storage->local_transaction(
-            {t->tid}, {}, [&](const storage_t::reservation_result_t &res) {
+            {cpu_tid}, {}, [&](const storage_t::reservation_result_t &res) {
 
               // create the tensor
               auto ts = res.get[0].get().tensor;
 
               // copy the tensor from the CPU to the GPU
               cudaMemcpy(t->dst->get_data_ptr<void>(), 
-                        ts->get_data_ptr<void>(), 
-                        t->num_bytes - sizeof(tensor_t), 
-                        cudaMemcpyHostToDevice);
+                         ts->get_data_ptr<void>(), 
+                         t->num_bytes - sizeof(tensor_t), 
+                         cudaMemcpyHostToDevice);
 
               // copy the meta data
               t->dst->get_meta<tensor_meta_t>() = 

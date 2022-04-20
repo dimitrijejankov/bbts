@@ -48,7 +48,7 @@ __global__ void dense_add_kernel(float *a, float *b, float *c, int n) {
 
     // get our global thread ID
     int id = blockIdx.x * blockDim.x + threadIdx.x;
- 
+    
     // make sure we do not go out of bounds
     if (id < n)
         c[id] = a[id] + b[id];
@@ -69,6 +69,8 @@ void bbts::dense_matrix_gpu_add_t::add(const bbts::ud_impl_t::tensor_params_t &p
     // get the number of rows and columns
     uint32_t I = a.meta().m().num_rows;
     uint32_t J = a.meta().m().num_cols;
+
+    // std::cout << "(" << I << ", " << J << ")\n" << std::flush;
 
     // number of threads in each thread block
     uint32_t block_size = 1024;

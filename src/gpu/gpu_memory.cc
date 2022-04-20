@@ -13,15 +13,18 @@ namespace bbts {
 gpu_memory_t::gpu_memory_t(size_t num_devices, size_t mem_per_gpu)
     : _num_devices(num_devices) {
 
+  _mem_per_gpu = mem_per_gpu;
   _unpinned_tensors.resize(num_devices);
   _total_free.resize(num_devices);
   _total_unpinned.resize(num_devices);
   _to_free_tensors.resize(num_devices);
   _pinned_tensors.resize(num_devices);
+  _total_to_free.resize(num_devices);
 
   for (auto dev = 0; dev < num_devices; ++dev) {
     _total_free[dev] = mem_per_gpu;
     _total_unpinned[dev] = 0;
+    _total_to_free[dev] = 0;
   }
 };
 
@@ -223,12 +226,16 @@ int gpu_memory_t::can_preallocate(kernel_prep_ptr_t kp,
                                   int32_t target_dev) {
   return _fits_memory(kp, target_dev, [&](int32_t dev){
     return _total_free[dev];
+  }, [&](tid_t tid, int32_t cur_dev) {
+    return !_is_on_device(tid, cur_dev) &&
+           !_is_transfered_to_device(tid, cur_dev);
   });
 };
 
 void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
 
   // set the device in the kernel prep
+  cudaSetDevice(dev);
   kp->dev = dev;
 
   // sum all the output bytes
@@ -459,8 +466,13 @@ void gpu_memory_t::mark_transfer_done(gpu_to_gpu_transfer_ptr_t kp) {
 }
 
 int gpu_memory_t::can_gc(kernel_prep_ptr_t kp, int32_t target_dev) { 
-  return _fits_memory(kp, target_dev, [&](int32_t dev){
-    return _total_unpinned[dev] + _total_free[dev];
+  return _fits_memory(kp, target_dev, [&](int32_t dev) {
+
+    return _total_unpinned[dev] + 
+           _total_free[dev] + 
+           _total_to_free[dev];
+  }, [&](tid_t tid, int32_t cur_dev) {
+    return !_is_pinned(tid, cur_dev);
   });
 };
 
@@ -487,7 +499,7 @@ gc_request_ptr_t gpu_memory_t::get_gc_request(kernel_prep_ptr_t kp, int dev) {
   }
 
   // make sure we actually have space
-  assert((_total_unpinned[dev] + _total_free[dev]) >= required);
+  assert((_total_unpinned[dev] + _total_free[dev] + _total_to_free[dev]) >= required);
 
   // go through all the tensors we need to free
   for(int64_t idx = _to_free_tensors[dev].size() - 1; idx >= 0; --idx) {
@@ -505,19 +517,15 @@ gc_request_ptr_t gpu_memory_t::get_gc_request(kernel_prep_ptr_t kp, int dev) {
     auto &t = it->second;
     required -= t.num_bytes;
 
-    // remove it from the structure
-    _unpinned_tensors[dev].erase(t.unpinned_its[dev]);
-    t.unpinned_its[dev] = _unpinned_tensors[dev].end();
-
     // claim this memory
-    _total_unpinned[dev] -= t.num_bytes;
+    _total_to_free[dev] -= t.num_bytes;
+
     request->to_free.push_back({t.data[dev].get(), free_me, t.num_bytes});
+    assert(t.data[dev] != nullptr);
     t.data[dev] = nullptr;
 
     // we are killing a copy of this
-    t.is_loaded_on_gpu[dev] = false;
-    assert(t.data[dev] != nullptr);
-    if(--t.num_copies == 0) {
+    if(--t.num_left_to_remove == 0) {
       _tensors.erase(it);
     }
 
@@ -630,6 +638,7 @@ void gpu_memory_t::_remove(tid_t id, size_t num_bytes) {
       
       // remove it from the unpinned tensors
       _unpinned_tensors[dev].erase(it->second.unpinned_its[dev]);
+      it->second.unpinned_its[dev] = _unpinned_tensors[dev].end();
 
       // make sure we don't have a ongoing transfer
       assert(it->second.cpu_transfer == nullptr);
@@ -639,8 +648,14 @@ void gpu_memory_t::_remove(tid_t id, size_t num_bytes) {
       _to_free_tensors[dev].push_back(id);
 
       // update the numbers
-      _total_free[dev] += num_bytes;
       _total_unpinned[dev] -= num_bytes;
+      _total_to_free[dev] += num_bytes;
+
+      // mark sure it is marked as not loaded
+      it->second.is_loaded_on_gpu[dev] = false;
+
+      // increment the number of tensors left to remove
+      it->second.num_left_to_remove++;
     }
 
     // make sure it is not pinned anywhere
@@ -665,6 +680,7 @@ gpu_memory_t::gpu_mem_tensor_t &gpu_memory_t::_init_tensor(tid_t id,
   t.should_delete = false;
   t.num_bytes = num_bytes;
   t.num_copies = 0;
+  t.num_left_to_remove = 0;
 
   // anonymous tensors will always used once
   t.num_uses = id < 0 ? 1 : 0;
@@ -680,7 +696,7 @@ gpu_memory_t::gpu_mem_tensor_t &gpu_memory_t::_init_tensor(tid_t id,
 
 std::shared_ptr<tensor_t> gpu_memory_t::_allocate_tensor(size_t num_bytes) {
   void *tmp;
-  cudaMalloc(&tmp, num_bytes - sizeof(tensor_t));
+  checkCudaErrors(cudaMalloc(&tmp, num_bytes - sizeof(tensor_t)));
   return std::move(std::make_shared<tensor_t>(tmp));
 }
 
