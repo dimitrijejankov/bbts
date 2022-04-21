@@ -315,9 +315,9 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
         // init the transfer
         transfer->id = _cur_gpu_tp_gpu_tranfer_id++;
         transfer->tid = kp->input[in_idx];
-        transfer->src = _tensors[kp->input[in_idx]].data[src_dev].get();
+        transfer->src = _tensors[kp->input[in_idx]].data[src_dev];
         transfer->src_dev = src_dev;
-        transfer->dst = t.data[dev].get();
+        transfer->dst = t.data[dev];
         transfer->dst_dev = dev;
         transfer->num_bytes = kp->input_sizes[in_idx];
         transfer->depends = nullptr;
@@ -354,9 +354,9 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
         // init the transfer
         transfer->id = _cur_gpu_tp_gpu_tranfer_id++;
         transfer->tid = kp->input[in_idx];
-        transfer->src = _tensors[kp->input[in_idx]].data[src_dev].get();
+        transfer->src = _tensors[kp->input[in_idx]].data[src_dev];
         transfer->src_dev = src_dev;
-        transfer->dst = t.data[dev].get();
+        transfer->dst = t.data[dev];
         transfer->dst_dev = dev;
         transfer->num_bytes = kp->input_sizes[in_idx];
         transfer->depends = _tensors[kp->input[in_idx]].cpu_transfer;
@@ -386,7 +386,7 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
         // init the transfer
         transfer->id = _cur_cpu_to_gpu_transfer_id++;
         transfer->tid = kp->input[in_idx];
-        transfer->dst = t.data[dev].get();
+        transfer->dst = t.data[dev];
         transfer->dst_dev = dev;
         transfer->is_finished = false;
         transfer->num_bytes = kp->input_sizes[in_idx];
@@ -520,7 +520,7 @@ gc_request_ptr_t gpu_memory_t::get_gc_request(kernel_prep_ptr_t kp, int dev) {
     // claim this memory
     _total_to_free[dev] -= t.num_bytes;
 
-    request->to_free.push_back({t.data[dev].get(), free_me, t.num_bytes});
+    request->to_free.push_back({t.data[dev], free_me, t.num_bytes});
     assert(t.data[dev] != nullptr);
     t.data[dev] = nullptr;
 
@@ -551,10 +551,11 @@ gc_request_ptr_t gpu_memory_t::get_gc_request(kernel_prep_ptr_t kp, int dev) {
 
     // do we have to evict it or can we kill it
     if(!t.is_on_cpu && t.num_copies == 1) {
-      request->to_evict.push_back({t.data[dev].get(), evict->second, t.num_bytes});
+      assert(t.data[dev].get()->get_data_ptr<void>() != nullptr);
+      request->to_evict.push_back({t.data[dev], evict->second, t.num_bytes});
     }
     else {
-      request->to_free.push_back({t.data[dev].get(), evict->second, t.num_bytes});
+      request->to_free.push_back({t.data[dev], evict->second, t.num_bytes});
     }
 
     // claim this memory

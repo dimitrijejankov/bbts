@@ -70,7 +70,6 @@ void bbts::dense_matrix_gpu_add_t::add(const bbts::ud_impl_t::tensor_params_t &p
     uint32_t I = a.meta().m().num_rows;
     uint32_t J = a.meta().m().num_cols;
 
-    // std::cout << "(" << I << ", " << J << ")\n" << std::flush;
 
     // number of threads in each thread block
     uint32_t block_size = 1024;

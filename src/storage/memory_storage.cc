@@ -42,7 +42,7 @@ memory_storage_t::memory_storage_t(communicator_ptr_t com,
   }
 
   // allocate a bunch of pinned memory (if this is a dev cluster allocate only 10GB)
-  auto to_allocate = node_config->is_dev_cluster ? 10lu * 1024lu * 1024lu * 1024lu : 
+  auto to_allocate = node_config->is_dev_cluster ? node_config->dev_cluster_ram : 
                                                    free_ram - reserved;
   cudaMallocHost(&_mem, to_allocate);
 
@@ -77,6 +77,9 @@ memory_storage_t::tensor_ref_t memory_storage_t::_create_tensor(tid_t _id, size_
 
   // malloc the tensor
   tensor_t *ts = _allocate_tensor(num_bytes);
+  if(ts == nullptr) {
+    throw std::runtime_error("Failed to allocate tensor!");
+  }
 
   // store the info
   _tensor_nfo[_id] = sto_tensor_nfo_t{.address = ts, .num_bytes = num_bytes};
@@ -94,6 +97,9 @@ memory_storage_t::tensor_ref_t memory_storage_t::_create_tensor(size_t num_bytes
 
   // malloc the tensor
   tensor_t *ts = _allocate_tensor(num_bytes);
+  if(ts == nullptr) {
+    throw std::runtime_error("Failed to allocate tensor!");
+  }
 
   // get a new tid for this
   auto tid = _current_anon--;
@@ -118,7 +124,7 @@ tensor_t *memory_storage_t::_allocate_tensor(size_t num_bytes) {
 
     // allocate the host pinned memory
     auto offset = _allocator->allocate(num_bytes);
-    ts = new (_mem + offset) tensor_t();
+    ts = (offset == _allocator->invalid_offset) ? nullptr : new (_mem + offset) tensor_t();
   #else
     // we can not do this
     ts = (tensor_t*) malloc(num_bytes);

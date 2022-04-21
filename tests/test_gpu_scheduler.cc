@@ -337,7 +337,7 @@ void init_blocked_matrix(float &val,
                          matrix_block_size, matrix_block_size, val);
       std::get<0>(index[{row_idx, col_idx}]) = cur_idx++;
       std::get<1>(index[{row_idx, col_idx}]) = val;
-      val += 1.0f;
+      val += 0.001f;
     }
   }
 }
@@ -402,15 +402,16 @@ std::vector<bbts::command_ptr_t> make_multiply(bbts::tid_t &cur_tid,
 
 TEST(TestGPUScheduler, Test4) {
 
-  float cur_val = 1.0f;
+  float cur_val = 0.0f;
   bbts::tid_t cur_tid = 0;
-  const size_t matrix_size = 12000;
-  const size_t matrix_blocking = 4;
+  const size_t matrix_size = 24000;
+  const size_t matrix_blocking = 8;
   const size_t matrix_block_size = matrix_size / matrix_blocking;
 
   // make the storage
   auto config = std::make_shared<bbts::node_config_t>(0, nullptr);
   config->is_dev_cluster = true;
+  config->dev_cluster_ram = 64lu * 1024lu * 1024lu * 1024lu;
 
   auto storage = std::make_shared<bbts::storage_t>(nullptr, config);
 
@@ -467,10 +468,8 @@ TEST(TestGPUScheduler, Test4) {
       {tid}, {}, [value](const bbts::storage_t::reservation_result_t &res) {
         auto ts = res.get[0].get().tensor;
         auto &t = ts->as<bbts::dense_tensor_t>();
-
-        std::cout << "Result : " << t.data()[0] << " " << value << "\n";
         for (auto idx = 0; idx < 100 * 100; ++idx) {
-          // EXPECT_NEAR(t.data()[idx], value, 0.001);
+          EXPECT_NEAR(t.data()[idx], value, 0.1f);
         }
     });
   }

@@ -61,7 +61,7 @@ struct cpu_to_gpu_transfer_t {
   size_t num_bytes;
 
   // the destination on the GPU
-  tensor_t *dst; 
+  std::shared_ptr<tensor_t> dst; 
 
   // the destination device
   int32_t dst_dev;
@@ -81,10 +81,10 @@ struct gpu_to_gpu_transfer_t {
   int32_t src_dev;
 
   // the source from the CPU 
-  tensor_t *src;
+  std::shared_ptr<tensor_t> src;
 
   // the destination on the GPU
-  tensor_t *dst; 
+  std::shared_ptr<tensor_t> dst; 
 
   // the destination device
   int32_t dst_dev;
@@ -149,10 +149,10 @@ struct gc_request_t {
   int32_t dev;
 
   // list of tensors we are supposed to free
-  std::vector<std::tuple<tensor_t *, tid_t, size_t>> to_free;
+  std::vector<std::tuple<std::shared_ptr<tensor_t>, tid_t, size_t>> to_free;
 
   // list of tensors we are supposed to evict
-  std::vector<std::tuple<tensor_t *, tid_t, size_t>> to_evict;
+  std::vector<std::tuple<std::shared_ptr<tensor_t>, tid_t, size_t>> to_evict;
 
   // tensors that are to be unpinned once the request is finished
   // this is unpinned by the GPU memory

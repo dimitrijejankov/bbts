@@ -59,6 +59,9 @@ struct node_config_t {
   // is this a local cluster that we use for testing
   bool is_dev_cluster = false;
 
+  // dev cluser max ram only used if is_dev_cluster is set to true
+  size_t dev_cluster_ram = 10lu * 1024lu * 1024lu * 1024lu;
+
   // should we print out everything?
   bool verbose = false;
 
