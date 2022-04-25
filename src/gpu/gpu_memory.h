@@ -122,6 +122,9 @@ private:
     // is the tensor loaded on a particular device (a tensor is loaded once the transfer is finished)
     std::array<bool, BBTS_MAX_GPU_DEVICES> is_loaded_on_gpu;
 
+    // the eviction requests that are currently going on
+    gc_request_evict_ptr_t eviction_request;
+
     // these are iterators so that we can quickly update the _unpinned_tensors
     std::array<unpinned_t::iterator, BBTS_MAX_GPU_DEVICES> unpinned_its;
 

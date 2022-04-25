@@ -43,6 +43,8 @@ using kernel_run_ptr_t = std::shared_ptr<kernel_run_t>;
 // the id of both GPU2GPU and CPU2GPU transfers
 using transfer_id_t = int64_t;
 
+class gc_request_evict_t;
+using gc_request_evict_ptr_t = std::shared_ptr<gc_request_evict_t>;
 struct cpu_to_gpu_transfer_t {
 
   // the id of the transfer so that we can easly match it
@@ -62,6 +64,9 @@ struct cpu_to_gpu_transfer_t {
 
   // the destination on the GPU
   std::shared_ptr<tensor_t> dst; 
+
+  // we have to a acutally wait for this to be finished if we want to load the tensor
+  gc_request_evict_ptr_t depends;
 
   // the destination device
   int32_t dst_dev;
@@ -143,16 +148,53 @@ struct kernel_prep_t {
 };
 using kernel_prep_ptr_t = std::shared_ptr<kernel_prep_t>;
 
+struct gc_request_free_t {
+
+  gc_request_free_t(const std::shared_ptr<tensor_t> &tensor, 
+                    tid_t tid, 
+                    size_t num_bytes) : tensor(tensor), 
+                                        tid(tid), 
+                                        num_bytes(num_bytes) {} 
+
+  std::shared_ptr<tensor_t> tensor;
+
+  tid_t tid;
+
+  size_t num_bytes;
+};
+using gc_request_free_ptr_t = std::shared_ptr<gc_request_free_t>;
+
+struct gc_request_evict_t {
+
+  gc_request_evict_t(bool evicted, 
+                     const std::shared_ptr<tensor_t> &tensor, 
+                     tid_t tid, 
+                     size_t num_bytes) : evicted(evicted), 
+                                         tensor(tensor), 
+                                         tid(tid), 
+                                         num_bytes(num_bytes) {}
+
+  std::mutex m;
+
+  bool evicted;
+
+  std::shared_ptr<tensor_t> tensor;
+
+  tid_t tid;
+
+  size_t num_bytes;
+};
+
 struct gc_request_t {
 
   // the device for which the request is for
   int32_t dev;
 
   // list of tensors we are supposed to free
-  std::vector<std::tuple<std::shared_ptr<tensor_t>, tid_t, size_t>> to_free;
+  std::vector<gc_request_free_ptr_t> to_free;
 
   // list of tensors we are supposed to evict
-  std::vector<std::tuple<std::shared_ptr<tensor_t>, tid_t, size_t>> to_evict;
+  std::vector<gc_request_evict_ptr_t> to_evict;
 
   // tensors that are to be unpinned once the request is finished
   // this is unpinned by the GPU memory

@@ -189,7 +189,11 @@ void multi_gpu_scheduler_t::cpu_to_gpu_thread() {
 
     // schedule all the copies
     done_transfers.clear();
-    for (auto &t : prep->cpu_transfers) {
+    auto num_transfers = prep->cpu_transfers.size();
+    for (int32_t idx = num_transfers - 1; idx >= 0; --idx) {
+
+      // grab the transfer
+      auto t = prep->cpu_transfers[idx];
       
       // convert the gpu tid to cpu tid, for a regular tensor 
       // they are the same, for an anonymous tensor they differ
@@ -201,6 +205,20 @@ void multi_gpu_scheduler_t::cpu_to_gpu_thread() {
 
       // lock so that we can perform the copy
       std::unique_lock<std::mutex> lck(t->m);
+
+      // check if there is 
+      if(t->depends != nullptr) {
+
+        // try to lock access to the 
+        std::unique_lock<std::mutex> lck(t->depends->m, std::defer_lock);
+
+        // check if we can actually do the copy
+        if(!lck.try_lock() || !t->depends->evicted) {
+
+          // we break out of the loop and wait for other transfers to be finished
+          break;
+        }
+      }
 
       // run the local transaction move the tensor
       if(!t->is_finished) {
@@ -226,12 +244,23 @@ void multi_gpu_scheduler_t::cpu_to_gpu_thread() {
 
         // mark that it is finished
         t->is_finished = true;
-        done_transfers.push_back(std::move(t));
       }
+          
+      // store it as finished and remove it from the prep
+      done_transfers.push_back(std::move(t));
+      prep->cpu_transfers.pop_back();
     }
 
     // signal that the CPU transfers are done
     scheduler_queue.signal_cpu_to_gpu_transfer_done(done_transfers);
+
+    // did we manage to do all the transfers
+    if(!prep->cpu_transfers.empty()) {
+
+      // if we did not manage to process all copy requests reschedule it
+      cpu2gpu_queue.enqueue_copy(prep);
+      continue;
+    }
 
     // mark that we are done and possibly shedule for execution
     std::unique_lock<std::mutex> lck(prep->m);
@@ -430,27 +459,24 @@ void multi_gpu_scheduler_t::gc_thread(int dev_id) {
     }
 
     // schedule all the free commands
-    for (auto t : request->to_free) {
-      auto mem = std::get<0>(t)->get_data_ptr<void>();
+    for (auto &t : request->to_free) {
+      auto mem = t->tensor->get_data_ptr<void>();
       checkCudaErrors(cudaFreeAsync(mem, free_stream));
     }
 
     // evict everything we need to
-    for (auto t : request->to_evict) {
-      auto src_tensor = std::get<0>(t);
-      auto tensor_tid = std::get<1>(t);
-      auto num_bytes = std::get<2>(t);
+    for (auto &t : request->to_evict) {
 
       // if this is a regular tensor we are fine
-      bool has_tensor = tensor_tid > 0;
+      bool has_tensor = t->tid > 0;
 
       // check if we already have an id for this tensor
       if(!has_tensor) {
         std::unique_lock<std::mutex> lck(anon_lck);
-        auto it = _anon_cpu_gpu.find(tensor_tid);
+        auto it = _anon_cpu_gpu.find(t->tid);
         if(it != _anon_cpu_gpu.end()) {
           has_tensor = true;
-          tensor_tid = it->second;
+          t->tid = it->second;
         }
       }
 
@@ -458,7 +484,7 @@ void multi_gpu_scheduler_t::gc_thread(int dev_id) {
       if(has_tensor) {
 
         // run the local transaction move the tensor
-        storage->local_transaction({}, {{tensor_tid, num_bytes}},
+        storage->local_transaction({}, {{t->tid, t->num_bytes}},
           [&](const storage_t::reservation_result_t &res) {
 
             // create the tensor
@@ -466,21 +492,21 @@ void multi_gpu_scheduler_t::gc_thread(int dev_id) {
 
             // copy the tensor from the CPU to the GPU
             checkCudaErrors(cudaMemcpy(ts->get_data_ptr<void>(), 
-                      src_tensor->get_data_ptr<void>(), 
-                      num_bytes - sizeof(tensor_t), 
+                      t->tensor->get_data_ptr<void>(), 
+                      t->num_bytes - sizeof(tensor_t), 
                       cudaMemcpyDeviceToHost));
             
 
             // copy the meta
             ts->get_meta<tensor_meta_t>() = 
-              src_tensor->get_meta<tensor_meta_t>();
+              t->tensor->get_meta<tensor_meta_t>();
         });
       }
       else {
 
         // run the local transaction move the tensor
         tid_t cpu_tid;
-        storage->local_transaction({}, {{tensor_tid, num_bytes}},
+        storage->local_transaction({}, {{t->tid, t->num_bytes}},
           [&](const storage_t::reservation_result_t &res) {
 
             // create the tensor
@@ -489,26 +515,32 @@ void multi_gpu_scheduler_t::gc_thread(int dev_id) {
 
             // copy the tensor from the CPU to the GPU
             checkCudaErrors(cudaMemcpy(ts->get_data_ptr<void>(), 
-                      src_tensor->get_data_ptr<void>(), 
-                      num_bytes - sizeof(tensor_t), 
+                      t->tensor->get_data_ptr<void>(), 
+                      t->num_bytes - sizeof(tensor_t), 
                       cudaMemcpyDeviceToHost));
 
             // copy the meta
             ts->get_meta<tensor_meta_t>() = 
-              src_tensor->get_meta<tensor_meta_t>();
+              t->tensor->get_meta<tensor_meta_t>();
         });
 
         // store the anonymous tid mapping
         {
           std::unique_lock<std::mutex> lck(anon_lck);
-          _anon_gpu_cpu[tensor_tid] = cpu_tid;
-          _anon_cpu_gpu[cpu_tid] = tensor_tid;
+          _anon_gpu_cpu[t->tid] = cpu_tid;
+          _anon_cpu_gpu[cpu_tid] = t->tid;
         }
       }
 
+      // mark that the tensor now was evicted
+      {
+        std::unique_lock<std::mutex> lck(t->m);
+        t->evicted = true;
+      }
+
       // free this memory
-      assert(src_tensor->get_data_ptr<void>() != nullptr);
-      checkCudaErrors(cudaFree(src_tensor->get_data_ptr<void>()));
+      assert(t->tensor->get_data_ptr<void>() != nullptr);
+      checkCudaErrors(cudaFree(t->tensor->get_data_ptr<void>()));
     }
 
     // sync free

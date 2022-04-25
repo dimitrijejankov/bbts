@@ -243,13 +243,15 @@ void memory_storage_t::clear() {
   _tensor_nfo.clear();
 }
 
-memory_storage_t::reservation_result_t memory_storage_t::_create_reserved(const std::vector<tid_t> &get,                                                                       const std::vector<std::tuple<tid_t, size_t>> &create) {
+memory_storage_t::reservation_result_t memory_storage_t::_create_reserved(const std::vector<tid_t> &get, 
+                                                                          const std::vector<std::tuple<tid_t, size_t>> &create) {
 
   // get all the tensors
   std::vector<tensor_ref_t> out_get;
   out_get.reserve(get.size());
   for (auto t : get) {
     out_get.push_back(_get_by_tid(t));
+    assert(out_get.back().tensor != nullptr);
   }
 
   // create all the tensors we need

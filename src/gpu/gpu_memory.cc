@@ -380,7 +380,7 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
         auto num_pinned = _pinned_tensors[dev][kp->input[in_idx]]++;
         assert(num_pinned == 0);
 
-        // if it is on any other GPU make a GPU2GPU transfer
+        // if it is on any other GPU make a CPU2GPU transfer
         auto transfer = std::make_shared<cpu_to_gpu_transfer_t>();
 
         // init the transfer
@@ -390,6 +390,7 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
         transfer->dst_dev = dev;
         transfer->is_finished = false;
         transfer->num_bytes = kp->input_sizes[in_idx];
+        transfer->depends = t.eviction_request;
 
         // store the transfer
         _tensors[kp->input[in_idx]].cpu_transfer = transfer;
@@ -520,7 +521,9 @@ gc_request_ptr_t gpu_memory_t::get_gc_request(kernel_prep_ptr_t kp, int dev) {
     // claim this memory
     _total_to_free[dev] -= t.num_bytes;
 
-    request->to_free.push_back({t.data[dev], free_me, t.num_bytes});
+    auto gc_req_free = std::make_shared<gc_request_free_t>(t.data[dev], free_me, t.num_bytes);
+    request->to_free.emplace_back(gc_req_free);
+      
     assert(t.data[dev] != nullptr);
     t.data[dev] = nullptr;
 
@@ -552,10 +555,16 @@ gc_request_ptr_t gpu_memory_t::get_gc_request(kernel_prep_ptr_t kp, int dev) {
     // do we have to evict it or can we kill it
     if(!t.is_on_cpu && t.num_copies == 1) {
       assert(t.data[dev].get()->get_data_ptr<void>() != nullptr);
-      request->to_evict.push_back({t.data[dev], evict->second, t.num_bytes});
+
+      // make the eviction requests
+      auto gc_req_evict = std::make_shared<gc_request_evict_t>(false, t.data[dev], 
+                                                               evict->second, t.num_bytes);
+      t.eviction_request = gc_req_evict;
+      request->to_evict.emplace_back(gc_req_evict);
     }
     else {
-      request->to_free.push_back({t.data[dev], evict->second, t.num_bytes});
+      auto gc_req_free = std::make_shared<gc_request_free_t>(t.data[dev], evict->second, t.num_bytes);
+      request->to_free.emplace_back(gc_req_free);
     }
 
     // claim this memory
@@ -568,6 +577,7 @@ gc_request_ptr_t gpu_memory_t::get_gc_request(kernel_prep_ptr_t kp, int dev) {
     t.is_loaded_on_gpu[dev] = false;
 
     // remove it from the unpinned list
+    assert(t.unpinned_its[dev] == evict);
     _unpinned_tensors[dev].erase(t.unpinned_its[dev]);
     t.unpinned_its[dev] = _unpinned_tensors[dev].end();
   }
@@ -585,14 +595,12 @@ void gpu_memory_t::finish_gc_request(const gc_request_ptr_t &req) {
 
   // increase the free memeory for each tensor we have freed
   for(auto r : req->to_free) {
-    auto [_, tid, num_bytes] = r;
-    _total_free[req->dev] += num_bytes;
+    _total_free[req->dev] += r->num_bytes;
   }
 
   // increase the free memory for each tensor we have evicted
-  for(auto r : req->to_evict) {
-    auto [_, tid, num_bytes] = r;
-    _total_free[req->dev] += num_bytes;
+  for(auto &r : req->to_evict) {
+    _total_free[req->dev] += r->num_bytes;
   }
 
   // unpin all the tensors
