@@ -393,7 +393,6 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
         transfer->depends = t.eviction_request;
 
         // store the transfer
-        _tensors[kp->input[in_idx]].cpu_transfer = transfer;
         _cpu_to_gpu_transfer[transfer->id] = transfer;
         t.cpu_transfer = transfer;
         kp->cpu_transfers.push_back(t.cpu_transfer);

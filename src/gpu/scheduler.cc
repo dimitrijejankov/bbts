@@ -244,10 +244,10 @@ void multi_gpu_scheduler_t::cpu_to_gpu_thread() {
 
         // mark that it is finished
         t->is_finished = true;
+        done_transfers.push_back(std::move(t));
       }
           
       // store it as finished and remove it from the prep
-      done_transfers.push_back(std::move(t));
       prep->cpu_transfers.pop_back();
     }
 
@@ -320,8 +320,8 @@ void multi_gpu_scheduler_t::command_prep_thread() {
       mem.mark_transfer_done(gpu_transfer);
     }
 
-    for(auto &cpu_transfers : req->cpu_transfers) {
-      mem.mark_transfer_done(cpu_transfers);
+    for(auto &cpu_transfer : req->cpu_transfers) {
+      mem.mark_transfer_done(cpu_transfer);
     }
 
     // 2. check for finished kernels
