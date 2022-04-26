@@ -418,14 +418,14 @@ TEST(TestGPUScheduler, Test4) {
 
   float cur_val = 0.0f;
   bbts::tid_t cur_tid = 0;
-  const size_t matrix_size = 6000;
-  const size_t matrix_blocking = 4;
+  const size_t matrix_size = 24000;
+  const size_t matrix_blocking = 8;
   const size_t matrix_block_size = matrix_size / matrix_blocking;
 
   // make the storage
   auto config = std::make_shared<bbts::node_config_t>(0, nullptr);
   config->is_dev_cluster = true;
-  config->dev_cluster_ram = 10lu * 1024lu * 1024lu * 1024lu;
+  config->dev_cluster_ram = 60lu * 1024lu * 1024lu * 1024lu;
 
   auto storage = std::make_shared<bbts::storage_t>(nullptr, config);
 
@@ -437,7 +437,7 @@ TEST(TestGPUScheduler, Test4) {
 
   // make the scheduler
   auto scheduler = std::make_shared<bbts::multi_gpu_scheduler_t>(
-      4, 256lu * 1024lu * 1024lu, storage, udf_manager, factory);
+      4, 512lu * 1024lu * 1024lu, storage, udf_manager, factory);
 
   // run all the scheduler threads
   auto scheduler_threads = run_threads(scheduler);
