@@ -366,7 +366,6 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
         transfer->depends = _tensors[kp->input[in_idx]].cpu_transfer;
 
         // store the transfer
-        _tensors[kp->input[in_idx]].gpu_transfers[dev] = transfer;
         _gpu_to_gpu_transfer[transfer->id] = transfer;
         t.gpu_transfers[dev] = transfer;
         kp->gpu_transfers.push_back(transfer);
@@ -464,6 +463,7 @@ void gpu_memory_t::mark_transfer_done(gpu_to_gpu_transfer_ptr_t kp) {
   // remove the transfer
   assert(t.gpu_transfers[kp->dst_dev]->id == kp->id);
   t.gpu_transfers[kp->dst_dev] = nullptr;
+  t.is_loaded_on_gpu[kp->dst_dev] = true;
 
   // remove the gpu2gpu transfer
   _gpu_to_gpu_transfer.erase(kp->id);

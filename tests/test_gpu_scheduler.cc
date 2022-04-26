@@ -1,4 +1,5 @@
 #include "../src/gpu/scheduler.h"
+#include "../src/tensor/builtin_formats.h"
 #include <cstddef>
 #include <cstdint>
 #include <gtest/gtest.h>
@@ -59,8 +60,15 @@ create_apply(bbts::command_id_t id,
     output_types.push_back("dense");
   }
   auto matcher = udm->get_matcher_for(ud_name);
-  auto ud = matcher->findMatch({}, output_types, true);
-  auto cmd = bbts::command_t::create_apply(id, ud->impl_id, true, params,
+
+  #ifdef ENABLE_GPU
+  bool is_gpu = true;
+  #else
+  bool is_gpu = false;
+  #endif
+
+  auto ud = matcher->findMatch({}, output_types, is_gpu);
+  auto cmd = bbts::command_t::create_apply(id, ud->impl_id, is_gpu, params,
                                            prep_in, prep_out);
   return std::move(cmd);
 }
@@ -79,10 +87,16 @@ create_reduce(bbts::command_id_t id,
     input_types.push_back("dense");
   }
 
+  #ifdef ENABLE_GPU
+  bool is_gpu = true;
+  #else
+  bool is_gpu = false;
+  #endif
+
   std::vector<bbts::command_t::tid_node_id_t> prep_out;
   auto matcher = udm->get_matcher_for(ud_name);
-  auto ud = matcher->findMatch(input_types, {"dense"}, true);
-  auto cmd = bbts::command_t::create_reduce(id, ud->impl_id, true, params,
+  auto ud = matcher->findMatch(input_types, {"dense"}, is_gpu);
+  auto cmd = bbts::command_t::create_reduce(id, ud->impl_id, is_gpu, params,
                                             prep_in, bbts::command_t::tid_node_id_t{.tid = output, .node = 0});
   return std::move(cmd);
 }
