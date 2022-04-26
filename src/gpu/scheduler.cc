@@ -6,6 +6,7 @@
 #include <memory>
 #include <mutex>
 #include <ostream>
+#include <unistd.h>
 #include <utility>
 
 namespace bbts {
@@ -61,13 +62,17 @@ void multi_gpu_scheduler_t::gpu_execution_thread(int32_t dev) {
     auto kernel = req->run_me;
 
     // set the cuda parameters
+    #ifdef ENABLE_GPU
     kernel->params.stream = run_stream;
     kernel->params.cublas_handle = cublas_handle;
-
+    
     // call the kernel
     kernel->ud->call_gpu_ud(kernel->params, 
                             kernel->inputs, 
                             kernel->outputs);
+    #else
+    usleep(1000);
+    #endif
 
     // sync the stream
     checkCudaErrors(cudaStreamSynchronize(run_stream));

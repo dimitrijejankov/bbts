@@ -75,8 +75,10 @@ udf_manager_t::udf_manager_t(tensor_factory_ptr_t _tensor_factory,
   /// 4. constant matrix init
   register_udf(get_matrix_const_udf());
 
+  #ifdef ENABLE_GPU
   /// 4.1 constant matrix init implementation for the GPU
   register_udf_impl(std::make_unique<dense_const_gpu>());
+  #endif
 }
 
 // registers a udf with the system

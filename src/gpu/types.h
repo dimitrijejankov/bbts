@@ -5,12 +5,41 @@
 #include "../storage/storage.h"
 #include "../ud_functions/udf_manager.h"
 #include "../utils/concurent_queue.h"
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <memory>
 #include <tuple>
 #include <vector>
 
+#ifndef ENABLE_GPU
+
+void checkCudaErrors(int code);
+
+int cudaSetDevice(int dev);
+int cudaFree(void *ptr);
+int cudaMalloc(void **tmp, size_t num_bytes);
+int cudaDeviceEnablePeerAccess(int dev1, int dev2);
+
+using cudaStream_t = int;
+using cublasHandle_t = int;
+
+int cudaStreamCreate(int *tmp);
+int cublasCreate(int *tmp);
+int cublasSetStream(int tmp, int tmp2);
+int cudaStreamSynchronize(cudaStream_t);
+
+int cudaMemcpyPeerAsync(void *dst, int dstDevice, const void *src,
+                        int srcDevice, size_t count, cudaStream_t stream = 0);
+
+#define cudaMemcpyHostToDevice 0
+#define cudaMemcpyDeviceToHost 0
+int cudaMemcpy(void *dst, const void *src, size_t count, int kind);
+int cudaFreeAsync(void *me, cudaStream_t);
+
+#endif
 
 namespace bbts {
 
@@ -202,6 +231,9 @@ struct gc_request_t {
 
   // the kernel prep to run once the request is finished
   kernel_prep_ptr_t to_run;
+
+  // total memory free
+  size_t free_memory_used;
 };
 using gc_request_ptr_t = std::shared_ptr<gc_request_t>;
 

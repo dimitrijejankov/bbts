@@ -3,7 +3,11 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+
+#ifdef ENABLE_GPU
 #include <cuda.h>
+#endif
+
 #include <memory>
 #include <ostream>
 #include <vector>
@@ -501,11 +505,17 @@ gc_request_ptr_t gpu_memory_t::get_gc_request(kernel_prep_ptr_t kp, int dev) {
   // make sure we actually have space
   assert((_total_unpinned[dev] + _total_free[dev] + _total_to_free[dev]) >= required);
 
+  // how much do we need to free
+  int64_t need_to_free = _total_free[dev] > required ? 0  : required - _total_free[dev];
+  int64_t free_mem_used = _total_free[dev] > required ? required : _total_free[dev];
+  _total_free[dev] -= free_mem_used;
+  request->free_memory_used = free_mem_used;
+
   // go through all the tensors we need to free
   for(int64_t idx = _to_free_tensors[dev].size() - 1; idx >= 0; --idx) {
     
     // are we done?
-    if(required <= 0) {
+    if(need_to_free <= 0) {
       break;
     }
 
@@ -515,7 +525,7 @@ gc_request_ptr_t gpu_memory_t::get_gc_request(kernel_prep_ptr_t kp, int dev) {
     // decrement the memory
     auto it = _tensors.find(free_me);
     auto &t = it->second;
-    required -= t.num_bytes;
+    need_to_free -= t.num_bytes;
 
     // claim this memory
     _total_to_free[dev] -= t.num_bytes;
@@ -539,7 +549,7 @@ gc_request_ptr_t gpu_memory_t::get_gc_request(kernel_prep_ptr_t kp, int dev) {
   while (true) {
 
     // are we done?
-    if(required <= 0) {
+    if(need_to_free <= 0) {
       break;
     }
     
@@ -549,7 +559,7 @@ gc_request_ptr_t gpu_memory_t::get_gc_request(kernel_prep_ptr_t kp, int dev) {
     // decrement the required memory
     auto evict = _unpinned_tensors[dev].begin();
     auto &t = _tensors[evict->second];
-    required -= t.num_bytes;
+    need_to_free -= t.num_bytes;
 
     // do we have to evict it or can we kill it
     if(!t.is_on_cpu && t.num_copies == 1) {
@@ -586,7 +596,7 @@ gc_request_ptr_t gpu_memory_t::get_gc_request(kernel_prep_ptr_t kp, int dev) {
   request->dev = dev;
 
   // make sure it is 
-  assert(required <= 0);
+  assert(need_to_free <= 0);
   return std::move(request);
 };
 
@@ -607,6 +617,8 @@ void gpu_memory_t::finish_gc_request(const gc_request_ptr_t &req) {
     auto [tid, num_bytes] = u;
     _unpin_tensor(tid, req->dev, num_bytes);
   }
+
+  _total_free[req->dev] += req->free_memory_used;
 }
 
 bool gpu_memory_t::get_tensors_to_flush(std::vector<std::tuple<tensor_t*, tid_t, size_t>> &to_flush) {
