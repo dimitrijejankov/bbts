@@ -21,14 +21,14 @@ public:
 
   ~gpu_memory_t();
 
-  // mark that a tensor has already been used
-  void mark_as_used(tid_t id);
+  // mark that a tensor has already been used, returns tro if it should be removed 
+  [[nodiscard]] bool mark_as_used(tid_t id);
 
   // mark the gpu command for use
   void mark_for_use(const gpu_command_schedule_ptr_t &cmd_sch);
 
-  // mark this tensor for deletion
-  void mark_for_deletion(tid_t id);
+  // mark this tensor for deletion returns true if the tensors is removed
+  [[nodiscard]] bool mark_for_deletion(tid_t id);
 
   // pins all the tensors in the kernel prep
   void pin_all(kernel_prep_ptr_t kp, int dev);
@@ -64,7 +64,8 @@ public:
   void preallocate(kernel_prep_ptr_t kp, int dev);
 
   // finish the kernel prep
-  void finish_kernel_prep(kernel_prep_ptr_t kp);
+  void finish_kernel_prep(kernel_prep_ptr_t kp, 
+                          std::vector<tid_t> &deleted_tensors);
 
   // can an we run garbage collection
   // if we can it returns the device othewise it returns -1
@@ -81,6 +82,9 @@ public:
 
   // mark that all of these tensors were just flushed
   void mark_as_flushed(const std::vector<std::tuple<tensor_t*, tid_t, size_t>> &to_flush);
+
+  // returns all the tensors that were deleted in the mean time
+  std::vector<tid_t> get_deleted_tensors();
 
 private:
 

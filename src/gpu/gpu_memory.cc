@@ -95,7 +95,7 @@ void gpu_memory_t::_mark_reduce_for_use(const gpu_command_schedule_ptr_t &reduce
   }
 }
 
-void gpu_memory_t::mark_as_used(tid_t id) {
+bool gpu_memory_t::mark_as_used(tid_t id) {
 
   // reduce the number of uses
   auto it = _tensors.find(id); assert(it != _tensors.end());
@@ -105,7 +105,7 @@ void gpu_memory_t::mark_as_used(tid_t id) {
   if(it->second.num_uses == 0 &&
      it->second.should_delete) {
     _remove(id, it->second.num_bytes);
-    return;
+    return true;
   }
 
   // update the unpinned tensor so that they are sorted right
@@ -118,6 +118,7 @@ void gpu_memory_t::mark_as_used(tid_t id) {
                                                                      it->second.num_uses}, id});
     }
   }
+  return false;
 };
 
 void gpu_memory_t::mark_for_use(const gpu_command_schedule_ptr_t &cmd_sch) {
@@ -130,7 +131,7 @@ void gpu_memory_t::mark_for_use(const gpu_command_schedule_ptr_t &cmd_sch) {
   }
 }
 
-void gpu_memory_t::mark_for_deletion(tid_t id) {
+bool gpu_memory_t::mark_for_deletion(tid_t id) {
 
   // find the tensor and make sure it was initialized previously
   auto it = _tensors.find(id);
@@ -139,11 +140,12 @@ void gpu_memory_t::mark_for_deletion(tid_t id) {
   // if we are not using this tensor anymore we are free to delete it
   if(it->second.num_uses == 0) {
     _remove(id, it->second.num_bytes);
+    return true;
   }
-  else {
-    // mark that we should delete this tensor as soon as can
-    it->second.should_delete = true;
-  }
+
+  // mark that we should delete this tensor as soon as can
+  it->second.should_delete = true;
+  return false;
 };
 
 void gpu_memory_t::_unpin_tensor(tid_t id, int dev, size_t num_bytes) {
@@ -411,16 +413,22 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
   }
 };
 
-void gpu_memory_t::finish_kernel_prep(kernel_prep_ptr_t kp) {
+void gpu_memory_t::finish_kernel_prep(kernel_prep_ptr_t kp, 
+                                      std::vector<tid_t> &deleted_tensors) {
 
   // unpin input tensors
+  assert(deleted_tensors.empty());
   for(auto in_idx = 0; in_idx < kp->input.size(); ++in_idx) {
     _unpin_tensor(kp->input[in_idx], kp->dev, kp->input_sizes[in_idx]);
-    mark_as_used(kp->input[in_idx]);
+    if(mark_as_used(kp->input[in_idx])) {
+      deleted_tensors.push_back(kp->input[in_idx]);
+    }
 
     // check if this was an anonymous tensor
     if(kp->input[in_idx] < 0) {
-      mark_for_deletion(kp->input[in_idx]);
+      if(mark_for_deletion(kp->input[in_idx])) {
+        deleted_tensors.push_back(kp->input[in_idx]);
+      }
     }
   }
 

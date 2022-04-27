@@ -46,6 +46,9 @@ public:
   // to the CPU or straight up deleting them
   void gc_thread(int dev_id);
 
+  // returns all the tensors that were deleted in the mean time
+  std::vector<tid_t> get_deleted_tensors();
+
 private: 
 
   // schedule an apply to be run on the GPU
@@ -97,6 +100,9 @@ private:
 
   // the commands we can run immediately
   std::multimap<uint32_t, command_ptr_t> runnable_commands;
+
+  // all the tensors that are now deleted on the GPU side
+  concurent_queue<tid_t> _deleted_tensors;
 
   // the meta data
   std::mutex meta_lck;

@@ -279,6 +279,7 @@ void multi_gpu_scheduler_t::cpu_to_gpu_thread() {
 void multi_gpu_scheduler_t::command_prep_thread() {
 
   bool should_sleep = false;
+  std::vector<tid_t> deleted_tensors;
   scheduler_request_ptr_t req = std::make_shared<scheduler_request_t>();
   while (true) {
 
@@ -333,13 +334,28 @@ void multi_gpu_scheduler_t::command_prep_thread() {
     for (auto &fk : req->retired_kernels) {
 
       // 2.1. since a new tensor has been created update commands that can be scheduled
-      mem.finish_kernel_prep(fk);
+      deleted_tensors.clear();
+      mem.finish_kernel_prep(fk, deleted_tensors);
       for (auto out_idx = 0; out_idx < fk->output.size(); ++out_idx) {
         heuristic.tensor_loaded(fk->output[out_idx], fk->dev);
       }
 
       // 2.2. we finished a kernel so decrement this
       num_unfinished_kernels--;
+
+      // 2.3 mark that we have deleted the tensors
+      for(auto t : deleted_tensors) {
+        if(t < 0) {
+          std::unique_lock<std::mutex> anon_locked(anon_lck);
+          auto it = _anon_cpu_gpu.find(t);
+          if(it != _anon_cpu_gpu.end()) {
+            _deleted_tensors.enqueue_copy(it->second);
+          }
+        }
+        else {
+          _deleted_tensors.enqueue_copy(t);
+        }        
+      }
     }
 
     // 4. did we get any new commands that were scheduled?
@@ -366,7 +382,19 @@ void multi_gpu_scheduler_t::command_prep_thread() {
 
         // mark all the tensor for deletion
         for(auto idx = 0; idx < nc->cmd->get_num_inputs(); ++idx) {
-          mem.mark_for_deletion(nc->cmd->get_inputs()[idx].tid);
+          auto t = nc->cmd->get_inputs()[idx].tid;
+          if(mem.mark_for_deletion(nc->cmd->get_inputs()[idx].tid)) {
+            if(t < 0) {
+              std::unique_lock<std::mutex> anon_locked(anon_lck);
+              auto it = _anon_cpu_gpu.find(t);
+              if(it != _anon_cpu_gpu.end()) {
+                _deleted_tensors.enqueue_copy(it->second);
+              }
+            }
+            else {
+              _deleted_tensors.enqueue_copy(t);
+            }  
+          }
           heuristic.remove_tensor(nc->cmd->get_inputs()[idx].tid);
         }
       }
@@ -556,6 +584,15 @@ void multi_gpu_scheduler_t::gc_thread(int dev_id) {
   }
 }
 
+std::vector<tid_t> multi_gpu_scheduler_t::get_deleted_tensors() {
+
+  std::vector<tid_t> deleted_tensors;
+  if(!_deleted_tensors.wait_dequeue_all(deleted_tensors)) {
+    return {};
+  }
+  return std::move(deleted_tensors);
+}
+
 gpu_command_schedule_ptr_t multi_gpu_scheduler_t::_prepare_apply(bbts::command_ptr_t &cmd) {
 
   assert(cmd->type == bbts::command_t::APPLY);
@@ -740,6 +777,7 @@ void multi_gpu_scheduler_t::_perform_shutdown() {
     gc_queue[dev].enqueue_copy(gc_done);
   }
   cpu2gpu_queue.enqueue_copy(kp_done);
+  _deleted_tensors.shutdown();
 }
 
 void multi_gpu_scheduler_t::shutdown() {
