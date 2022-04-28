@@ -19,6 +19,7 @@ add_aplication("ffnn")
 add_aplication("node")
 add_aplication("multiplication_chain")
 add_aplication("mm_single_node")
+add_aplication("gpu_bench")
 
 if(${ENABLE_GPU})
     add_aplication("ffnn-gpu")
