@@ -19,7 +19,8 @@ multi_gpu_scheduler_t::multi_gpu_scheduler_t(size_t num_gpus,
     : _num_gpus(num_gpus), run_queue(num_gpus), storage(std::move(storage)), 
       gpu2gpu_queue(num_gpus), gc_queue(num_gpus),
       udm(std::move(udm)), tf(std::move(tf)), heuristic(num_gpus), 
-      mem(num_gpus, gpu_mem_size), num_unfinished_kernels(0) {
+      mem(num_gpus, gpu_mem_size), num_unfinished_kernels(0), 
+      profiler(num_gpus) {
 
   // set the device
   for(auto dev = 0; dev < _num_gpus; ++dev) {
@@ -58,6 +59,9 @@ void multi_gpu_scheduler_t::gpu_execution_thread(int32_t dev) {
       break;
     }
 
+    // start the kernel profiling
+    profiler.kernel_begin(req);
+
     // get the kernel
     auto kernel = req->run_me;
 
@@ -65,24 +69,26 @@ void multi_gpu_scheduler_t::gpu_execution_thread(int32_t dev) {
     #ifdef ENABLE_GPU
     kernel->params.stream = run_stream;
     kernel->params.cublas_handle = cublas_handle;
-    
+    #endif
+
     // call the kernel
     kernel->ud->call_gpu_ud(kernel->params, 
                             kernel->inputs, 
                             kernel->outputs);
-    #else
-    usleep(1000);
-    #endif
+
 
     // sync the stream
     checkCudaErrors(cudaStreamSynchronize(run_stream));
+
+    // end the kernel profiling
+    profiler.kernel_end(req);
 
     // mark that the kernels is retired now
     scheduler_queue.signal_kernel_done(req);
   }
 }
 
-void multi_gpu_scheduler_t::gpu_to_gpu_thread(int32_t dev) {
+void multi_gpu_scheduler_t::gpu_to_gpu_thread(int32_t dst_dev) {
   
   // init the stream
   cudaStream_t cpy_stream;
@@ -93,12 +99,15 @@ void multi_gpu_scheduler_t::gpu_to_gpu_thread(int32_t dev) {
 
     // get a kernel run
     kernel_prep_ptr_t prep{};
-    gpu2gpu_queue[dev].wait_dequeue(prep);
+    gpu2gpu_queue[dst_dev].wait_dequeue(prep);
 
     // check if we are done
     if (prep == nullptr) {
       break;
     }
+
+    // log that we are doing the GPU2GPU copy
+    profiler.log_gpu_copy_begin(dst_dev);
 
     // we keep all the finished transfers here
     std::vector<gpu_to_gpu_transfer_ptr_t> done_transfers; 
@@ -129,10 +138,13 @@ void multi_gpu_scheduler_t::gpu_to_gpu_thread(int32_t dev) {
         }
       }
 
+      // log that we have have copied this tensor
+      profiler.log_gpu_copy_tensor(t->tid, t->num_bytes - sizeof(tensor_t), dst_dev, t->src_dev);
+
       // init the copy of the tensor
       checkCudaErrors(cudaMemcpyPeerAsync(
           t->dst->get_data_ptr<void>(),    // destination
-          dev,                             // destination device
+          dst_dev,                         // destination device
           t->src->get_data_ptr<void>(),    // source
           t->src_dev,                      // source device
           t->num_bytes - sizeof(tensor_t), // the number of bytes to copy
@@ -150,6 +162,9 @@ void multi_gpu_scheduler_t::gpu_to_gpu_thread(int32_t dev) {
     // sync all the copies
     checkCudaErrors(cudaStreamSynchronize(cpy_stream));
 
+    // log that all the copies are done
+    profiler.log_gpu_copy_end(dst_dev);
+
     // mark that it is finished
     for(auto &t : done_transfers) {
       t->is_finished = true;
@@ -162,7 +177,7 @@ void multi_gpu_scheduler_t::gpu_to_gpu_thread(int32_t dev) {
     if(!prep->gpu_transfers.empty()) {
 
       // if we did not manage to process all copy requests reschedule it
-      gpu2gpu_queue[dev].enqueue_copy(prep);
+      gpu2gpu_queue[dst_dev].enqueue_copy(prep);
       continue;
     }
 
@@ -170,7 +185,7 @@ void multi_gpu_scheduler_t::gpu_to_gpu_thread(int32_t dev) {
     std::unique_lock<std::mutex> lck(prep->m);
     prep->gpu_done = true;
     if (prep->gpu_done && prep->cpu_done) {
-      run_queue[dev].enqueue_copy(prep);
+      run_queue[dst_dev].enqueue_copy(prep);
     }
   }
 }
@@ -228,6 +243,9 @@ void multi_gpu_scheduler_t::cpu_to_gpu_thread() {
       // run the local transaction move the tensor
       if(!t->is_finished) {
 
+        // log that we are starting a CPU2GPU copy
+        profiler.log_cpu_copy_begin(t->tid, t->num_bytes - sizeof(tensor_t), t->dst_dev);
+
         // process the local transaction
         storage->local_transaction(
             {cpu_tid}, {}, [&](const storage_t::reservation_result_t &res) {
@@ -245,7 +263,10 @@ void multi_gpu_scheduler_t::cpu_to_gpu_thread() {
               // copy the meta data
               t->dst->get_meta<tensor_meta_t>() = 
                 ts->get_meta<tensor_meta_t>();
-        });
+        });        
+        
+        // load the we have finished the copy
+        profiler.log_cpu_copy_end(t->dst_dev);
 
         // mark that it is finished
         t->is_finished = true;
@@ -424,6 +445,9 @@ void multi_gpu_scheduler_t::command_prep_thread() {
          gc_req->to_run->gpu_transfers.empty()) {
         run_queue[gc_req->dev].enqueue_copy(gc_req->to_run);
       }
+
+      // log that the kernel scheduled
+      profiler.log_kernel_scheduled(gc_req->to_run);
     }
 
     // 6.1. check if we have a command that we can run immeidately (all the
@@ -495,21 +519,23 @@ void multi_gpu_scheduler_t::gc_thread(int dev_id) {
     for (auto &t : request->to_free) {
       auto mem = t->tensor->get_data_ptr<void>();
       checkCudaErrors(cudaFreeAsync(mem, free_stream));
+      profiler.tensor_freed(t->tid, dev_id, t->num_bytes);
     }
 
     // evict everything we need to
     for (auto &t : request->to_evict) {
 
       // if this is a regular tensor we are fine
-      bool has_tensor = t->tid > 0;
+      auto cpu_tid = t->tid;
+      bool has_tensor = cpu_tid > 0;
 
       // check if we already have an id for this tensor
       if(!has_tensor) {
         std::unique_lock<std::mutex> lck(anon_lck);
-        auto it = _anon_cpu_gpu.find(t->tid);
+        auto it = _anon_cpu_gpu.find(cpu_tid);
         if(it != _anon_cpu_gpu.end()) {
           has_tensor = true;
-          t->tid = it->second;
+          cpu_tid = it->second;
         }
       }
 
@@ -517,7 +543,8 @@ void multi_gpu_scheduler_t::gc_thread(int dev_id) {
       if(has_tensor) {
 
         // run the local transaction move the tensor
-        storage->local_transaction({}, {{t->tid, t->num_bytes}},
+        profiler.tensor_eviction_start(t->tid, dev_id, t->num_bytes - sizeof(tensor_t));
+        storage->local_transaction({}, {{cpu_tid, t->num_bytes}},
           [&](const storage_t::reservation_result_t &res) {
 
             // create the tensor
@@ -534,12 +561,13 @@ void multi_gpu_scheduler_t::gc_thread(int dev_id) {
             ts->get_meta<tensor_meta_t>() = 
               t->tensor->get_meta<tensor_meta_t>();
         });
+        profiler.tensor_eviction_end(t->tid, dev_id);
       }
       else {
 
         // run the local transaction move the tensor
-        tid_t cpu_tid;
-        storage->local_transaction({}, {{t->tid, t->num_bytes}},
+        profiler.tensor_eviction_start(t->tid, dev_id, t->num_bytes - sizeof(tensor_t));
+        storage->local_transaction({}, {{cpu_tid, t->num_bytes}},
           [&](const storage_t::reservation_result_t &res) {
 
             // create the tensor
@@ -556,6 +584,7 @@ void multi_gpu_scheduler_t::gc_thread(int dev_id) {
             ts->get_meta<tensor_meta_t>() = 
               t->tensor->get_meta<tensor_meta_t>();
         });
+        profiler.tensor_eviction_end(t->tid, dev_id);
 
         // store the anonymous tid mapping
         {
@@ -591,6 +620,10 @@ std::vector<tid_t> multi_gpu_scheduler_t::get_deleted_tensors() {
     return {};
   }
   return std::move(deleted_tensors);
+}
+
+void multi_gpu_scheduler_t::save_log(const std::string file_name) {
+  profiler.save(file_name);
 }
 
 gpu_command_schedule_ptr_t multi_gpu_scheduler_t::_prepare_apply(bbts::command_ptr_t &cmd) {
@@ -840,6 +873,9 @@ bool multi_gpu_scheduler_t::_schedule_for_execution(kernel_prep_ptr_t kernel_pre
       run_queue[dev].enqueue_copy(kernel_prep);
     }
 
+    // log that the kernel scheduled
+    profiler.log_kernel_scheduled(kernel_prep);
+
     // we just scheduled a kernel
     num_unfinished_kernels++;
     
@@ -853,6 +889,9 @@ bool multi_gpu_scheduler_t::_schedule_for_execution(kernel_prep_ptr_t kernel_pre
 
     // make a garbage collection request
     gc_request_ptr_t gc_request = mem.get_gc_request(kernel_prep, dev);
+    
+    // log that the garbage collection is scheduled
+    profiler.log_gc_scheduled(gc_request);
 
     // schedule the request
     gc_queue[dev].enqueue_copy(gc_request);
@@ -860,7 +899,7 @@ bool multi_gpu_scheduler_t::_schedule_for_execution(kernel_prep_ptr_t kernel_pre
     // we jusst schduled a kernel
     num_unfinished_kernels++;
     
-    // 
+    // go to the next device
     preffered_dev = (preffered_dev + 1) % _num_gpus;
 
     return true;

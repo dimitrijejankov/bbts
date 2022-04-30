@@ -202,6 +202,9 @@ private:
 
   // we assign these for anonymous 
   tid_t inner_anon_id = 0;
+
+  // we assign the an id to each kernel prep
+  int32_t cur_prep_id = 0;
 };
 
 } // namespace bbts

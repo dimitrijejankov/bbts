@@ -3,6 +3,7 @@
 #include "types.h"
 #include "gpu_heuristic.h"
 #include "gpu_memory.h"
+#include "gpu_profiler.h"
 #include "../storage/storage.h"
 #include "../ud_functions/udf_manager.h"
 #include <cstddef>
@@ -48,6 +49,9 @@ public:
 
   // returns all the tensors that were deleted in the mean time
   std::vector<tid_t> get_deleted_tensors();
+
+  // save the log to file
+  void save_log(const std::string file_name);
 
 private: 
 
@@ -127,6 +131,9 @@ private:
 
   // the number of unfinished kernels
   size_t num_unfinished_kernels;
+
+  // this keeps track of all the runtime stats
+  gpu_profiler_t profiler;
 };
 using multi_gpu_scheduler_ptr_t = std::shared_ptr<multi_gpu_scheduler_t>;
 

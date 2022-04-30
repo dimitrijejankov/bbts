@@ -297,6 +297,8 @@ int main() {
     t.join();
   }
 
+  scheduler->save_log("log.proto");
+
   for(auto &c_blk : c_index) {
     bbts::tid_t tid = std::get<0>(c_blk.second);
     float value = std::get<1>(c_blk.second);

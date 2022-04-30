@@ -82,6 +82,11 @@ if(${ENABLE_GPU})
     set (UD_SOURCE_CUDA ${UD_SOURCE_CUDA} "src/ud_functions/gpu_scheduler_impl.cc")
 endif()
 
+# find the protocol buffer
+find_package(Protobuf REQUIRED)
+include_directories(${Protobuf_INCLUDE_DIRS})
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
+
 # forward the definitions ENABLE_HOOKS=ON/OFF
 if(${ENABLE_HOOKS})
     add_compile_definitions(ENABLE_HOOKS)
@@ -144,6 +149,10 @@ file(GLOB UD_SOURCE "src/ud_functions/*.cc" "src/ud_functions/impls/*.cc")
 list(REMOVE_ITEM UD_SOURCE "src/ud_functions/gpu_scheduler_impl.cc")
 add_library(ud_functions OBJECT ${UD_SOURCE} ${UD_SOURCE_CUDA})
 
+# the protobuf 
+protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS src/gpu/gpu_profiler.proto)
+add_library(proto_buf OBJECT ${PROTO_SRCS} ${PROTO_HDRS})
+
 # link all modules up
 add_library(bbts-common $<TARGET_OBJECTS:tensor>
                         $<TARGET_OBJECTS:commands>
@@ -152,11 +161,13 @@ add_library(bbts-common $<TARGET_OBJECTS:tensor>
                         $<TARGET_OBJECTS:communication>
                         $<TARGET_OBJECTS:server>
                         $<TARGET_OBJECTS:gpu>
-                        $<TARGET_OBJECTS:ud_functions>)
+                        $<TARGET_OBJECTS:ud_functions>
+                        $<TARGET_OBJECTS:proto_buf>)
 
 # to open .so files and stuff
 target_link_libraries(bbts-common ${CMAKE_DL_LIBS})
 target_link_libraries(bbts-common MKL::MKL)
+target_link_libraries(bbts-common ${PROTOBUF_LIBRARIES})
 
 # link the cublas library
 if(${ENABLE_GPU})

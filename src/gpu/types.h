@@ -136,6 +136,9 @@ using gpu_to_gpu_transfer_ptr_t = std::shared_ptr<gpu_to_gpu_transfer_t>;
 
 struct kernel_prep_t {
 
+  // the id of this kernel prep assigned by the heuristic
+  int32_t kernel_prep_id = -1;
+
   // the id of the command the kernel is associated with
   command_id_t command_id;
 
