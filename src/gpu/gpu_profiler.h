@@ -31,6 +31,7 @@ public:
   void log_gc_scheduled(const gc_request_ptr_t &gc_req);
 
   void save(const std::string file_name);
+  std::string log_as_json();
 
 private:
   

@@ -1,4 +1,5 @@
 #include "gpu_profiler.h"
+#include <google/protobuf/util/json_util.h>
 #include <assert.h>
 #include <cstddef>
 #include <cstdint>
@@ -204,4 +205,18 @@ void bbts::gpu_profiler_t::log_gc_scheduled(const gc_request_ptr_t &gc_req) {
 void bbts::gpu_profiler_t::save(const std::string file_name) {
   std::ofstream ofs(file_name, std::ios_base::out | std::ios_base::binary);
   log.SerializeToOstream(&ofs);
+}
+
+std::string bbts::gpu_profiler_t::log_as_json() {
+
+  // convert the object to json
+  std::string json_string;
+  google::protobuf::util::JsonPrintOptions options;
+  options.add_whitespace = true;
+  options.always_print_primitive_fields = true;
+  options.preserve_proto_field_names = true;
+  MessageToJsonString(log, &json_string, options);
+  
+  // return the json
+  return std::move(json_string);
 }
