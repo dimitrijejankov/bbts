@@ -35,6 +35,8 @@ public:
 
 private:
   
+  size_t base_tick;
+
   gpu_profiler_log_t log;
 };
 

@@ -8,13 +8,16 @@ bbts::gpu_profiler_t::gpu_profiler_t(size_t num_gpus) {
   for(auto dev = 0; dev < num_gpus; ++dev) {
     log.add_device_logs();
   }
+
+  auto now = std::chrono::high_resolution_clock::now();
+  base_tick = duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
 }
 
 void bbts::gpu_profiler_t::log_cpu_copy_begin(bbts::tid_t id, size_t num_bytes, int32_t dev) {
 
   // get the current timestamp
   auto now = std::chrono::high_resolution_clock::now();
-  auto tick = duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
+  auto tick = duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count() - base_tick;
 
   // create a new cpu2gpu transfer log
   auto &dl = log.mutable_device_logs()->at(dev);
@@ -30,7 +33,7 @@ void bbts::gpu_profiler_t::log_cpu_copy_end(int32_t dev) {
   
   // get the current timestamp
   auto now = std::chrono::high_resolution_clock::now();
-  auto tick = duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
+  auto tick = duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count() - base_tick;
 
   // set the end time stamp
   auto &dl = log.mutable_device_logs()->at(dev);
@@ -41,7 +44,7 @@ void bbts::gpu_profiler_t::log_gpu_copy_begin(int32_t dev) {
 
   // get the current timestamp
   auto now = std::chrono::high_resolution_clock::now();
-  auto tick = duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
+  auto tick = duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count() - base_tick;
 
   // create a new cpu2gpu transfer log
   auto &dl = log.mutable_device_logs()->at(dev);
@@ -69,7 +72,7 @@ void bbts::gpu_profiler_t::log_gpu_copy_end(int32_t dev) {
 
   // get the current timestamp
   auto now = std::chrono::high_resolution_clock::now();
-  auto tick = duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
+  auto tick = duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count() - base_tick;
 
   // set the end timestamp
   auto &dl = log.mutable_device_logs()->at(dev);
@@ -80,7 +83,7 @@ void bbts::gpu_profiler_t::kernel_begin(const kernel_prep_ptr_t &prep) {
 
   // get the current timestamp
   auto now = std::chrono::high_resolution_clock::now();
-  auto tick = duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
+  auto tick = duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count() - base_tick;
 
   // store the kernel
   auto &dl = log.mutable_device_logs()->at(prep->dev);
@@ -95,7 +98,7 @@ void bbts::gpu_profiler_t::kernel_end(const kernel_prep_ptr_t &prep) {
 
   // get the current timestamp
   auto now = std::chrono::high_resolution_clock::now();
-  auto tick = duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
+  auto tick = duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count() - base_tick;
 
   // make sure this is the same command we are ending
   auto &dl = log.mutable_device_logs()->at(prep->dev);
@@ -107,7 +110,7 @@ void bbts::gpu_profiler_t::tensor_freed(tid_t id, int32_t dev, size_t num_bytes)
 
   // get the current timestamp
   auto now = std::chrono::high_resolution_clock::now();
-  auto tick = duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
+  auto tick = duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count() - base_tick;
 
   // log the tensor freed
   auto &dl = log.mutable_device_logs()->at(dev);
@@ -122,7 +125,7 @@ void bbts::gpu_profiler_t::tensor_eviction_start(tid_t id, int32_t dev, size_t n
 
   // get the current timestamp
   auto now = std::chrono::high_resolution_clock::now();
-  auto tick = duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
+  auto tick = duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count() - base_tick;
 
   // set the stats
   auto &dl = log.mutable_device_logs()->at(dev);
@@ -137,7 +140,7 @@ void bbts::gpu_profiler_t::tensor_eviction_end(tid_t id, int32_t dev) {
 
   // get the current timestamp
   auto now = std::chrono::high_resolution_clock::now();
-  auto tick = duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
+  auto tick = duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count() - base_tick;
 
   // set the end 
   log.mutable_device_logs()->at(dev).mutable_evicted_tensor_stats()->rbegin()->set_end(tick);
@@ -147,7 +150,7 @@ void bbts::gpu_profiler_t::log_kernel_scheduled(const kernel_prep_ptr_t &prp) {
 
   // get the current timestamp
   auto now = std::chrono::high_resolution_clock::now();
-  auto tick = duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
+  auto tick = duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count() - base_tick;
 
   auto &dl = log.mutable_device_logs()->at(prp->dev);
   auto ks = dl.add_kernels_scheduled();
