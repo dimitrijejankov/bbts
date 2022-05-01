@@ -163,7 +163,12 @@ void multi_gpu_scheduler_t::gpu_to_gpu_thread(int32_t dst_dev) {
     checkCudaErrors(cudaStreamSynchronize(cpy_stream));
 
     // log that all the copies are done
-    profiler.log_gpu_copy_end(dst_dev);
+    if(!done_transfers.empty()) {
+      profiler.log_gpu_copy_end(dst_dev);
+    }
+    else {
+      profiler.log_gpu_copy_cancel(dst_dev);
+    }
 
     // mark that it is finished
     for(auto &t : done_transfers) {
@@ -256,14 +261,16 @@ void multi_gpu_scheduler_t::cpu_to_gpu_thread() {
               // copy the tensor from the CPU to the GPU
               auto dst = t->dst->get_data_ptr<void>();
               auto src = ts->get_data_ptr<void>();
-              checkCudaErrors(cudaMemcpy(dst, src, 
-                                         t->num_bytes - sizeof(tensor_t), 
-                                         cudaMemcpyHostToDevice));
+
+              checkCudaErrors(cudaMemcpyAsync(dst, src, 
+                                              t->num_bytes - sizeof(tensor_t), 
+                                              cudaMemcpyHostToDevice, cpy_stream));
+              checkCudaErrors(cudaStreamSynchronize(cpy_stream));
 
               // copy the meta data
               t->dst->get_meta<tensor_meta_t>() = 
                 ts->get_meta<tensor_meta_t>();
-        });        
+        });
         
         // load the we have finished the copy
         profiler.log_cpu_copy_end(t->dst_dev);

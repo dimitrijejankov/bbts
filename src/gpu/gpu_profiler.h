@@ -19,6 +19,7 @@ public:
   void log_gpu_copy_tensor(tid_t tid, size_t num_bytes, 
                            int32_t dst_dev, int32_t src_dev);
   void log_gpu_copy_end(int32_t dev);
+  void log_gpu_copy_cancel(int32_t dev);
 
   void kernel_begin(const kernel_prep_ptr_t &prep);
   void kernel_end(const kernel_prep_ptr_t &prep);

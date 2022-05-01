@@ -297,7 +297,7 @@ int main() {
     t.join();
   }
 
-  scheduler->save_log("log.proto");
+  scheduler->save_log("gpu.proto");
 
   for(auto &c_blk : c_index) {
     bbts::tid_t tid = std::get<0>(c_blk.second);

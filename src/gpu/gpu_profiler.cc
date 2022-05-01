@@ -79,6 +79,11 @@ void bbts::gpu_profiler_t::log_gpu_copy_end(int32_t dev) {
   dl.mutable_gpu2gpu_transfer_stats()->rbegin()->set_end(tick);
 }
 
+void bbts::gpu_profiler_t::log_gpu_copy_cancel(int32_t dev) {
+  auto &dl = log.mutable_device_logs()->at(dev);
+  dl.mutable_gpu2gpu_transfer_stats()->RemoveLast();
+}
+
 void bbts::gpu_profiler_t::kernel_begin(const kernel_prep_ptr_t &prep) {
 
   // get the current timestamp
