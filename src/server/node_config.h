@@ -72,10 +72,10 @@ struct node_config_t {
   float send_cost_per_byte = 1.16415322E-9;
 
   // the root of the web stuff (html, css and js files)
-  std::string web_root = "./web";
+  std::string web_root = "web";
 
   // the directory where all the logs are stored
-  std::string log_dir = "./log";
+  std::string log_dir = "logs";
 
   // web interface port
   int32_t web_port = 8081;

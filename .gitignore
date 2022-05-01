@@ -22,6 +22,7 @@ libraries
 generated/commands*
 generated/kernels*
 generated
+logs
 external
 perf.data
 perf.data.old
