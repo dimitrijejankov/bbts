@@ -68,9 +68,9 @@ private:
                       const std::tuple<int32_t, int32_t> &rhs) const {
 
           if (std::get<0>(lhs) == std::get<0>(rhs)) {
-            return std::get<1>(lhs) > std::get<1>(rhs);
+            return std::get<1>(lhs) < std::get<1>(rhs);
           }
-          return std::get<0>(lhs) < std::get<0>(rhs);
+          return std::get<0>(lhs) > std::get<0>(rhs);
       }
   };
 
@@ -182,7 +182,7 @@ private:
   // how many gpus do we actually have
   uint32_t num_devices = 1;
 
-  // (number of inputs not on GPU, where less is better, number )
+  // (number of inputs not on GPU, where less is better, number of tensors used by other commands more is better)
   heuristic_map_t goodness_heuristic;
 
   std::unordered_multimap<tid_t, std::tuple<command_id_t, command_t::op_type_t>> tensors_to_cmds;
