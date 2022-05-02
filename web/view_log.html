@@ -1,0 +1,94 @@
+<html>
+
+<head>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"
+        integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
+
+    <script src="https://unpkg.com/timelines-chart@2.11.5/dist/timelines-chart.min.js"></script>
+</head>
+
+<body>
+
+    <script>
+
+        let searchParams = new URLSearchParams(window.location.search);
+        param = searchParams.get('log');
+
+        $.getJSON( "api/logs/" + param, function(fetched) {
+            
+            console.log(fetched.device_logs)
+            groups = []
+            for (let i = 0; i < fetched.device_logs.length; i++) {
+
+                data = [];
+
+                // add the info about the kernels that were run on this GPU
+                kr_dps = [];
+                ks = fetched.device_logs[i].kernels_stats;
+                for (let j = 0; j < ks.length; j++) {
+                    dp = {
+                        timeRange : [ks[j].start * 1e-5, ks[j].end * 1e-5],
+                        val : j
+                    }
+                    kr_dps.push(dp);
+                }
+                kr_dps = {
+                    label: "kernels_run",
+                    data: kr_dps
+                }
+                data.push(kr_dps)
+
+                // add the info about gpu2gpu transfers
+                g2g_dps = []
+                g2gs = fetched.device_logs[i].gpu2gpu_transfer_stats;
+                for (let j = 0; j < g2gs.length; j++) {
+                    dp = {
+                        timeRange : [g2gs[j].start * 1e-5, g2gs[j].end * 1e-5],
+                        val : j
+                    }
+                    g2g_dps.push(dp);
+                }
+                g2g_dps = {
+                    label: "gpu2gpu_copies",
+                    data: g2g_dps
+                }
+                data.push(g2g_dps)
+
+                // add the info about cpu2gpu transfers
+                c2g_dps = []
+                c2gs = fetched.device_logs[i].cpu2gpu_transfer_stats;
+                for (let j = 0; j < c2gs.length; j++) {
+                    dp = {
+                        timeRange : [c2gs[j].start * 1e-5, c2gs[j].end * 1e-5],
+                        val : j
+                    }
+                    c2g_dps.push(dp);
+                }
+                c2g_dps = {
+                    label: "cpu2gpu_copies",
+                    data: c2g_dps
+                }
+                data.push(c2g_dps)
+
+                group = {
+                    data : data,
+                    group : "GPU " + i.toString()
+                }
+                groups.push(group)
+            }
+            console.log(groups);
+
+            TimelinesChart()(document.body)
+            .xTickFormat(n => +n)
+            .timeFormat('%Q')
+            .data(groups);
+        });
+
+    </script>
+
+    <script>
+
+    </script>
+</body>
+
+</html>

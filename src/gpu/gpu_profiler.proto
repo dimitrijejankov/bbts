@@ -182,32 +182,29 @@ message gc_request_stat_t {
 
 message gpu_device_log_t {
 
-  // the krenels that were run
-  repeated uint64 kernels_run = 1;
-  
   // the number of devices
-  uint32 num_devices = 2;
+  uint32 num_devices = 1;
 
   // the stats about the kernels that were run
-  repeated kernel_run_stats_t kernels_stats = 3;
+  repeated kernel_run_stats_t kernels_stats = 2;
 
   // the stats about the gpu2gpu that were run
-  repeated gpu_to_gpu_stat_t gpu2gpu_transfer_stats = 4;
+  repeated gpu_to_gpu_stat_t gpu2gpu_transfer_stats = 3;
   
   // the stats about the cpu2gpu that were run
-  repeated cpu_to_gpu_stat_t cpu2gpu_transfer_stats = 5;
+  repeated cpu_to_gpu_stat_t cpu2gpu_transfer_stats = 4;
 
   // the stats about the tensors that were freed
-  repeated tensor_freed_stat_t free_tensor_stats = 6;
+  repeated tensor_freed_stat_t free_tensor_stats = 5;
 
   // the stats about the tensors that were evicted
-  repeated tensor_evicted_stat_t evicted_tensor_stats = 7;
+  repeated tensor_evicted_stat_t evicted_tensor_stats = 6;
 
   // the krenels that were scheduled
-  repeated scheduled_kernel_stat_t kernels_scheduled = 8;
+  repeated scheduled_kernel_stat_t kernels_scheduled = 7;
 
   // the garbage requests that were scheduled
-  repeated gc_request_stat_t gc_scheduled = 9;
+  repeated gc_request_stat_t gc_scheduled = 8;
 
 };
 
