@@ -5,120 +5,23 @@
         integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
 
     <script src="https://unpkg.com/timelines-chart@2.11.5/dist/timelines-chart.min.js"></script>
+
+    <!-- Latest compiled and minified CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@3.4.1/dist/css/bootstrap.min.css" integrity="sha384-HSMxcRTRxnN+Bdg0JdbxYKrThecOKuH5zCYotlSAcp1+c8xmyTe9GYg1l9a69psu" crossorigin="anonymous">
+
+    <!-- Optional theme -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@3.4.1/dist/css/bootstrap-theme.min.css" integrity="sha384-6pzBo3FDv/PJ8r2KRkGHifhEocL+1X2rVCTTkUfGk7/0pbek5mMa1upzvWbrUbOZ" crossorigin="anonymous">
+
+    <!-- Latest compiled and minified JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@3.4.1/dist/js/bootstrap.min.js" integrity="sha384-aJ21OjlMXNL5UyIl/XNwTMqvzeRMZH2w8c5cRVpzpU8Y5bApTppSuUkhZXN0VxHd" crossorigin="anonymous"></script>
 </head>
 
 <body>
 
-    <script>
+    <script src="js/plot_timeline.js"></script>
 
-        let searchParams = new URLSearchParams(window.location.search);
-        param = searchParams.get('log');
-
-        $.getJSON( "api/logs/" + param, function(profiling_data) {
-            
-            console.log(profiling_data.device_logs)
-            groups = []
-            for (let i = 0; i < profiling_data.device_logs.length; i++) {
-
-                data = [];
-
-                // add the info about the kernels that were run on this GPU
-                kr_dps = [];
-                ks = profiling_data.device_logs[i].kernels_stats;
-                for (let j = 0; j < ks.length; j++) {
-                    dp = {
-                        timeRange : [ks[j].start * 1e-5, ks[j].end * 1e-5],
-                        val : j
-                    }
-                    kr_dps.push(dp);
-                }
-                kr_dps = {
-                    label: "kernels_run",
-                    data: kr_dps
-                }
-                data.push(kr_dps)
-
-                // add the info about gpu2gpu transfers
-                g2g_dps = []
-                g2gs = profiling_data.device_logs[i].gpu2gpu_transfer_stats;
-                for (let j = 0; j < g2gs.length; j++) {
-                    dp = {
-                        timeRange : [g2gs[j].start * 1e-5, g2gs[j].end * 1e-5],
-                        val : j
-                    }
-                    g2g_dps.push(dp);
-                }
-                g2g_dps = {
-                    label: "gpu2gpu_copies",
-                    data: g2g_dps
-                }
-                data.push(g2g_dps)
-
-                // add the info about cpu2gpu transfers
-                c2g_dps = []
-                c2gs = profiling_data.device_logs[i].cpu2gpu_transfer_stats;
-                for (let j = 0; j < c2gs.length; j++) {
-                    dp = {
-                        timeRange : [c2gs[j].start * 1e-5, c2gs[j].end * 1e-5],
-                        val : j
-                    }
-                    c2g_dps.push(dp);
-                }
-                c2g_dps = {
-                    label: "cpu2gpu_copies",
-                    data: c2g_dps
-                }
-                data.push(c2g_dps)
-
-                group = {
-                    data : data,
-                    group : "GPU " + i.toString()
-                }
-                groups.push(group)
-            }
-            console.log(groups);
-
-            json_to_table = function(tableData) {
-
-                var table = $('<table></table>');
-                for (const [key, value] of Object.entries(tableData)) {
-                    var data = $('<tr></tr>');
-                    data.append($('<td>'+ key + '</td>'));
-                    data.append($('<td>'+ JSON.stringify(value) + '</td>'));
-                    table.append(data);
-                }
-                $("#dump").html(table); 
-            }
-
-            TimelinesChart()(document.body)
-            .xTickFormat(n => +n)
-            .timeFormat('%Q')
-            .data(groups)
-            .onSegmentClick(function(segment) {
-
-                if(segment.label === "gpu2gpu_copies") {
-                    device_idx = segment.group.split(" ")[1];
-                    t = profiling_data.device_logs[device_idx].gpu2gpu_transfer_stats[segment.val];
-                    json_to_table(t);
-                }
-                else if(segment.label === "cpu2gpu_copies") {
-                    device_idx = segment.group.split(" ")[1];
-                    t = profiling_data.device_logs[device_idx].cpu2gpu_transfer_stats[segment.val];
-                    json_to_table(t);
-                }
-                else if(segment.label === "kernels_run") {
-                    device_idx = segment.group.split(" ")[1];
-                    t = profiling_data.device_logs[device_idx].kernels_stats[segment.val];
-                    json_to_table(t);
-                }
-            });
-        });
-
-    </script>
-
-    <div id="dump">
-
-    </div>
+    <div id="timeline"></div>
+    <div id="dump"></div>
 </body>
 
 </html>

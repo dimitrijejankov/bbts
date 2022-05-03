@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <cstddef>
 #include <cstdint>
+#include <mutex>
 
 bbts::gpu_profiler_t::gpu_profiler_t(size_t num_gpus) {
   for(auto dev = 0; dev < num_gpus; ++dev) {
@@ -14,6 +15,9 @@ bbts::gpu_profiler_t::gpu_profiler_t(size_t num_gpus) {
 }
 
 void bbts::gpu_profiler_t::log_cpu_copy_begin(bbts::tid_t id, size_t num_bytes, int32_t dev) {
+
+  // lock this thing
+  std::unique_lock<std::mutex> lck(m);
 
   // get the current timestamp
   auto now = std::chrono::high_resolution_clock::now();
@@ -31,6 +35,9 @@ void bbts::gpu_profiler_t::log_cpu_copy_begin(bbts::tid_t id, size_t num_bytes, 
 
 void bbts::gpu_profiler_t::log_cpu_copy_end(int32_t dev) {
   
+  // lock this thing
+  std::unique_lock<std::mutex> lck(m);
+
   // get the current timestamp
   auto now = std::chrono::high_resolution_clock::now();
   auto tick = duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count() - base_tick;
@@ -41,6 +48,9 @@ void bbts::gpu_profiler_t::log_cpu_copy_end(int32_t dev) {
 }
 
 void bbts::gpu_profiler_t::log_gpu_copy_begin(int32_t dev) {
+
+  // lock this thing
+  std::unique_lock<std::mutex> lck(m);
 
   // get the current timestamp
   auto now = std::chrono::high_resolution_clock::now();
@@ -58,6 +68,9 @@ void bbts::gpu_profiler_t::log_gpu_copy_begin(int32_t dev) {
 void bbts::gpu_profiler_t::log_gpu_copy_tensor(tid_t tid, size_t num_bytes, 
                                                int32_t dst_dev, int32_t src_dev) {
 
+  // lock this thing
+  std::unique_lock<std::mutex> lck(m);
+
   // set the end time stamp
   auto &dl = log.mutable_device_logs()->at(dst_dev);
 
@@ -70,6 +83,9 @@ void bbts::gpu_profiler_t::log_gpu_copy_tensor(tid_t tid, size_t num_bytes,
 
 void bbts::gpu_profiler_t::log_gpu_copy_end(int32_t dev) {
 
+  // lock this thing
+  std::unique_lock<std::mutex> lck(m);
+
   // get the current timestamp
   auto now = std::chrono::high_resolution_clock::now();
   auto tick = duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count() - base_tick;
@@ -80,11 +96,18 @@ void bbts::gpu_profiler_t::log_gpu_copy_end(int32_t dev) {
 }
 
 void bbts::gpu_profiler_t::log_gpu_copy_cancel(int32_t dev) {
+
+  // lock this thing
+  std::unique_lock<std::mutex> lck(m);
+
   auto &dl = log.mutable_device_logs()->at(dev);
   dl.mutable_gpu2gpu_transfer_stats()->RemoveLast();
 }
 
 void bbts::gpu_profiler_t::kernel_begin(const kernel_prep_ptr_t &prep) {
+
+  // lock this thing
+  std::unique_lock<std::mutex> lck(m);
 
   // get the current timestamp
   auto now = std::chrono::high_resolution_clock::now();
@@ -101,6 +124,9 @@ void bbts::gpu_profiler_t::kernel_begin(const kernel_prep_ptr_t &prep) {
 
 void bbts::gpu_profiler_t::kernel_end(const kernel_prep_ptr_t &prep) {
 
+  // lock this thing
+  std::unique_lock<std::mutex> lck(m);
+
   // get the current timestamp
   auto now = std::chrono::high_resolution_clock::now();
   auto tick = duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count() - base_tick;
@@ -112,6 +138,9 @@ void bbts::gpu_profiler_t::kernel_end(const kernel_prep_ptr_t &prep) {
 }
 
 void bbts::gpu_profiler_t::tensor_freed(tid_t id, int32_t dev, size_t num_bytes) {
+
+  // lock this thing
+  std::unique_lock<std::mutex> lck(m);
 
   // get the current timestamp
   auto now = std::chrono::high_resolution_clock::now();
@@ -128,6 +157,9 @@ void bbts::gpu_profiler_t::tensor_freed(tid_t id, int32_t dev, size_t num_bytes)
 
 void bbts::gpu_profiler_t::tensor_eviction_start(tid_t id, int32_t dev, size_t num_bytes) {
 
+  // lock this thing
+  std::unique_lock<std::mutex> lck(m);
+
   // get the current timestamp
   auto now = std::chrono::high_resolution_clock::now();
   auto tick = duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count() - base_tick;
@@ -143,6 +175,9 @@ void bbts::gpu_profiler_t::tensor_eviction_start(tid_t id, int32_t dev, size_t n
 
 void bbts::gpu_profiler_t::tensor_eviction_end(tid_t id, int32_t dev) {
 
+  // lock this thing
+  std::unique_lock<std::mutex> lck(m);
+
   // get the current timestamp
   auto now = std::chrono::high_resolution_clock::now();
   auto tick = duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count() - base_tick;
@@ -152,6 +187,9 @@ void bbts::gpu_profiler_t::tensor_eviction_end(tid_t id, int32_t dev) {
 }
 
 void bbts::gpu_profiler_t::log_kernel_scheduled(const kernel_prep_ptr_t &prp) {
+
+  // lock this thing
+  std::unique_lock<std::mutex> lck(m);
 
   // get the current timestamp
   auto now = std::chrono::high_resolution_clock::now();
@@ -190,6 +228,9 @@ void bbts::gpu_profiler_t::log_kernel_scheduled(const kernel_prep_ptr_t &prp) {
 
 void bbts::gpu_profiler_t::log_gc_scheduled(const gc_request_ptr_t &gc_req) {
 
+  // lock this thing
+  std::unique_lock<std::mutex> lck(m);
+
   auto &dl = log.mutable_device_logs()->at(gc_req->dev);
   auto ks = dl.add_gc_scheduled();
   
@@ -211,11 +252,18 @@ void bbts::gpu_profiler_t::log_gc_scheduled(const gc_request_ptr_t &gc_req) {
 }
 
 void bbts::gpu_profiler_t::save(const std::string file_name) {
+
+  // lock this thing
+  std::unique_lock<std::mutex> lck(m);
+
   std::ofstream ofs(file_name, std::ios_base::out | std::ios_base::binary);
   log.SerializeToOstream(&ofs);
 }
 
 std::string bbts::gpu_profiler_t::log_as_json() {
+
+  // lock this thing
+  std::unique_lock<std::mutex> lck(m);
 
   // convert the object to json
   std::string json_string;

@@ -238,10 +238,11 @@ std::vector<bbts::command_ptr_t> make_multiply(bbts::tid_t &cur_tid,
 
 int main() {
 
+  const int32_t num_gpus = 1;
   float cur_val = 0.0f;
   bbts::tid_t cur_tid = 0;
   const size_t matrix_size = 24000;
-  const size_t matrix_blocking = 2;
+  const size_t matrix_blocking = 4;
   const size_t matrix_block_size = matrix_size / matrix_blocking;
 
   // make the storage
@@ -259,7 +260,7 @@ int main() {
 
   // make the scheduler
   auto scheduler = std::make_shared<bbts::multi_gpu_scheduler_t>(
-      4, 14lu * 1024lu * 1024lu * 1024lu, storage, udf_manager, factory);
+      num_gpus, 14lu * 1024lu * 1024lu * 1024lu, storage, udf_manager, factory);
 
   // run all the scheduler threads
   auto scheduler_threads = run_threads(scheduler, storage);

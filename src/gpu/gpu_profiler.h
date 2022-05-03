@@ -1,5 +1,6 @@
 #include <cstddef>
 #include <cstdint>
+#include <mutex>
 #include <string>
 #include <vector>
 #include "types.h"
@@ -35,6 +36,8 @@ public:
   std::string log_as_json();
 
 private:
+
+  std::mutex m;
   
   size_t base_tick;
 
