@@ -4,6 +4,7 @@ param = searchParams.get('log');
 kernels_run = "Kernels Run"
 gpu2gpu_copies = "GPU2GPU Copies"
 cpu2gpu_copies = "CPU2GPU Copies"
+evictions = "Evictions"
 
 $.getJSON("api/logs/" + param, function (profiling_data) {
 
@@ -61,6 +62,21 @@ $.getJSON("api/logs/" + param, function (profiling_data) {
         }
         data.push(c2g_dps)
 
+        evict_dps = []
+        evict = profiling_data.device_logs[i].evicted_tensor_stats;
+        for (let j = 0; j < evict.length; j++) {
+            ev = {
+                timeRange: [evict[j].start * 1e-5, evict[j].end * 1e-5],
+                val: j
+            }
+            evict_dps.push(ev);
+        }
+        evict_dps = {
+            label: evictions,
+            data: evict_dps
+        }
+        data.push(evict_dps)
+
         group = {
             data: data,
             group: "GPU " + i.toString()
@@ -101,6 +117,12 @@ $.getJSON("api/logs/" + param, function (profiling_data) {
             else if (segment.label === kernels_run) {
                 device_idx = segment.group.split(" ")[1];
                 t = profiling_data.device_logs[device_idx].kernels_stats[segment.val];
+                t = profiling_data.device_logs[device_idx].kernels_scheduled[t.kernel_run_idx];
+                json_to_table(t);
+            }
+            else if (segment.label === evictions) {
+                device_idx = segment.group.split(" ")[1];
+                t = profiling_data.device_logs[device_idx].evicted_tensor_stats[segment.val];
                 json_to_table(t);
             }
         });
