@@ -238,17 +238,17 @@ std::vector<bbts::command_ptr_t> make_multiply(bbts::tid_t &cur_tid,
 
 int main() {
 
-  const int32_t num_gpus = 4;
+  const int32_t num_gpus = 1;
   float cur_val = 0.0f;
   bbts::tid_t cur_tid = 0;
-  const size_t matrix_size = 40000;
+  const size_t matrix_size = 20000;
   const size_t matrix_blocking = 4;
   const size_t matrix_block_size = matrix_size / matrix_blocking;
 
   // make the storage
   auto config = std::make_shared<bbts::node_config_t>(0, nullptr);
   config->is_dev_cluster = true;
-  config->dev_cluster_ram = 80lu * 1024lu * 1024lu * 1024lu;
+  config->dev_cluster_ram = 20lu * 1024lu * 1024lu * 1024lu;
 
   auto storage = std::make_shared<bbts::storage_t>(nullptr, config);
 
@@ -260,7 +260,7 @@ int main() {
 
   // make the scheduler
   auto scheduler = std::make_shared<bbts::multi_gpu_scheduler_t>(
-      num_gpus, 8lu * 1024lu * 1024lu * 1024lu, storage, udf_manager, factory);
+      num_gpus, 14lu * 1024lu * 1024lu * 1024lu, storage, udf_manager, factory);
 
   // run all the scheduler threads
   auto scheduler_threads = run_threads(scheduler, storage);
@@ -300,16 +300,16 @@ int main() {
 
   scheduler->save_log("gpu.proto");
 
-  for(auto &c_blk : c_index) {
-    bbts::tid_t tid = std::get<0>(c_blk.second);
-    float value = std::get<1>(c_blk.second);
-    storage->local_transaction(
-      {tid}, {}, [value](const bbts::storage_t::reservation_result_t &res) {
-        auto ts = res.get[0].get().tensor;
-        auto &t = ts->as<bbts::dense_tensor_t>();
-        for (auto idx = 0; idx < 100 * 100; ++idx) {
-        //   EXPECT_NEAR(t.data()[idx], value, 0.1f);
-        }
-    });
-  }
+  // for(auto &c_blk : c_index) {
+  //   bbts::tid_t tid = std::get<0>(c_blk.second);
+  //   float value = std::get<1>(c_blk.second);
+  //   storage->local_transaction(
+  //     {tid}, {}, [value](const bbts::storage_t::reservation_result_t &res) {
+  //       auto ts = res.get[0].get().tensor;
+  //       auto &t = ts->as<bbts::dense_tensor_t>();
+  //       for (auto idx = 0; idx < 100 * 100; ++idx) {
+  //       //   EXPECT_NEAR(t.data()[idx], value, 0.1f);
+  //       }
+  //   });
+  // }
 }

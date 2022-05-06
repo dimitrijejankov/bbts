@@ -5,6 +5,7 @@ kernels_run = "Kernels Run"
 gpu2gpu_copies = "GPU2GPU Copies"
 cpu2gpu_copies = "CPU2GPU Copies"
 evictions = "Evictions"
+free_label = "Free"
 
 $.getJSON("api/logs/" + param, function (profiling_data) {
 
@@ -77,6 +78,23 @@ $.getJSON("api/logs/" + param, function (profiling_data) {
         }
         data.push(evict_dps)
 
+
+        free_dps = []
+        free = profiling_data.device_logs[i].free_tensor_stats;
+        for (let j = 0; j < free.length; j++) {
+            fr = {
+                timeRange: [free[j].start * 1e-5, free[j].start * 1e-5 + 20],
+                val: j
+            }
+            free_dps.push(fr);
+        }
+        free_dps = {
+            label: free_label,
+            data: free_dps
+        }
+        data.push(free_dps)
+
+
         group = {
             data: data,
             group: "GPU " + i.toString()
@@ -123,6 +141,11 @@ $.getJSON("api/logs/" + param, function (profiling_data) {
             else if (segment.label === evictions) {
                 device_idx = segment.group.split(" ")[1];
                 t = profiling_data.device_logs[device_idx].evicted_tensor_stats[segment.val];
+                json_to_table(t);
+            }
+            else if (segment.label === free_label) {
+                device_idx = segment.group.split(" ")[1];
+                t = profiling_data.device_logs[device_idx].free_tensor_stats[segment.val];
                 json_to_table(t);
             }
         });
