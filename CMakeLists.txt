@@ -61,6 +61,7 @@ if(${ENABLE_GPU})
     
     # try to find cuda
     find_package(CUDA REQUIRED)
+    find_package(CUDAToolkit)
 
     # set the right architecture
     include(FindCUDA/select_compute_arch)

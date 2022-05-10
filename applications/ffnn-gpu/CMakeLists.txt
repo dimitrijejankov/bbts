@@ -21,6 +21,7 @@ add_library(ffnn_gpu_lib SHARED ${app_dir}/ffnn_lib_init.cc
                                 ${app_dir}/ffnn_back_mult.cu  
                                 ${app_dir}/ffnn_uniform_sparse_data.cc  
                                 ${app_dir}/ffnn_weighted_sum_sparse_dense.cc)
+target_link_libraries(ffnn_gpu_lib CUDA::curand)  
 
 # add the dependencies
 add_dependencies(applications generate_gpu_ffnn)
