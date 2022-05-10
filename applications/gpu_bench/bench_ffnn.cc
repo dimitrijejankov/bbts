@@ -1,3 +1,4 @@
+#include <cassert>
 #include <cstdint>
 #include <iostream>
 #include <string>
@@ -11,17 +12,17 @@
 
 float learning_rate = 1.0f;
 
-int32_t num_batch = 1280;
-int32_t batch_block = 128;
+int32_t num_batch = 12800;
+int32_t batch_block = 3200;
 
-int32_t num_features = 1000;
-int32_t features_block = 100;
+int32_t num_features = 10000;
+int32_t features_block = 2500;
 
 int32_t num_labels = 1500;
-int32_t labels_block = 150;
+int32_t labels_block = 375;
 
-int32_t embedding_size = 2300;
-int32_t embedding_block = 230;
+int32_t embedding_size = 12000;
+int32_t embedding_block = 3000;
 
 int32_t num_gpus = 4;
 
@@ -103,15 +104,20 @@ run_threads(bbts::multi_gpu_scheduler_ptr_t scheduler,
 void init_tensor_on_cpu(const bbts::multi_gpu_scheduler_ptr_t &scheduler, 
                         const bbts::tensor_factory_ptr_t &factory,
                         const bbts::storage_ptr_t &storage, bbts::tid_t tid,
-                        uint32_t num_rows, uint32_t num_cols, float value) {
+                        uint32_t row_id, uint32_t col_id,
+                        uint32_t num_rows, uint32_t num_cols, bool has_bias) {
 
   // make the meta
-  bbts::dense_tensor_meta_t dm{tid, num_rows, num_cols};
-  dm.fmt_id = factory->get_tensor_ftm("dense");
-  auto &m = dm.as<bbts::tensor_meta_t>();
+  bbts::ffnn_dense_meta_t dm(factory->get_tensor_ftm("ffnn_dense"));
+  dm.m() = {.num_rows = num_rows,  
+            .num_cols = num_cols, 
+            .row_idx = row_id, 
+            .col_idx = col_id, 
+            .has_bias = has_bias, 
+            .num_aggregated = 1 };
 
   // get how much we need to allocate
-  auto num_bytes = factory->get_tensor_size(m);
+  auto num_bytes = factory->get_tensor_size(dm);
 
   // make the tensor and const init it
   storage->local_transaction(
@@ -119,22 +125,26 @@ void init_tensor_on_cpu(const bbts::multi_gpu_scheduler_ptr_t &scheduler,
       [&](const bbts::storage_t::reservation_result_t &res) {
 
         // create the tensor
-        auto &ts = res.create[0].get().tensor->as<bbts::dense_tensor_t>();
+        auto &ts = res.create[0].get().tensor->as<bbts::ffnn_dense_t>();
         for (auto idx = 0; idx < num_rows * num_cols; ++idx) {
-          ts.data()[idx] = value;
+          ts.data()[idx] = 1.0f;
         }
 
-        ts.get_meta<bbts::tensor_meta_t>() = m;
+        for (auto idx = 0; idx < num_cols; ++idx) {
+          ts.bias()[idx] = 1.0f;
+        }
+
+        ts.get_meta<bbts::tensor_meta_t>() = dm.as<bbts::tensor_meta_t>();
       });
 
   // mark the that the tensor is on the CPU
-  scheduler->mark_tensor_on_cpu(tid, num_bytes, m);
+  scheduler->mark_tensor_on_cpu(tid, num_bytes, dm.as<bbts::tensor_meta_t>());  
 }
 
 matrix_index generate(const bbts::multi_gpu_scheduler_ptr_t &scheduler, 
                       const bbts::tensor_factory_ptr_t &factory,
                       const bbts::storage_ptr_t &storage, size_t num_rows, size_t num_cols,
-                      size_t split_rows, size_t split_cols) {
+                      size_t split_rows, size_t split_cols, bool has_bias) {
 
   matrix_index out;
   for (size_t rowID = 0; rowID < split_rows; ++rowID) {
@@ -150,7 +160,8 @@ matrix_index generate(const bbts::multi_gpu_scheduler_ptr_t &scheduler,
 
       // init the tensor
       init_tensor_on_cpu(scheduler, factory, storage, tid,
-                         blk_rows, blk_cols, 1.0f);
+                         rowID, colID, 
+                         blk_rows, blk_cols, has_bias);
     }
   }
 
@@ -266,7 +277,7 @@ matrix_index generate_multiply(bbts::multi_gpu_scheduler_ptr_t &scheduler,
         to_schedule.push_back(create_apply(cmd_id, udf_manager, ud_name,  
                                            {lhs[{l_row, l_col}], rhs[{r_row, r_col}]}, 
                                            {tid}, 
-                                           {}));
+                                           param_data));
         cmd_id++;
       }
     }
@@ -318,6 +329,7 @@ matrix_index apply_binary(bbts::udf_manager_ptr udf_manager,
                                     {l.second, r}, 
                                     {tid}, 
                                     param_data));
+    cmd_id++;
   }
 
   return std::move(out);
@@ -373,18 +385,18 @@ int main() {
   // generate the input batch
   auto x = generate(scheduler, factory, storage, num_batch,
                     num_features, num_batch / batch_block,
-                    num_features / features_block);
+                    num_features / features_block, false);
   auto y = generate(scheduler, factory, storage, num_batch,
                     num_labels, num_batch / batch_block,
-                    num_labels / labels_block);
+                    num_labels / labels_block, false);
 
   // init the weights
   auto w1 = generate(scheduler, factory, storage, 
                      num_features, embedding_size,
-                     num_features / features_block, embedding_size / embedding_block);
+                     num_features / features_block, embedding_size / embedding_block, true);
   auto w2 = generate(scheduler, factory, storage, 
                      embedding_size, num_labels,
-                     embedding_size / embedding_block, num_labels / labels_block);
+                     embedding_size / embedding_block, num_labels / labels_block, true);
 
   // a_1 = relu(X * W1 + b)
   std::list<bbts::command_ptr_t> ffnn_commands;

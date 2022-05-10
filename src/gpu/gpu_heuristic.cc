@@ -16,6 +16,7 @@ void gpu_heuristic_t::tensor_loaded(tid_t id, int dev) {
 
   // mark that the tensor is now on the device
   auto &t = tensors[id];
+  bool just_created = t.gpu_copies == 0 && !t.on_cpu;
   t.on_device[dev] = true;
   t.gpu_copies++;
 
@@ -32,6 +33,7 @@ void gpu_heuristic_t::tensor_loaded(tid_t id, int dev) {
     if (command_type == command_t::APPLY) {
 
       // update the counts
+      apply_cmds[command_id].inputs_available += just_created;
       apply_cmds[command_id].inputs_on_devices[dev]++;
       apply_cmds[command_id].loaded_inputs += t.gpu_copies == 1;
 
