@@ -1,7 +1,7 @@
 get_filename_component(app_dir ${CMAKE_CURRENT_LIST_FILE} DIRECTORY)
 
 # create the application for matrix multiplication benchmark
-add_executable(gpu_mm_bench ${app_dir}/bench_matrix_mutiply.cc)
+add_executable(gpu_mm_bench ${app_dir}/bench_matrix_mutiply.cc ${app_dir}/mm_util.cc)
 set_target_properties(gpu_mm_bench PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 
 # link the stuff we need
@@ -11,6 +11,18 @@ target_link_libraries(gpu_mm_bench bbts-common)
 
 # add the dependencies
 add_dependencies(applications gpu_mm_bench)
+
+# create the application for matrix multiplication benchmark
+add_executable(gpu_mm_chain_bench ${app_dir}/bench_mm_chain.cc ${app_dir}/mm_util.cc)
+set_target_properties(gpu_mm_chain_bench PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+
+# link the stuff we need
+target_link_libraries(gpu_mm_chain_bench ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(gpu_mm_chain_bench ${MPI_LIBRARIES})
+target_link_libraries(gpu_mm_chain_bench bbts-common)
+
+# add the dependencies
+add_dependencies(applications gpu_mm_chain_bench)
 
 # create the application for ffnn benchmark
 add_executable(gpu_ffnn_bench ${app_dir}/bench_ffnn.cc)
