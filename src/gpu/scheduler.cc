@@ -457,9 +457,39 @@ void multi_gpu_scheduler_t::command_prep_thread() {
       profiler.log_kernel_scheduled(gc_req->to_run);
     }
 
+    // 6.1. check if we have a command that we can run immeidately (all the
+    // inputs are on the same GPU) ex. APPLY 1 2 3 -> 4 | GPU 0 has 1 2 3
+    auto [kernel_prep, dev] = heuristic.get_next_on_same(preffered_dev);
+    if (dev != -1) {
+
+      // schedule it for execution, if it fails to schedule put it to sleep
+      bool scheduled = _schedule_for_execution(kernel_prep, dev);
+      if(scheduled) {
+        heuristic.mark_as_scheduled(kernel_prep);
+      }
+
+      // go to sleep if we did not manage to schedule anything
+      should_sleep = !scheduled;
+      continue;
+    }
+    // 6.2. othwerwise check if we have commands that have inputs on at least
+    // one of the GPUs ex. APPLY 1 2 3 -> 4 | GPU 0 has 1 2 | GPU 1 has 3
+    else if ((kernel_prep = heuristic.get_next_on_any()) != nullptr) {
+
+      // schedule them for execution, if it fails to schedule put it to sleep
+      bool scheduled = _schedule_for_execution(kernel_prep, preffered_dev);
+      if(scheduled) {
+        heuristic.mark_as_scheduled(kernel_prep);
+      }
+
+      // go to sleep if we did not manage to schedule anything
+      should_sleep = !scheduled;
+      continue;
+    }
+
     // 7.1. if there are not commands we can schedule immediately
     //  we pick a command based on a 'GOODNESS' score
-    auto kernel_prep = heuristic.get_next_heuristic();
+    kernel_prep = heuristic.get_next_heuristic();
     if (kernel_prep == nullptr) {
       should_sleep = true;
       continue;

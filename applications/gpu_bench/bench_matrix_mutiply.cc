@@ -55,10 +55,10 @@ run_threads(bbts::multi_gpu_scheduler_ptr_t scheduler,
 
 int main() {
 
-  const int32_t num_gpus = 1;
+  const int32_t num_gpus = 4;
   float cur_val = 0.0f;
   bbts::tid_t cur_tid = 0;
-  const size_t matrix_size = 20000;
+  const size_t matrix_size = 24000;
   const size_t matrix_blocking = 4;
   const size_t matrix_block_size = matrix_size / matrix_blocking;
 

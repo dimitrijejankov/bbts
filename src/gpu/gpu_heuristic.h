@@ -27,6 +27,13 @@ public:
   // make a heuristic with multiple device
   gpu_heuristic_t(uint32_t num_devices);
 
+  // returns a kernel that does not need any copies and the GPU to run it on
+  std::tuple<kernel_prep_ptr_t, int32_t>
+  get_next_on_same(int32_t preffered_dev);
+
+  // returns a kernel that needs just GPU copies
+  kernel_prep_ptr_t get_next_on_any();
+
   // return a kernel that need CPU copies
   kernel_prep_ptr_t get_next_heuristic();
 
@@ -182,9 +189,13 @@ private:
 
   // manages the information about the apply commands
   std::unordered_map<command_id_t, es_apply_command_nfo_t> apply_cmds;
-
+  std::unordered_set<command_id_t> apply_in_gpu_memory;
+  std::vector<std::unordered_set<command_id_t>> on_apply_single_gpu;
+  
   // manages the information about the reduce commands 
   std::unordered_map<command_id_t, es_reduce_command_nfo_t> reduce_cmds;
+  std::unordered_set<command_id_t> reduce_in_gpu_memory;
+  std::vector<std::unordered_set<command_id_t>> on_reduce_single_gpu;
   
   // keeps track of all the tensors on the GPU (we need that)
   std::unordered_map<tid_t, es_tensor_nfo> tensors;
