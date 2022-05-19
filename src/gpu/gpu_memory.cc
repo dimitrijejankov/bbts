@@ -1,4 +1,5 @@
 #include "gpu_memory.h"
+#include "gpu_profiler.h"
 #include "types.h"
 #include <cassert>
 #include <cstddef>
@@ -24,25 +25,17 @@ gpu_memory_t::gpu_memory_t(size_t num_devices, size_t mem_per_gpu)
   _to_free_tensors.resize(num_devices);
   _pinned_tensors.resize(num_devices);
   _total_to_free.resize(num_devices);
+  _mem_pools.resize(num_devices);
 
   for (auto dev = 0; dev < num_devices; ++dev) {
     _total_free[dev] = mem_per_gpu;
     _total_unpinned[dev] = 0;
     _total_to_free[dev] = 0;
+    _mem_pools[dev] = std::make_shared<gpu_memory_pool_t>(dev, mem_per_gpu);
   }
 };
 
-gpu_memory_t::~gpu_memory_t() {
-
-  // free all the tensors
-  for(auto &t : _tensors) {
-    for(auto dev = 0; dev < _num_devices; ++dev) {
-      if(t.second.data[dev] != nullptr) {
-        cudaFree(t.second.data[dev]->get_data_ptr<void>());
-      }
-    }
-  }
-}
+gpu_memory_t::~gpu_memory_t() {}
 
 void gpu_memory_t::_mark_apply_for_use(const gpu_command_schedule_ptr_t &apply) {
 
@@ -255,7 +248,7 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
     auto &t = _init_tensor(tid, num_bytes, created);
 
     // allocate it 
-    t.data[dev] = _allocate_tensor(num_bytes);
+    t.data[dev] = _allocate_tensor(num_bytes, dev);
     kp->run_me->outputs.set(out_idx, *t.data[dev]);
 
     // we just initialized and plan on filling it out during 
@@ -302,7 +295,7 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
       else if (src_dev != -1) {
 
         // allocate the memory 
-        t.data[dev] = _allocate_tensor(kp->input_sizes[in_idx]);
+        t.data[dev] = _allocate_tensor(kp->input_sizes[in_idx], dev);
         kp->run_me->inputs.set(in_idx, *t.data[dev]);
         assert(t.data[dev] != nullptr);
 
@@ -341,7 +334,7 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
         
         // we need to latch onto the CPU transfer
         src_dev = _tensors[kp->input[in_idx]].cpu_transfer->dst_dev;
-        t.data[dev] = _allocate_tensor(kp->input_sizes[in_idx]);
+        t.data[dev] = _allocate_tensor(kp->input_sizes[in_idx], dev);
         kp->run_me->inputs.set(in_idx, *t.data[dev]);
         assert(t.data[dev] != nullptr);
 
@@ -376,7 +369,7 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
       else {
 
         // allocate and pin the tensor
-        t.data[dev] = _allocate_tensor(kp->input_sizes[in_idx]);
+        t.data[dev] = _allocate_tensor(kp->input_sizes[in_idx], dev);
         kp->run_me->inputs.set(in_idx, *t.data[dev]);
         assert(t.data[dev] != nullptr);
 
@@ -613,11 +606,13 @@ void gpu_memory_t::finish_gc_request(const gc_request_ptr_t &req) {
   // increase the free memeory for each tensor we have freed
   for(auto r : req->to_free) {
     _total_free[req->dev] += r->num_bytes;
+    _mem_pools[req->dev]->free(r->tensor->get_data_ptr<void>(), r->num_bytes);
   }
 
   // increase the free memory for each tensor we have evicted
   for(auto &r : req->to_evict) {
     _total_free[req->dev] += r->num_bytes;
+    _mem_pools[req->dev]->free(r->tensor->get_data_ptr<void>(), r->num_bytes);
   }
 
   // unpin all the tensors
@@ -722,9 +717,10 @@ gpu_memory_t::gpu_mem_tensor_t &gpu_memory_t::_init_tensor(tid_t id,
   return t;
 }
 
-std::shared_ptr<tensor_t> gpu_memory_t::_allocate_tensor(size_t num_bytes) {
+std::shared_ptr<tensor_t> gpu_memory_t::_allocate_tensor(size_t num_bytes, int32_t dev) {
   void *tmp;
-  checkCudaErrors(cudaMalloc(&tmp, num_bytes - sizeof(tensor_t)));
+  tmp = _mem_pools[dev]->allocate(num_bytes);
+
   return std::move(std::make_shared<tensor_t>(tmp));
 }
 

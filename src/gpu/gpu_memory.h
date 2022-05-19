@@ -1,4 +1,5 @@
 #include "types.h"
+#include "gpu_memory_pool.h"
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -143,7 +144,7 @@ private:
   gpu_mem_tensor_t &_init_tensor(tid_t id, size_t num_bytes, bool &created);
 
   // allocate the tensor
-  std::shared_ptr<tensor_t> _allocate_tensor(size_t num_bytes);
+  std::shared_ptr<tensor_t> _allocate_tensor(size_t num_bytes, int32_t dev);
 
   // is the tensor pinned
   bool _is_pinned(tid_t id, int32_t dev);
@@ -210,6 +211,9 @@ private:
 
   // unpinned tensors, the multimap (num_copies, num_uses)
   std::vector<unpinned_t> _unpinned_tensors;
+
+  // the gpu memory pools for fast allocation
+  std::vector<gpu_memory_pool_ptr_t> _mem_pools;
 
   // to delete tensors
   std::vector<std::vector<tid_t>> _to_free_tensors;

@@ -2,6 +2,7 @@
 #include "../../src/tensor/builtin_formats.h"
 #include <cstddef>
 #include <cstdint>
+#include <unistd.h>
 #include <utility>
 #include <vector>
 
@@ -58,7 +59,7 @@ int main() {
   const int32_t num_gpus = 4;
   float cur_val = 0.0f;
   bbts::tid_t cur_tid = 0;
-  const size_t matrix_size = 24000;
+  const size_t matrix_size = 8000;
   const size_t matrix_blocking = 4;
   const size_t matrix_block_size = matrix_size / matrix_blocking;
 
@@ -105,6 +106,7 @@ int main() {
                                                                c_index,
                                                                matrix_blocking, 
                                                                matrix_block_size);
+  sleep(2);
 
   scheduler->schedule(to_schedule);
 
