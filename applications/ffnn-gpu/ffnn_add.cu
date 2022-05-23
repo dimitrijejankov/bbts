@@ -5,7 +5,7 @@
 bbts::ffnn_add::ffnn_add() {
 
   // set the names
-  impl_name = "ffnn_add_cpu";
+  impl_name = "ffnn_add_gpu";
   ud_name = "ffnn_add";
 
   // set the input and output types

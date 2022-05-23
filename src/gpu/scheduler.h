@@ -8,12 +8,13 @@
 #include "../ud_functions/udf_manager.h"
 #include <cstddef>
 #include <cstdint>
+#include <mutex>
 
 namespace bbts {
 
 class multi_gpu_scheduler_t {
 public:
-  multi_gpu_scheduler_t(size_t num_gpus, size_t gpu_mem_size, bbts::storage_ptr_t storage,
+  multi_gpu_scheduler_t(size_t num_gpus, size_t gpu_mem_size, size_t num_numa, bbts::storage_ptr_t storage,
                         bbts::udf_manager_ptr udm, tensor_factory_ptr_t tf);
 
   // mark that a tensor is created
@@ -38,7 +39,7 @@ public:
   void gpu_to_gpu_thread(int32_t dev);
 
   // CPU RAM to GPU RAM
-  void cpu_to_gpu_thread();
+  void cpu_to_gpu_thread(int32_t numa);
 
   // moves memory from the CPU to GPUs
   void command_prep_thread();
@@ -53,7 +54,17 @@ public:
   // save the log to file
   void save_log(const std::string file_name);
 
+  // the number of numa nodes we can use
+  size_t get_num_numa() const;
+
+  // returns the numa index
+  int32_t get_numa_idx(int32_t gpu_idx) const;
+
 private: 
+
+
+  // how many GPUs are connected per numa node
+  size_t gpus_per_num_node;
 
   // schedule an apply to be run on the GPU
   gpu_command_schedule_ptr_t _prepare_apply(bbts::command_ptr_t &cmd);
@@ -97,7 +108,7 @@ private:
   std::vector<concurent_queue<kernel_prep_ptr_t>> gpu2gpu_queue;
 
   // we schedule all the requests for cpu to gpu transfers
-  concurent_queue<kernel_prep_ptr_t> cpu2gpu_queue;
+  std::vector<concurent_queue<kernel_prep_ptr_t>> cpu2gpu_queue;
 
   // we schedule here all the reqeusts for tensor garbage collection
   std::vector<concurent_queue<gc_request_ptr_t>> gc_queue;

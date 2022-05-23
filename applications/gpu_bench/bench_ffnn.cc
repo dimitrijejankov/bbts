@@ -1,4 +1,5 @@
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <iostream>
 #include <string>
@@ -12,17 +13,18 @@
 
 float learning_rate = 1.0f;
 
-int32_t num_batch = 12800;
-int32_t batch_block = 3200;
+int32_t num_batch = 2000;
+int32_t batch_block = 2000;
 
-int32_t num_features = 10000;
-int32_t features_block = 5000;
+int32_t num_features = 16000;
+int32_t features_block = 4000;
 
-int32_t num_labels = 8000;
+int32_t num_labels = 16000;
 int32_t labels_block = 4000;
 
-int32_t embedding_size = 12000;
-int32_t embedding_block = 3000;
+int32_t embedding_size = 16000;
+int32_t embedding_block = 4000;
+
 
 int32_t num_gpus = 4;
 
@@ -66,8 +68,10 @@ run_threads(bbts::multi_gpu_scheduler_ptr_t scheduler,
   threads.push_back(
       std::thread([scheduler]() { scheduler->command_prep_thread(); }));
 
-  threads.push_back(
-      std::thread([scheduler]() { scheduler->cpu_to_gpu_thread(); }));
+  for (auto numa = 0; numa < scheduler->get_num_numa(); ++numa) {
+    threads.push_back(
+        std::thread([scheduler, numa]() { scheduler->cpu_to_gpu_thread(numa); }));
+  }
 
   threads.push_back(std::thread([scheduler, storage]() { 
 
@@ -179,14 +183,14 @@ create_apply(bbts::command_id_t id,
   std::vector<std::string> input_types;
   for (auto in : inputs) {
     prep_in.push_back(bbts::command_t::tid_node_id_t{.tid = in, .node = 0});
-    input_types.push_back("dense");
+    input_types.push_back("ffnn_dense");
   }
 
   std::vector<bbts::command_t::tid_node_id_t> prep_out;
   std::vector<std::string> output_types;
   for (auto out : outputs) {
     prep_out.push_back(bbts::command_t::tid_node_id_t{.tid = out, .node = 0});
-    output_types.push_back("dense");
+    output_types.push_back("ffnn_dense");
   }
   auto matcher = udm->get_matcher_for(ud_name);
 
@@ -210,10 +214,8 @@ create_reduce(bbts::command_id_t id,
               const std::vector<bbts::command_param_t> &params) {
 
   std::vector<bbts::command_t::tid_node_id_t> prep_in;
-  std::vector<std::string> input_types;
   for (auto in : inputs) {
     prep_in.push_back(bbts::command_t::tid_node_id_t{.tid = in, .node = 0});
-    input_types.push_back("dense");
   }
 
   #ifdef ENABLE_GPU
@@ -224,7 +226,7 @@ create_reduce(bbts::command_id_t id,
 
   std::vector<bbts::command_t::tid_node_id_t> prep_out;
   auto matcher = udm->get_matcher_for(ud_name);
-  auto ud = matcher->findMatch(input_types, {"dense"}, is_gpu);
+  auto ud = matcher->findMatch({"ffnn_dense", "ffnn_dense"}, {"ffnn_dense"}, is_gpu);
   auto cmd = bbts::command_t::create_reduce(id, ud->impl_id, is_gpu, params,
                                             prep_in, bbts::command_t::tid_node_id_t{.tid = output, .node = 0});
   return std::move(cmd);
@@ -283,29 +285,38 @@ matrix_index generate_multiply(bbts::multi_gpu_scheduler_ptr_t &scheduler,
     }
   }
 
-  param_data = {bbts::command_param_t{.i = k},
-                bbts::command_param_t{.i = (int32_t)final_op}};
-
-  // make the reduce ops
   matrix_index out;
-  for (auto &c : ridx) {
-
-    // set the current tid
-    out[c.first] = currentTID;
-
-    // reduce tensors
-    to_schedule.push_back(create_reduce(cmd_id,  
-                                        udf_manager, 
-                                        "ffnn_add", 
-                                        c.second, 
-                                        currentTID++, 
-                                        param_data));
-    cmd_id++;
-
-    // delete intermediate
-    to_schedule.push_back(create_delete(cmd_id, c.second));
-    cmd_id++;
+  if(k == 1) {
+    for (auto &c : ridx) {
+      out[c.first] = c.second.front();
+    }
   }
+  else {
+
+    param_data = {bbts::command_param_t{.i = k},
+                  bbts::command_param_t{.i = (int32_t)final_op}};
+
+    // make the reduce ops
+    for (auto &c : ridx) {
+
+      // set the current tid
+      out[c.first] = currentTID;
+
+      // reduce tensors
+      to_schedule.push_back(create_reduce(cmd_id,  
+                                          udf_manager, 
+                                          "ffnn_add", 
+                                          c.second, 
+                                          currentTID++, 
+                                          param_data));
+      cmd_id++;
+
+      // delete intermediate
+      to_schedule.push_back(create_delete(cmd_id, c.second));
+      cmd_id++;
+    }
+  }
+
 
   // return the idex
   return std::move(out);
@@ -374,7 +385,7 @@ int main() {
 
   // make the scheduler
   auto scheduler = std::make_shared<bbts::multi_gpu_scheduler_t>(
-      num_gpus, 15lu * 1024lu * 1024lu * 1024lu, storage, udf_manager, factory);
+      num_gpus, 15lu * 1024lu * 1024lu * 1024lu, 1, storage, udf_manager, factory);
 
   // run all the scheduler threads
   auto scheduler_threads = run_threads(scheduler, storage);
@@ -458,6 +469,8 @@ int main() {
   remove_matrix(delta_w_1, ffnn_commands);
 
   auto to_schedule = to_vector(ffnn_commands);
+
+  sleep(2);
   scheduler->schedule(to_schedule);
   
   // move all the tensors currently in the GPU back into RAM

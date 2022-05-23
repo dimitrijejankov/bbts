@@ -133,7 +133,7 @@ void bbts::gpu_profiler_t::kernel_end(const kernel_prep_ptr_t &prep) {
 
   // make sure this is the same command we are ending
   auto &dl = log.mutable_device_logs()->at(prep->dev);
-  assert(dl.mutable_kernels_stats()->rbegin()->kernel_run_idx() == prep->kernel_prep_id);
+  // assert(dl.mutable_kernels_stats()->rbegin()->kernel_run_idx() == prep->kernel_prep_id);
   dl.mutable_kernels_stats()->rbegin()->set_end(tick);
 }
 

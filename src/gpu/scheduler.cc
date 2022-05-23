@@ -1,5 +1,6 @@
 #include "scheduler.h"
 #include "types.h"
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -13,6 +14,7 @@ namespace bbts {
 
 multi_gpu_scheduler_t::multi_gpu_scheduler_t(size_t num_gpus,
                                              size_t gpu_mem_size,
+                                             size_t num_numa,
                                              bbts::storage_ptr_t storage,
                                              bbts::udf_manager_ptr udm,
                                              tensor_factory_ptr_t tf)
@@ -20,7 +22,7 @@ multi_gpu_scheduler_t::multi_gpu_scheduler_t(size_t num_gpus,
       gpu2gpu_queue(num_gpus), gc_queue(num_gpus),
       udm(std::move(udm)), tf(std::move(tf)), heuristic(num_gpus), 
       mem(num_gpus, gpu_mem_size), num_unfinished_kernels(0), 
-      profiler(num_gpus) {
+      profiler(num_gpus), cpu2gpu_queue(num_numa) {
 
   // set the device
   for(auto dev = 0; dev < _num_gpus; ++dev) {
@@ -31,6 +33,9 @@ multi_gpu_scheduler_t::multi_gpu_scheduler_t(size_t num_gpus,
       }
     }
   }
+
+  // set the numa stuff
+  gpus_per_num_node = num_gpus / num_numa;
 }
 
 void multi_gpu_scheduler_t::gpu_execution_thread(int32_t dev) {
@@ -195,7 +200,7 @@ void multi_gpu_scheduler_t::gpu_to_gpu_thread(int32_t dst_dev) {
   }
 }
 
-void multi_gpu_scheduler_t::cpu_to_gpu_thread() {
+void multi_gpu_scheduler_t::cpu_to_gpu_thread(int32_t numa_node) {
 
   cudaStream_t cpy_stream;
   cudaStreamCreate(&cpy_stream);
@@ -205,7 +210,7 @@ void multi_gpu_scheduler_t::cpu_to_gpu_thread() {
 
     // get a kernel run
     kernel_prep_ptr_t prep{};
-    cpu2gpu_queue.wait_dequeue(prep);
+    cpu2gpu_queue[numa_node].wait_dequeue(prep);
 
     // check if we are done
     if (prep == nullptr) {
@@ -291,7 +296,7 @@ void multi_gpu_scheduler_t::cpu_to_gpu_thread() {
     if(!prep->cpu_transfers.empty()) {
 
       // if we did not manage to process all copy requests reschedule it
-      cpu2gpu_queue.enqueue_copy(prep);
+      cpu2gpu_queue[numa_node].enqueue_copy(prep);
       continue;
     }
 
@@ -438,7 +443,8 @@ void multi_gpu_scheduler_t::command_prep_thread() {
       // schedule the CPU transfers
       gc_req->to_run->cpu_done = gc_req->to_run->cpu_transfers.empty();
       if (!gc_req->to_run->cpu_transfers.empty()) {
-        cpu2gpu_queue.enqueue_copy(gc_req->to_run);
+        auto numa = get_numa_idx(gc_req->to_run->dev);
+        cpu2gpu_queue[numa].enqueue_copy(gc_req->to_run);
       }
 
       // schedule the GPU transfers
@@ -618,6 +624,14 @@ std::vector<tid_t> multi_gpu_scheduler_t::get_deleted_tensors() {
 
 void multi_gpu_scheduler_t::save_log(const std::string file_name) {
   profiler.save(file_name);
+}
+
+size_t multi_gpu_scheduler_t::get_num_numa() const {
+  return _num_gpus / gpus_per_num_node;
+}
+
+int32_t multi_gpu_scheduler_t::get_numa_idx(int32_t gpu_idx) const {
+  return gpu_idx / gpus_per_num_node;
 }
 
 gpu_command_schedule_ptr_t multi_gpu_scheduler_t::_prepare_apply(bbts::command_ptr_t &cmd) {
@@ -803,7 +817,11 @@ void multi_gpu_scheduler_t::_perform_shutdown() {
     run_queue[dev].enqueue_copy(kp_done);
     gc_queue[dev].enqueue_copy(gc_done);
   }
-  cpu2gpu_queue.enqueue_copy(kp_done);
+  
+  for(auto numa = 0; numa < get_num_numa(); numa++) {
+    cpu2gpu_queue[numa].enqueue_copy(kp_done);
+  }
+
   _deleted_tensors.shutdown();
 }
 
@@ -858,7 +876,8 @@ bool multi_gpu_scheduler_t::_schedule_for_execution(kernel_prep_ptr_t kernel_pre
     // schedule the CPU transfers
     kernel_prep->cpu_done = kernel_prep->cpu_transfers.empty();
     if (!kernel_prep->cpu_transfers.empty()) {
-      cpu2gpu_queue.enqueue_copy(kernel_prep);
+      auto numa = get_numa_idx(kernel_prep->dev);
+      cpu2gpu_queue[numa].enqueue_copy(kernel_prep);
     }
 
     // if there are not transfers to be scheduled we can just run it immediately 
