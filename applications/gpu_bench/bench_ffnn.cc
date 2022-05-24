@@ -13,17 +13,19 @@
 
 float learning_rate = 1.0f;
 
-int32_t num_batch = 2000;
-int32_t batch_block = 2000;
+size_t num_iter = 5;
 
-int32_t num_features = 16000;
-int32_t features_block = 4000;
+int32_t num_batch = 1000;
+int32_t batch_block = 1000;
 
-int32_t num_labels = 16000;
-int32_t labels_block = 4000;
+int32_t num_features = 10000;
+int32_t features_block = 2500;
 
-int32_t embedding_size = 16000;
-int32_t embedding_block = 4000;
+int32_t num_labels = 10000;
+int32_t labels_block = 2500;
+
+int32_t embedding_size = 12000;
+int32_t embedding_block = 3000;
 
 
 int32_t num_gpus = 4;
@@ -247,7 +249,7 @@ matrix_index generate_multiply(bbts::multi_gpu_scheduler_ptr_t &scheduler,
                                bbts::udf_manager_ptr udf_manager,
                                std::list<bbts::command_ptr_t> &to_schedule,
                                const std::string &ud_name,
-                               matrix_index &lhs, matrix_index &rhs,
+                               const matrix_index &lhs, const matrix_index &rhs,
                                bool lhs_trans, bool rhs_trans, int32_t n,
                                int32_t m, int32_t k,
                                bbts::ffnn_add::elementwise_fn_type final_op) {
@@ -272,12 +274,15 @@ matrix_index generate_multiply(bbts::multi_gpu_scheduler_ptr_t &scheduler,
         auto tid = currentTID++;
         ridx[{ni, mi}].push_back(tid);
 
-        assert(lhs.find({l_row, l_col}) != lhs.end());
-        assert(rhs.find({r_row, r_col}) != rhs.end());
+        auto lt = lhs.find({l_row, l_col});
+        assert(lt != lhs.end());
+
+        auto rt = rhs.find({r_row, r_col});
+        assert(rt != rhs.end());
 
         // make the multiply
         to_schedule.push_back(create_apply(cmd_id, udf_manager, ud_name,  
-                                           {lhs[{l_row, l_col}], rhs[{r_row, r_col}]}, 
+                                           {lt->second, rt->second}, 
                                            {tid}, 
                                            param_data));
         cmd_id++;
@@ -325,13 +330,14 @@ matrix_index generate_multiply(bbts::multi_gpu_scheduler_ptr_t &scheduler,
 matrix_index apply_binary(bbts::udf_manager_ptr udf_manager, 
                           const std::string &ud_name,
                           std::list<bbts::command_ptr_t> &commands,
-                          matrix_index &lhs, matrix_index &rhs,
+                          const matrix_index &lhs, const matrix_index &rhs,
                           const std::vector<bbts::command_param_t> &param_data) {
   matrix_index out;
   for (auto l : lhs) {
 
-    assert(rhs.find(l.first) != rhs.end());
-    auto r = rhs[l.first];
+    auto rt = rhs.find(l.first);
+    assert(rt != rhs.end());
+    auto r = rt->second;
 
     auto tid = currentTID++;
     out[l.first] = tid;
@@ -368,49 +374,15 @@ std::vector<bbts::command_ptr_t> to_vector(const std::list<bbts::command_ptr_t> 
   return std::move(to_schedule);
 }
 
-int main() {
-
-  // make the storage
-  auto config = std::make_shared<bbts::node_config_t>(0, nullptr);
-  config->is_dev_cluster = true;
-  config->dev_cluster_ram = 20lu * 1024lu * 1024lu * 1024lu;
-
-  auto storage = std::make_shared<bbts::storage_t>(nullptr, config);
-
-  // create the tensor factory
-  auto factory = std::make_shared<bbts::tensor_factory_t>();
-
-  // crate the udf manager
-  auto udf_manager = std::make_shared<bbts::udf_manager_t>(factory, nullptr);
-
-  // make the scheduler
-  auto scheduler = std::make_shared<bbts::multi_gpu_scheduler_t>(
-      num_gpus, 15lu * 1024lu * 1024lu * 1024lu, 1, storage, udf_manager, factory);
-
-  // run all the scheduler threads
-  auto scheduler_threads = run_threads(scheduler, storage);
-
-  // load the GPU library
-  load_library(factory, udf_manager);
-
-  // generate the input batch
-  auto x = generate(scheduler, factory, storage, num_batch,
-                    num_features, num_batch / batch_block,
-                    num_features / features_block, false);
-  auto y = generate(scheduler, factory, storage, num_batch,
-                    num_labels, num_batch / batch_block,
-                    num_labels / labels_block, false);
-
-  // init the weights
-  auto w1 = generate(scheduler, factory, storage, 
-                     num_features, embedding_size,
-                     num_features / features_block, embedding_size / embedding_block, true);
-  auto w2 = generate(scheduler, factory, storage, 
-                     embedding_size, num_labels,
-                     embedding_size / embedding_block, num_labels / labels_block, true);
+auto ffnn_iter(std::list<bbts::command_ptr_t> &ffnn_commands,
+               bbts::multi_gpu_scheduler_ptr_t &scheduler, 
+               bbts::udf_manager_ptr udf_manager,
+               const matrix_index &x, 
+               const matrix_index &y,
+               const matrix_index &w1,
+               const matrix_index &w2) {
 
   // a_1 = relu(X * W1 + b)
-  std::list<bbts::command_ptr_t> ffnn_commands;
   auto a_1 = generate_multiply(scheduler, udf_manager, ffnn_commands, 
       "ffnn_act_mult", x, w1, false, false,
       num_batch / batch_block, embedding_size / embedding_block,
@@ -457,16 +429,92 @@ int main() {
   auto updated_w2 =
       apply_binary(udf_manager, "ffnn_weighted_sum", ffnn_commands, w2, delta_w_2, param_data);
 
-  // do a ton of removes
-  remove_matrix(w1, ffnn_commands);
-  remove_matrix(w2, ffnn_commands);
-  remove_matrix(a_1, ffnn_commands);
-  remove_matrix(a_2, ffnn_commands);
-  remove_matrix(delta_a_2, ffnn_commands);
-  remove_matrix(delta_w_2, ffnn_commands);
-  remove_matrix(delta_a_1_tmp, ffnn_commands);
-  remove_matrix(delta_a_1, ffnn_commands);
-  remove_matrix(delta_w_1, ffnn_commands);
+  return std::tuple{updated_w1, updated_w2, a_1, a_2, delta_a_2, delta_w_2, delta_a_1_tmp, delta_a_1, delta_w_1};
+}
+
+int main() {
+
+
+  // make the storage
+  auto config = std::make_shared<bbts::node_config_t>(0, nullptr);
+  config->is_dev_cluster = true;
+  config->dev_cluster_ram = 20lu * 1024lu * 1024lu * 1024lu;
+
+  auto storage = std::make_shared<bbts::storage_t>(nullptr, config);
+
+  // create the tensor factory
+  auto factory = std::make_shared<bbts::tensor_factory_t>();
+
+  // crate the udf manager
+  auto udf_manager = std::make_shared<bbts::udf_manager_t>(factory, nullptr);
+
+  // make the scheduler
+  auto scheduler = std::make_shared<bbts::multi_gpu_scheduler_t>(
+      num_gpus, 15lu * 1024lu * 1024lu * 1024lu, 2, storage, udf_manager, factory);
+
+  // run all the scheduler threads
+  auto scheduler_threads = run_threads(scheduler, storage);
+
+  // load the GPU library
+  load_library(factory, udf_manager);
+
+  // generate the input batch
+  std::vector<matrix_index> x;
+  std::vector<matrix_index> y;
+
+  // create all the input/output matrices
+  x.resize(num_iter);
+  y.resize(num_iter);
+  for(auto iter = 0; iter < num_iter; ++iter) {
+
+    x[iter] = generate(scheduler, factory, storage, num_batch,
+                       num_features, num_batch / batch_block,
+                       num_features / features_block, false);
+
+    y[iter] = generate(scheduler, factory, storage, num_batch,
+                       num_labels, num_batch / batch_block,
+                       num_labels / labels_block, false);
+  }
+
+  // init the weights
+  auto w1 = generate(scheduler, factory, storage, 
+                     num_features, embedding_size,
+                     num_features / features_block, embedding_size / embedding_block, true);
+  auto w2 = generate(scheduler, factory, storage, 
+                     embedding_size, num_labels,
+                     embedding_size / embedding_block, num_labels / labels_block, true);
+
+  std::list<bbts::command_ptr_t> ffnn_commands;
+  for(auto iter = 0; iter < num_iter; ++iter) {
+    
+    // create commands for ffnn iterations
+    auto [w1_new, 
+          w2_new, 
+          a_1, 
+          a_2, 
+          delta_a_2, 
+          delta_w_2, 
+          delta_a_1_tmp, 
+          delta_a_1, 
+          delta_w_1] = ffnn_iter(ffnn_commands, scheduler, udf_manager, x[iter], y[iter], w1, w2);
+
+    // do a ton of removes
+    remove_matrix(w1, ffnn_commands);
+    remove_matrix(w2, ffnn_commands);
+    remove_matrix(x[iter], ffnn_commands);
+    remove_matrix(y[iter], ffnn_commands);
+    remove_matrix(a_1, ffnn_commands);
+    remove_matrix(a_2, ffnn_commands);
+    remove_matrix(delta_a_2, ffnn_commands);
+    remove_matrix(delta_w_2, ffnn_commands);
+    remove_matrix(delta_a_1_tmp, ffnn_commands);
+    remove_matrix(delta_a_1, ffnn_commands);
+    remove_matrix(delta_w_1, ffnn_commands);
+
+    // set the new weights
+    w1 = std::move(w1_new);
+    w2 = std::move(w2_new);
+  }
 
   auto to_schedule = to_vector(ffnn_commands);
 
