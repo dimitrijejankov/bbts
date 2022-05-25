@@ -13,19 +13,19 @@
 
 float learning_rate = 1.0f;
 
-size_t num_iter = 5;
+size_t num_iter = 10;
 
 int32_t num_batch = 1000;
 int32_t batch_block = 1000;
 
-int32_t num_features = 10000;
-int32_t features_block = 2500;
+int32_t num_features = 16000;
+int32_t features_block = 4000;
 
-int32_t num_labels = 10000;
-int32_t labels_block = 2500;
+int32_t num_labels = 16000;
+int32_t labels_block = 4000;
 
-int32_t embedding_size = 12000;
-int32_t embedding_block = 3000;
+int32_t embedding_size = 16000;
+int32_t embedding_block = 4000;
 
 
 int32_t num_gpus = 4;
@@ -438,7 +438,7 @@ int main() {
   // make the storage
   auto config = std::make_shared<bbts::node_config_t>(0, nullptr);
   config->is_dev_cluster = true;
-  config->dev_cluster_ram = 20lu * 1024lu * 1024lu * 1024lu;
+  config->dev_cluster_ram = 80lu * 1024lu * 1024lu * 1024lu;
 
   auto storage = std::make_shared<bbts::storage_t>(nullptr, config);
 
@@ -450,7 +450,7 @@ int main() {
 
   // make the scheduler
   auto scheduler = std::make_shared<bbts::multi_gpu_scheduler_t>(
-      num_gpus, 15lu * 1024lu * 1024lu * 1024lu, 2, storage, udf_manager, factory);
+      num_gpus, 14lu * 1024lu * 1024lu * 1024lu, 2, storage, udf_manager, factory);
 
   // run all the scheduler threads
   auto scheduler_threads = run_threads(scheduler, storage);

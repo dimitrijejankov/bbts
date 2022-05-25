@@ -23,6 +23,7 @@ gpu_memory_t::gpu_memory_t(size_t num_devices, size_t mem_per_gpu)
   _total_free.resize(num_devices);
   _total_unpinned.resize(num_devices);
   _to_free_tensors.resize(num_devices);
+  _free_cache.resize(num_devices);
   _pinned_tensors.resize(num_devices);
   _total_to_free.resize(num_devices);
   _mem_pools.resize(num_devices);
@@ -537,6 +538,10 @@ gc_request_ptr_t gpu_memory_t::get_gc_request(kernel_prep_ptr_t kp, int dev) {
     assert(t.data[dev] != nullptr);
     t.data[dev] = nullptr;
 
+    // remove it from the free cache
+    assert(t.free_its[dev] != _free_cache[dev].end());
+    _free_cache[dev].erase(t.free_its[dev]);
+
     // we are killing a copy of this
     if(--t.num_left_to_remove == 0) {
       _tensors.erase(it);
@@ -670,6 +675,10 @@ void gpu_memory_t::_remove(tid_t id, size_t num_bytes) {
       // add it to the free
       _to_free_tensors[dev].push_back(id);
 
+      // store it in the cache
+      assert(it->second.data[dev] != nullptr);
+      it->second.free_its[dev] = _free_cache[dev].insert({num_bytes, id});
+
       // update the numbers
       _total_unpinned[dev] -= num_bytes;
       _total_to_free[dev] += num_bytes;
@@ -710,6 +719,7 @@ gpu_memory_t::gpu_mem_tensor_t &gpu_memory_t::_init_tensor(tid_t id,
   t.cpu_transfer = nullptr;
   for(auto dev = 0; dev < _num_devices; ++dev) {
     t.unpinned_its[dev] = _unpinned_tensors[dev].end();
+    t.free_its[dev] = _free_cache[dev].end();
     t.gpu_transfers[dev] = nullptr;
     t.data[dev] = nullptr;
   }
@@ -718,10 +728,91 @@ gpu_memory_t::gpu_mem_tensor_t &gpu_memory_t::_init_tensor(tid_t id,
 }
 
 std::shared_ptr<tensor_t> gpu_memory_t::_allocate_tensor(size_t num_bytes, int32_t dev) {
-  void *tmp;
-  tmp = _mem_pools[dev]->allocate(num_bytes);
 
-  return std::move(std::make_shared<tensor_t>(tmp));
+  // the allocated memory on the GPU
+  void *tmp;
+
+  // try to find it in the free cache (fast path)
+  auto it = _free_cache[dev].find(num_bytes);
+  if(it != _free_cache[dev].end()) {
+
+    // we got a chuck from the free cache we should be able to use it...
+    auto t = _tensors.find(it->second);
+
+    // claim this memory
+    _total_to_free[dev] -= t->second.num_bytes;
+    _total_free[dev] += t->second.num_bytes;
+
+    // null the data just in case
+    assert(t->second.data[dev] != nullptr);
+    tmp = t->second.data[dev]->get_data_ptr<void*>();
+    t->second.data[dev] = nullptr;
+
+    // we are killing a copy of this
+    if(--t->second.num_left_to_remove == 0) {
+      _tensors.erase(t);
+    }
+
+    // remove it from the free tensors
+    auto jt = std::find(_to_free_tensors[dev].begin(), 
+                        _to_free_tensors[dev].end(), 
+                        it->second);
+    std::iter_swap(jt, (_to_free_tensors[dev].end() - 1));
+    _to_free_tensors[dev].pop_back();
+
+    // remove it form the cache
+    _free_cache[dev].erase(it);
+  }
+  else {
+    
+    // slow path
+    tmp = _mem_pools[dev]->allocate(num_bytes);
+  }
+
+  // ok we can allocate space in any way lets 
+  if(tmp == nullptr) {
+
+    // free all the tensors we can free
+    for (auto it = _free_cache[dev].begin(); it != _free_cache[dev].end(); ++it) {
+
+      // we got a chuck from the free cache we should be able to use it...
+      auto t = _tensors.find(it->second);
+
+      // claim this memory
+      _total_to_free[dev] -= t->second.num_bytes;
+      _total_free[dev] += t->second.num_bytes;
+
+      // null the data just in case
+      assert(t->second.data[dev] != nullptr);
+      auto kmp = t->second.data[dev]->get_data_ptr<void*>();
+      t->second.data[dev] = nullptr;
+
+      // we are killing a copy of this
+      if(--t->second.num_left_to_remove == 0) {
+        _tensors.erase(t);
+      }
+
+      // remove it from the free tensors
+      auto jt = std::find(_to_free_tensors[dev].begin(), 
+                          _to_free_tensors[dev].end(), 
+                          it->second);
+      std::iter_swap(jt, (_to_free_tensors[dev].end() - 1));
+      _to_free_tensors[dev].pop_back();
+
+      // free it from the memory pool
+      _mem_pools[dev]->free(kmp, num_bytes);
+    }
+
+    // clear all the free on this device
+    _free_cache[dev].clear();
+
+    // try to allocate again
+    tmp = _mem_pools[dev]->allocate(num_bytes);
+  }
+
+  // return a tensors if possible
+  assert(tmp != nullptr);
+  return tmp == nullptr ? nullptr : std::move(std::make_shared<tensor_t>(tmp));
 }
 
 bool gpu_memory_t::_is_pinned(tid_t id, int32_t dev) {

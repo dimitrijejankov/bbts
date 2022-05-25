@@ -133,6 +133,9 @@ private:
     // these are iterators so that we can quickly update the _unpinned_tensors
     std::array<unpinned_t::iterator, BBTS_MAX_GPU_DEVICES> unpinned_its;
 
+    // iterators to the free cache
+    std::array<std::unordered_multimap<size_t, tid_t>::iterator, BBTS_MAX_GPU_DEVICES> free_its;
+
     // the ongoing transfers from GPU2GPU
     std::array<gpu_to_gpu_transfer_ptr_t, BBTS_MAX_GPU_DEVICES> gpu_transfers;
     
@@ -217,6 +220,9 @@ private:
 
   // to delete tensors
   std::vector<std::vector<tid_t>> _to_free_tensors;
+
+  // we use these for fastpath allocations
+  std::vector<std::unordered_multimap<size_t, tid_t>> _free_cache;
 
   // unpinned memory per gpu
   std::vector<size_t> _total_unpinned;
