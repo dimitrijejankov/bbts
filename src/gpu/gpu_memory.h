@@ -1,5 +1,4 @@
 #include "types.h"
-#include "gpu_memory_pool.h"
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -79,10 +78,10 @@ public:
   void finish_gc_request(const gc_request_ptr_t &req);
 
   // get all the tensors we can flush, returns true if all tensors can be flushed
-  bool get_tensors_to_flush(std::vector<std::tuple<tensor_t*, tid_t, size_t>> &to_flush);
+  bool get_tensors_to_flush(std::vector<std::tuple<tensor_t*, tid_t, size_t, int32_t>> &to_flush);
 
   // mark that all of these tensors were just flushed
-  void mark_as_flushed(const std::vector<std::tuple<tensor_t*, tid_t, size_t>> &to_flush);
+  void mark_as_flushed(const std::vector<std::tuple<tensor_t*, tid_t, size_t, int32_t>> &to_flush);
 
   // returns all the tensors that were deleted in the mean time
   std::vector<tid_t> get_deleted_tensors();
@@ -216,7 +215,7 @@ private:
   std::vector<unpinned_t> _unpinned_tensors;
 
   // the gpu memory pools for fast allocation
-  std::vector<gpu_memory_pool_ptr_t> _mem_pools;
+  std::vector<std::tuple<cudaMemPool_t, cudaMemPoolProps, cudaStream_t>> _mem_pools;
 
   // to delete tensors
   std::vector<std::vector<tid_t>> _to_free_tensors;

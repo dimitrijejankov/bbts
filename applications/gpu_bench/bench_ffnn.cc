@@ -13,7 +13,7 @@
 
 float learning_rate = 1.0f;
 
-size_t num_iter = 10;
+size_t num_iter = 1;
 
 int32_t num_batch = 1000;
 int32_t batch_block = 1000;

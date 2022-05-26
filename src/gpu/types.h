@@ -177,6 +177,9 @@ struct kernel_prep_t {
 
   // are the cpu2gpu transfers finished
   bool cpu_done = false;
+
+  // the event 
+  cudaEvent_t malloc_event;
 };
 using kernel_prep_ptr_t = std::shared_ptr<kernel_prep_t>;
 

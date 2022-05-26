@@ -32,7 +32,19 @@ gpu_memory_t::gpu_memory_t(size_t num_devices, size_t mem_per_gpu)
     _total_free[dev] = mem_per_gpu;
     _total_unpinned[dev] = 0;
     _total_to_free[dev] = 0;
-    _mem_pools[dev] = std::make_shared<gpu_memory_pool_t>(dev, mem_per_gpu);
+
+    // make the pool
+    auto &[exportPool, poolProps, stream] = _mem_pools[dev];
+    
+    // create the allocation stream
+    cudaSetDevice(dev);
+    cudaStreamCreate(&stream);
+
+    poolProps.allocType = cudaMemAllocationTypePinned;
+    poolProps.handleTypes = cudaMemHandleTypePosixFileDescriptor;
+    poolProps.location.type = cudaMemLocationTypeDevice;
+    poolProps.location.id = dev;
+    cudaMemPoolCreate(&exportPool, &poolProps);
   }
 };
 
@@ -405,6 +417,10 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
       assert(_tensors[kp->input[in_idx]].data[dev] != nullptr);
     }
   }
+
+  // create the event and set the stream
+  checkCudaErrors(cudaEventCreate(&kp->malloc_event));
+  checkCudaErrors(cudaEventRecord(kp->malloc_event, std::get<2>(_mem_pools[dev])));
 };
 
 void gpu_memory_t::finish_kernel_prep(kernel_prep_ptr_t kp, 
@@ -611,13 +627,11 @@ void gpu_memory_t::finish_gc_request(const gc_request_ptr_t &req) {
   // increase the free memeory for each tensor we have freed
   for(auto r : req->to_free) {
     _total_free[req->dev] += r->num_bytes;
-    _mem_pools[req->dev]->free(r->tensor->get_data_ptr<void>(), r->num_bytes);
   }
 
   // increase the free memory for each tensor we have evicted
   for(auto &r : req->to_evict) {
     _total_free[req->dev] += r->num_bytes;
-    _mem_pools[req->dev]->free(r->tensor->get_data_ptr<void>(), r->num_bytes);
   }
 
   // unpin all the tensors
@@ -629,7 +643,7 @@ void gpu_memory_t::finish_gc_request(const gc_request_ptr_t &req) {
   _total_free[req->dev] += req->free_memory_used;
 }
 
-bool gpu_memory_t::get_tensors_to_flush(std::vector<std::tuple<tensor_t*, tid_t, size_t>> &to_flush) {
+bool gpu_memory_t::get_tensors_to_flush(std::vector<std::tuple<tensor_t*, tid_t, size_t, int32_t>> &to_flush) {
 
   bool can_flush_all = true;
   for(auto &t : _tensors) {
@@ -640,14 +654,14 @@ bool gpu_memory_t::get_tensors_to_flush(std::vector<std::tuple<tensor_t*, tid_t,
     // if this one is just on the GPU but not on the CPU we need to flush it
     for(auto dev = 0; dev < _num_devices; dev++) {
       if(!t.second.is_on_cpu && t.second.is_loaded_on_gpu[dev])  {
-        to_flush.push_back({t.second.data[dev].get(), t.first, t.second.num_bytes});
+        to_flush.push_back({t.second.data[dev].get(), t.first, t.second.num_bytes, dev});
       }
     }
   }
   return can_flush_all;
 }
 
-void gpu_memory_t::mark_as_flushed(const std::vector<std::tuple<tensor_t*, tid_t, size_t>> &to_flush) {
+void gpu_memory_t::mark_as_flushed(const std::vector<std::tuple<tensor_t*, tid_t, size_t, int32_t>> &to_flush) {
 
   // go and mark each tensor...
   for(auto &t : to_flush) {
@@ -766,48 +780,10 @@ std::shared_ptr<tensor_t> gpu_memory_t::_allocate_tensor(size_t num_bytes, int32
   else {
     
     // slow path
-    tmp = _mem_pools[dev]->allocate(num_bytes);
-  }
-
-  // ok we can allocate space in any way lets 
-  if(tmp == nullptr) {
-
-    // free all the tensors we can free
-    for (auto it = _free_cache[dev].begin(); it != _free_cache[dev].end(); ++it) {
-
-      // we got a chuck from the free cache we should be able to use it...
-      auto t = _tensors.find(it->second);
-
-      // claim this memory
-      _total_to_free[dev] -= t->second.num_bytes;
-      _total_free[dev] += t->second.num_bytes;
-
-      // null the data just in case
-      assert(t->second.data[dev] != nullptr);
-      auto kmp = t->second.data[dev]->get_data_ptr<void*>();
-      t->second.data[dev] = nullptr;
-
-      // we are killing a copy of this
-      if(--t->second.num_left_to_remove == 0) {
-        _tensors.erase(t);
-      }
-
-      // remove it from the free tensors
-      auto jt = std::find(_to_free_tensors[dev].begin(), 
-                          _to_free_tensors[dev].end(), 
-                          it->second);
-      std::iter_swap(jt, (_to_free_tensors[dev].end() - 1));
-      _to_free_tensors[dev].pop_back();
-
-      // free it from the memory pool
-      _mem_pools[dev]->free(kmp, num_bytes);
-    }
-
-    // clear all the free on this device
-    _free_cache[dev].clear();
-
-    // try to allocate again
-    tmp = _mem_pools[dev]->allocate(num_bytes);
+    checkCudaErrors(cudaMallocAsync(&tmp, 
+                                    num_bytes, 
+                                    std::get<0>(_mem_pools[dev]), 
+                                    std::get<2>(_mem_pools[dev]))); 
   }
 
   // return a tensors if possible

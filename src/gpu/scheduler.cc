@@ -95,6 +95,8 @@ void multi_gpu_scheduler_t::gpu_execution_thread(int32_t dev) {
 
 void multi_gpu_scheduler_t::gpu_to_gpu_thread(int32_t dst_dev) {
   
+  checkCudaErrors(cudaSetDevice(dst_dev));
+
   // init the stream
   cudaStream_t cpy_stream;
   cudaStreamCreate(&cpy_stream);
@@ -110,6 +112,9 @@ void multi_gpu_scheduler_t::gpu_to_gpu_thread(int32_t dst_dev) {
     if (prep == nullptr) {
       break;
     }
+
+    // make sure everything is malloced
+    cudaEventSynchronize(prep->malloc_event);
 
     // log that we are doing the GPU2GPU copy
     profiler.log_gpu_copy_begin(dst_dev);
@@ -216,6 +221,10 @@ void multi_gpu_scheduler_t::cpu_to_gpu_thread(int32_t numa_node) {
     if (prep == nullptr) {
       break;
     }
+
+    // make sure everything is malloced
+    checkCudaErrors(cudaEventSynchronize(prep->malloc_event));
+    checkCudaErrors(cudaSetDevice(prep->dev));
 
     // schedule all the copies
     done_transfers.clear();
@@ -515,6 +524,12 @@ void multi_gpu_scheduler_t::command_prep_thread() {
 
 void multi_gpu_scheduler_t::gc_thread(int dev_id) {
 
+
+  checkCudaErrors(cudaSetDevice(dev_id));
+
+  cudaStream_t free_stream;
+  cudaStreamCreate(&free_stream);
+
   cudaStream_t copy_stream;
   cudaStreamCreate(&copy_stream);
 
@@ -526,6 +541,13 @@ void multi_gpu_scheduler_t::gc_thread(int dev_id) {
     // finish if the request is null
     if (request == nullptr) {
       break;
+    }
+
+    // schedule all the free commands
+    for (auto &t : request->to_free) {
+      auto mem = t->tensor->get_data_ptr<void>();
+      checkCudaErrors(cudaFreeAsync(mem, free_stream));
+      profiler.tensor_freed(t->tid, dev_id, t->num_bytes);
     }
 
     // evict everything we need to
@@ -606,7 +628,14 @@ void multi_gpu_scheduler_t::gc_thread(int dev_id) {
         std::unique_lock<std::mutex> lck(t->m);
         t->evicted = true;
       }
+
+      // free this memory
+      assert(t->tensor->get_data_ptr<void>() != nullptr);
+      checkCudaErrors(cudaFree(t->tensor->get_data_ptr<void>()));
     }
+
+    // sync free
+    checkCudaErrors(cudaStreamSynchronize(free_stream));
 
     // signal that we have processed this request
     scheduler_queue.signal_reaper_done(request);
@@ -765,7 +794,7 @@ void multi_gpu_scheduler_t::flush() {
 
 void multi_gpu_scheduler_t::_perform_flush() {
 
-  std::vector<std::tuple<tensor_t*, tid_t, size_t>> to_flush;
+  std::vector<std::tuple<tensor_t*, tid_t, size_t, int32_t>> to_flush;
   mem.get_tensors_to_flush(to_flush);
   bool success = to_flush.empty();
   if(!to_flush.empty()) {
@@ -777,12 +806,16 @@ void multi_gpu_scheduler_t::_perform_flush() {
       auto flush_me = std::get<0>(t);
       auto tid = std::get<1>(t);
       auto num_bytes = std::get<2>(t);
+      auto dev = std::get<3>(t);
 
       // run the local transaction move the tensor
       storage->local_transaction(
           {}, {{tid, num_bytes}},
           [&](const storage_t::reservation_result_t &res) {
             
+            // set the device
+            cudaSetDevice(dev);
+
             // create the tensor
             auto ts = res.create[0].get().tensor;
 
