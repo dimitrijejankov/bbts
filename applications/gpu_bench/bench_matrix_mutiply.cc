@@ -18,8 +18,10 @@ run_threads(bbts::multi_gpu_scheduler_ptr_t scheduler,
   threads.push_back(
       std::thread([scheduler]() { scheduler->command_prep_thread(); }));
 
-  threads.push_back(
-      std::thread([scheduler]() { scheduler->cpu_to_gpu_thread(); }));
+  for(auto numa = 0; numa < scheduler->get_num_numa(); ++numa) {
+    threads.push_back(
+        std::thread([scheduler, numa]() { scheduler->cpu_to_gpu_thread(numa); }));
+  }
 
   threads.push_back(std::thread([scheduler, storage]() { 
 
@@ -78,7 +80,7 @@ int main() {
 
   // make the scheduler
   auto scheduler = std::make_shared<bbts::multi_gpu_scheduler_t>(
-      num_gpus, 14lu * 1024lu * 1024lu * 1024lu, storage, udf_manager, factory);
+      num_gpus, 14lu * 1024lu * 1024lu * 1024lu, 1, storage, udf_manager, factory);
 
   // run all the scheduler threads
   auto scheduler_threads = run_threads(scheduler, storage);
