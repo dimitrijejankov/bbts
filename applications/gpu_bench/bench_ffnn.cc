@@ -18,17 +18,18 @@ size_t num_iter = 10;
 int32_t num_batch = 1000;
 int32_t batch_block = 1000;
 
-int32_t num_features = 16000;
+int32_t num_features = 32000;
 int32_t features_block = 4000;
+
+int32_t embedding_size = 2000;
+int32_t embedding_block = 2000;
 
 int32_t num_labels = 16000;
 int32_t labels_block = 4000;
 
-int32_t embedding_size = 16000;
-int32_t embedding_block = 4000;
 
 
-int32_t num_gpus = 4;
+int32_t num_gpus = 2;
 
 bbts::command_id_t cmd_id = 0;
 bbts::tid_t currentTID = 0;

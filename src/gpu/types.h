@@ -169,6 +169,10 @@ struct kernel_prep_t {
   // all the GPU transfers we need to do
   std::vector<gpu_to_gpu_transfer_ptr_t> gpu_transfers;
 
+  // TEMP solution allocated in can_preallocate
+  std::vector<std::shared_ptr<tensor_t>> input_tensor_ptrs;
+  std::vector<std::shared_ptr<tensor_t>> output_tensor_ptrs;
+
   // lock this so we don't interfere with other scheduling the kernel
   std::mutex m;
 

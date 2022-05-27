@@ -14,6 +14,7 @@ public:
   gpu_memory_pool_t(int32_t dev, size_t num_bytes) : block_allocator(num_bytes) {
 
     // allocate the memory
+    this->dev = dev;
     cudaSetDevice(dev);
     checkCudaErrors(cudaMalloc(&memory, num_bytes));
   }
@@ -50,7 +51,7 @@ public:
     auto real_offset = aligned_offset_to_offset[aligned_offset];
 
     // just free this
-    block_allocator.free(real_offset, num_bytes);
+    block_allocator.free(real_offset, num_bytes + target_aligment);
 
     offset_to_aligned_offset.erase(real_offset);
     aligned_offset_to_offset.erase(aligned_offset);
@@ -63,6 +64,8 @@ public:
   const size_t target_aligment = 256;
 
   uint8_t *memory;
+
+  int32_t dev;
 
   block_allocator_t block_allocator;
 };

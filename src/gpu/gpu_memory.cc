@@ -224,13 +224,69 @@ void gpu_memory_t::tensor_loaded_on_cpu(tid_t id, size_t num_bytes) {
 
 int gpu_memory_t::can_preallocate(kernel_prep_ptr_t kp, 
                                   int32_t target_dev) {
-  return _fits_memory(kp, target_dev, [&](int32_t dev){
-    return _total_free[dev];
-  }, [&](tid_t tid, int32_t cur_dev) {
-    return !_is_on_device(tid, cur_dev) &&
-           !_is_transfered_to_device(tid, cur_dev);
-  });
-};
+
+  std::shared_ptr<tensor_t> tmp;
+  std::vector<std::tuple<std::shared_ptr<tensor_t>, size_t>> tensors;                    
+  for(auto dev = 0; dev < _num_devices; ++dev) {
+    
+    auto cur_dev = (dev + target_dev) % _num_devices;
+    
+    // reset the tensor ptrs
+    kp->input_tensor_ptrs.clear();
+    kp->input_tensor_ptrs.resize(kp->input.size());
+    kp->output_tensor_ptrs.clear();
+    kp->output_tensor_ptrs.resize(kp->output.size());
+
+    bool success = true;
+    for(auto out_idx = 0; out_idx < kp->output.size(); out_idx++) {
+      auto out_size = kp->output_sizes[out_idx];
+      tmp = _allocate_tensor(out_size, cur_dev);
+      if(tmp == nullptr) {
+          success = false;
+          goto free_all;
+      }
+      kp->output_tensor_ptrs[out_idx] = tmp;
+      tensors.push_back({std::move(tmp), out_size});
+    }
+
+    for(auto in_idx = 0; in_idx < kp->input.size(); ++in_idx) {
+
+      auto in = kp->input[in_idx];
+      auto in_size = kp->input_sizes[in_idx];
+
+      if(!_is_on_device(in, cur_dev) && !_is_transfered_to_device(in, cur_dev)) {
+        tmp = _allocate_tensor(in_size, cur_dev);
+        if(tmp == nullptr) {
+          success = false;
+          goto free_all;
+        }
+        kp->input_tensor_ptrs[in_idx] = tmp;
+        tensors.push_back({std::move(tmp), in_size});
+      }
+      else {
+        kp->input_tensor_ptrs[in_idx] = nullptr;
+      }
+    }
+
+    // if we have succeeded we are honkey-doray 
+    if(success) {
+      return cur_dev;
+    }
+
+free_all:
+
+    // free everything so far
+    for(auto &tmp : tensors) {
+      auto &[t, num_bytes] = tmp;
+      _mem_pools[cur_dev]->free(t->get_data_ptr<void*>(), num_bytes);
+    }
+    
+    tensors.clear();
+    continue;
+  }
+
+  return -1;
+}
 
 void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
 
@@ -249,7 +305,8 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
     auto &t = _init_tensor(tid, num_bytes, created);
 
     // allocate it 
-    t.data[dev] = _allocate_tensor(num_bytes, dev);
+    t.data[dev] = kp->output_tensor_ptrs[out_idx];
+    assert(t.data[dev] != nullptr);
     kp->run_me->outputs.set(out_idx, *t.data[dev]);
 
     // we just initialized and plan on filling it out during 
@@ -296,7 +353,7 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
       else if (src_dev != -1) {
 
         // allocate the memory 
-        t.data[dev] = _allocate_tensor(kp->input_sizes[in_idx], dev);
+        t.data[dev] = kp->input_tensor_ptrs[in_idx];
         kp->run_me->inputs.set(in_idx, *t.data[dev]);
         assert(t.data[dev] != nullptr);
 
@@ -335,7 +392,7 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
         
         // we need to latch onto the CPU transfer
         src_dev = _tensors[kp->input[in_idx]].cpu_transfer->dst_dev;
-        t.data[dev] = _allocate_tensor(kp->input_sizes[in_idx], dev);
+        t.data[dev] = kp->input_tensor_ptrs[in_idx];
         kp->run_me->inputs.set(in_idx, *t.data[dev]);
         assert(t.data[dev] != nullptr);
 
@@ -370,7 +427,7 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
       else {
 
         // allocate and pin the tensor
-        t.data[dev] = _allocate_tensor(kp->input_sizes[in_idx], dev);
+        t.data[dev] = kp->input_tensor_ptrs[in_idx];
         kp->run_me->inputs.set(in_idx, *t.data[dev]);
         assert(t.data[dev] != nullptr);
 
@@ -472,14 +529,15 @@ void gpu_memory_t::mark_transfer_done(gpu_to_gpu_transfer_ptr_t kp) {
 }
 
 int gpu_memory_t::can_gc(kernel_prep_ptr_t kp, int32_t target_dev) { 
-  return _fits_memory(kp, target_dev, [&](int32_t dev) {
+  // return _fits_memory(kp, target_dev, [&](int32_t dev) {
 
-    return _total_unpinned[dev] + 
-           _total_free[dev] + 
-           _total_to_free[dev];
-  }, [&](tid_t tid, int32_t cur_dev) {
-    return !_is_pinned(tid, cur_dev);
-  });
+  //   return _total_unpinned[dev] + 
+  //          _total_free[dev] + 
+  //          _total_to_free[dev];
+  // }, [&](tid_t tid, int32_t cur_dev) {
+  //   return !_is_pinned(tid, cur_dev);
+  // });
+  return -1;
 };
 
 gc_request_ptr_t gpu_memory_t::get_gc_request(kernel_prep_ptr_t kp, int dev) {
@@ -800,7 +858,7 @@ std::shared_ptr<tensor_t> gpu_memory_t::_allocate_tensor(size_t num_bytes, int32
       _to_free_tensors[dev].pop_back();
 
       // free it from the memory pool
-      _mem_pools[dev]->free(kmp, num_bytes);
+      _mem_pools[dev]->free(kmp, t->second.num_bytes);
     }
 
     // clear all the free on this device
@@ -810,8 +868,6 @@ std::shared_ptr<tensor_t> gpu_memory_t::_allocate_tensor(size_t num_bytes, int32
     tmp = _mem_pools[dev]->allocate(num_bytes);
   }
 
-  // return a tensors if possible
-  assert(tmp != nullptr);
   return tmp == nullptr ? nullptr : std::move(std::make_shared<tensor_t>(tmp));
 }
 

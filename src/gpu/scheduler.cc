@@ -866,6 +866,9 @@ bool multi_gpu_scheduler_t::_schedule_for_execution(kernel_prep_ptr_t kernel_pre
     // transfering just add an additional pin)
     mem.preallocate(kernel_prep, dev);
 
+    // log that the kernel scheduled
+    profiler.log_kernel_scheduled(kernel_prep);
+
     // we only need to setup GPU2GPU transfers as all the required tensors
     // are already there
     kernel_prep->gpu_done = kernel_prep->gpu_transfers.empty();
@@ -885,9 +888,6 @@ bool multi_gpu_scheduler_t::_schedule_for_execution(kernel_prep_ptr_t kernel_pre
        kernel_prep->gpu_transfers.empty()) {
       run_queue[dev].enqueue_copy(kernel_prep);
     }
-
-    // log that the kernel scheduled
-    profiler.log_kernel_scheduled(kernel_prep);
 
     // we just scheduled a kernel
     num_unfinished_kernels++;
