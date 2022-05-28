@@ -71,6 +71,12 @@ udf_manager_t::udf_manager_t(tensor_factory_ptr_t _tensor_factory,
 
   /// 3.1 add the dense implementation
   register_udf_impl(std::make_unique<dense_uniform_t>());
+
+  /// 4. stack
+  register_udf(get_matrix_stack_udf());
+
+  /// 4.1 add the dense implementation
+  register_udf_impl(std::make_unique<dense_stack_t>());
 }
 
 // registers a udf with the system

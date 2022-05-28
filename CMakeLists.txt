@@ -16,10 +16,10 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/cmake")
 if(CMAKE_BUILD_TYPE MATCHES Debug)
 
     if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-        set(CMAKE_CXX_FLAGS "-D_GLIBCXX_DEBUG")
+        set(CMAKE_CXX_FLAGS "-fsanitize=address -D_GLIBCXX_DEBUG")
     endif()
-    set(CMAKE_CXX_FLAGS "-g3 -fPIC")
-    set(CMAKE_C_FLAGS "-g3 -fPIC")
+    set(CMAKE_CXX_FLAGS "-fsanitize=address -g3 -fPIC")
+    set(CMAKE_C_FLAGS "-fsanitize=address -g3 -fPIC")
 
     # some stuff in the linker to make .so loading nicer
     set(CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -rdynamic -ldl" )

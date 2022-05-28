@@ -3,6 +3,7 @@
 #include "../operations/reduce_op.h"
 #include "../operations/broadcast_op.h"
 #include "../operations/local_reduce_op.h"
+#include "../operations/local_stack_op.h"
 #include <cassert>
 #include <thread>
 
@@ -272,6 +273,58 @@ void bbts::command_runner_t::local_reduce_command_runner() {
     }
   }
 }
+
+void bbts::command_runner_t::local_stack_command_runner() {
+
+  while (true) {
+
+    // get the command
+    auto cmd = _rs->get_next_stack_command();
+    if (cmd == nullptr) {
+      break;
+    }
+
+    // check if the reduce is remote or local
+    if (cmd->is_local_stack(_comm->get_rank())) {
+
+      // return me that matcher for matrix addition
+      auto ud = _udm->get_fn_impl(cmd->fun_id);
+
+      // preallocate the input pointers
+      auto cmd_inputs = cmd->get_inputs();
+      std::vector<tid_t> inputs;
+      inputs.reserve(cmd_inputs.size());
+
+      // get all the tensors we need
+      for(const auto& in : cmd_inputs) {
+
+        // get the source tensor
+        inputs.push_back(in.tid);
+      }
+
+      // create the reduce op
+      ud_impl_t::tensor_params_t _params = { ._params = cmd->get_parameters() };
+      local_stack_op_t op(*_tf, *_ts, inputs, _params,
+                            cmd->get_output(0).tid, *ud);
+
+      // do the apply
+      op.apply();
+
+      _logger->message("LOCAL_STACK " + std::to_string(cmd->id) + " on node " + std::to_string(_comm->get_rank()) + '\n');
+
+      // retire the command so it knows that we have processed the tensors
+      _rs->retire_command(std::move(cmd));
+
+
+    } else {
+
+      // for now, let's just do local stack to make things less complicated
+      throw std::runtime_error("Currently remote stack is not supported");
+
+    }
+  }
+}
+
 
 void bbts::command_runner_t::remote_command_handler() {
 

@@ -78,6 +78,9 @@ public:
   // load a list of tensors
   std::tuple<bool, std::string> load_tensor_list(const std::vector<std::tuple<bbts::tid_t, std::string, std::string>> &file_list);
 
+  // // STACK TENSORS 
+  // std::tuple<bool, std::string> stack_tensor_list(const std::vector<bbts::tid_t> &tensor_id_list);
+
   // run all the scheduled commands
   std::tuple<bool, std::string> run_commands();
 
@@ -135,6 +138,7 @@ public:
   std::thread create_move_processing_thread();
   std::thread create_apply_processing_thread();
   std::thread create_reduce_processing_thread();
+  std::thread create_stack_processing_thread();
 
   std::thread expect_remote_command();
 

@@ -33,6 +33,12 @@ public:
   // deserializes a tensor from the input data
   bbts::tensor_t &deserialize_tensor(tensor_t* here, tfid_t id, const char *data);
 
+  // // create the meta data for the output tensor of the stack operation
+  // void create_stack_meta(tensor_meta_t& _meta, std::vector<tensor_meta_t> meta_list_to_stack);
+
+  // // create the output tensor of the stack operation
+  // bbts::tensor_t &create_stack_tensor(tensor_t* here, std::vector<tensor_meta_t> meta_list_to_stack);
+
   // initializes the tensor
   tensor_t& init_tensor(tensor_t* here, const tensor_meta_t& _meta);
 

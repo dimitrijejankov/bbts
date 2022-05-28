@@ -15,7 +15,7 @@
 
 namespace bbts {
 
-enum class abstract_command_type_t : int { APPLY, REDUCE, DELETE };
+enum class abstract_command_type_t : int { APPLY, REDUCE, DELETE, STACK };
 
 using abstract_ud_spec_id_t = int32_t;
 
@@ -105,6 +105,9 @@ struct abstract_command_t {
     case abstract_command_type_t::DELETE:
       type_string = "DELETE";
       break;
+    case abstract_command_type_t::STACK:
+      type_string = "STACK";
+      break;
     }
 
     // write the stuff
@@ -141,11 +144,17 @@ struct abstract_command_t {
       type = abstract_command_type_t::REDUCE;
     } else if (type_string == "DELETE") {
       type = abstract_command_type_t::DELETE;
+    } else if (type_string == "STACK") {
+      type = abstract_command_type_t::STACK;
     } else {
       throw std::runtime_error("Unknown type!");
     }
 
     if (type == abstract_command_type_t::REDUCE) {
+      assert(num_input_tids != 0);
+    }
+
+    if (type == abstract_command_type_t::STACK){
       assert(num_input_tids != 0);
     }
 

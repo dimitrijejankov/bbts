@@ -42,6 +42,27 @@ bbts::tensor_t & bbts::tensor_factory_t::deserialize_tensor(tensor_t* here, tfid
   throw std::runtime_error("Requested deserialize_densor for a format " + std::to_string(id) + " not registered with the system.");
 }
 
+// void bbts::tensor_factory_t::create_stack_meta(tensor_meta_t& _meta, std::vector<tensor_meta_t> meta_list_to_stack) {
+
+//   // find the function to initialize the tensor, run it and set the right fmt_id
+//   if(_meta.fmt_id < _fmt_fs.size()) {
+//     _fmt_fs[_meta.fmt_id].create_stack_meta(_meta, meta_list_to_stack);
+//     _meta.fmt_id = _meta.fmt_id;
+//     return;
+//   }
+
+//   // check if the format exits
+//   throw std::runtime_error("Requested deserialize_meta for a format " + std::to_string(_meta.fmt_id) + " not registered with the system.");
+// }
+
+// bbts::tensor_t & bbts::tensor_factory_t::create_stack_tensor(tensor_t* here, std::vector<tensor_meta_t> meta_list_to_stack) {
+
+//   // find the function to initialize the tensor, run it and set the right fmt_id
+//     bbts::tensor_t &out = _fmt_fs[0].create_stack_tensor(here, meta_list_to_stack);
+//     out._meta.fmt_id = 0;
+//     return out;
+// }
+
 bbts::tensor_t &bbts::tensor_factory_t::init_tensor(tensor_t *here, const bbts::tensor_meta_t &_meta) {
 
   // find the function to initialize the tensor, run it and set the right fmt_id
