@@ -68,5 +68,11 @@ namespace bbts {
 
     // deserializes the tensor must be implemented to laod data for this format
     std::function<tensor_t&(tensor_t* here, tfid_t id, const char *data)> deserialize_tensor;
+
+    // create the meta for the new output tensor in the stack operation
+    std::function<void(tensor_meta_t& _meta, std::vector<tensor_meta_t> meta_list_to_stack)> create_stack_meta;
+
+    // create the output tensor of the stack operation
+    std::function<tensor_t&(tensor_t* here, std::vector<tensor_meta_t> meta_list_to_stack)> create_stack_tensor;
   };
 }

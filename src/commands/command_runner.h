@@ -22,6 +22,7 @@ public:
   void local_move_command_runner();
   void local_apply_command_runner();
   void local_reduce_command_runner();
+  void local_stack_command_runner();
 
   // handles the incoming request for remote commands
   void remote_command_handler();

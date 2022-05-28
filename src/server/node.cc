@@ -69,6 +69,7 @@ void bbts::node_t::run() {
     command_processing_threads.push_back(std::move(create_move_processing_thread()));
     command_processing_threads.push_back(std::move(create_apply_processing_thread()));
     command_processing_threads.push_back(std::move(create_reduce_processing_thread()));
+    command_processing_threads.push_back(std::move(create_stack_processing_thread()));
   }
 
   // create all the request threads if we are using storage
@@ -231,6 +232,10 @@ std::tuple<bool, std::string> bbts::node_t::load_tensor_list(const std::vector<s
   return _coordinator->load_tensor_list(file_list);
 }
 
+// std::tuple<bool, std::string> bbts::node_t::stack_tensor_list(const std::vector<bbts::tid_t> &tensor_id_list){
+//   return _coordinator->stack_tensor_list(tensor_id_list);
+// }
+
 std::tuple<bool, std::string> bbts::node_t::run_commands() {
 
   // run all the commands
@@ -309,6 +314,18 @@ std::thread bbts::node_t::create_reduce_processing_thread() {
   });
 
   return std::move(t);
+}
+
+std::thread bbts::node_t::create_stack_processing_thread() {
+  
+  // create the thread to pull
+  std::thread t = std::thread([this]() {
+
+    _command_runner->local_stack_command_runner();
+  });
+
+  return std::move(t);
+
 }
 
 std::thread bbts::node_t::expect_remote_command() {

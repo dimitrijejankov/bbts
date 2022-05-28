@@ -81,6 +81,9 @@ public:
   // loads a list of tensors
   std::tuple<bool, std::string> load_tensor_list(const std::vector<std::tuple<bbts::tid_t, std::string, std::string>> &file_list);
 
+  // stacks a list of tensors
+  // std::tuple<bool, std::string> stack_tensor_list(std::vector<bbts::tid_t> tensor_id_list);
+
   // shutdown the coordinator
   void shutdown();
 
@@ -161,6 +164,11 @@ private:
 
   // loads a single tensor
   void _load_tensor(std::stringstream &ss, tid_t tid, tfid_t type, char *file_data);
+
+  // handle the request to load a tensor list
+  void _stack_tensor_list(std::stringstream &ss, std::vector<bbts::tid_t> tensor_id_list);
+
+  void _stack_tensor(std::stringstream &ss, std::vector<bbts::tid_t> tensor_id_list);
 
   // the communicator
   bbts::communicator_ptr_t _comm;

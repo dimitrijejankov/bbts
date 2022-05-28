@@ -29,7 +29,8 @@ struct command_t {
     REDUCE = 1,
     MOVE = 2,
     DELETE = 3,
-    SHUTDOWN = 4 // special command to shutdown the server
+    STACK = 4,
+    SHUTDOWN = 5 // special command to shutdown the server
   };
 
   // specifies exactly what tensor on which node we refer to
@@ -98,6 +99,9 @@ struct command_t {
     // is this a reuce
   [[nodiscard]] bool is_reduce() const { return type == op_type_t::REDUCE; }
 
+  // is this a stack
+  [[nodiscard]] bool is_stack() const { return type == op_type_t::STACK; }
+
   // get all the nodes included in the reduce
   [[nodiscard]] node_list_t get_nodes() const {
     return { ._data = _nodes(), ._num_elements = _num_nodes };
@@ -162,6 +166,22 @@ struct command_t {
     return false;
   }
 
+  // is this a local stack - I think for now we should only support local stack
+  [[nodiscard]] bool is_local_stack(node_id_t _node_id) const {
+
+    // make sure it is actually a reduce
+    if(type != op_type_t::STACK) {
+      return false;
+    }
+
+    // check if the output and all inputs are on the same node
+    auto nodes = get_nodes();
+    for(int32_t idx = 0; idx < nodes.size(); idx++) {
+      if(nodes[idx] != _node_id) { return false; }
+    }
+    return true;
+  }
+
   void print(std::stringstream &ss) {
 
     ss << "{.id : " << id << " ";
@@ -172,6 +192,7 @@ struct command_t {
       case APPLY : ss << "APPLY "; break;
       case DELETE : ss << "DELETE "; break;
       case REDUCE : ss << "REDUCE "; break;
+      case STACK : ss << "STACK "; break;
       case SHUTDOWN :ss << "SHUTDOWN ";  break;
     }
 
@@ -398,6 +419,7 @@ struct command_t {
     // return the created pointer
     return std::move(tmp);
   }
+  
 
   static command_ptr_t create_delete(command_id_t id, const std::vector<tid_node_id_t> &in) {
 
@@ -426,6 +448,61 @@ struct command_t {
     for(size_t idx = 0; idx < in.size(); ++idx) {
       tmp->_input_tensors()[idx] = in[idx];
     }
+
+    // return the created pointer
+    return std::move(tmp);
+  }
+
+  static command_ptr_t create_stack(command_id_t id, ud_impl_id_t fun_id, bool is_gpu, 
+                                     const std::vector<command_param_t> &params,
+                                     const std::vector<tid_node_id_t> &in, const tid_node_id_t &out) {
+
+    // the nodes
+    std::vector<node_id_t> nodes;
+    nodes.reserve(1u + in.size());
+
+    // the root is at the out node
+    nodes.push_back(out.node);
+    for(const auto &i : in) {
+      // check if we already have this node
+      if(std::find(nodes.begin(), nodes.end(), i.node) == nodes.end()) {
+        nodes.push_back(i.node);
+      }
+    }
+
+    // create the output
+    auto tmp = allocate_command(_num_bytes(params.size(), nodes.size(), in.size(), 1));
+
+    // set the id type and function
+    tmp->id = id;
+    tmp->type = STACK;
+    tmp->fun_id = fun_id;
+    tmp->nfo.is_gpu = is_gpu;
+    tmp->_num_parameters = params.size();
+    tmp->_num_inputs = in.size();
+    tmp->_num_outputs = 1;
+    tmp->_num_nodes = nodes.size();
+
+    // setup the offsets
+    tmp->_setup_offsets();
+
+    // fill-up the parameters
+    for(size_t idx = 0; idx < params.size(); ++idx) {
+      tmp->_parameters()[idx] = params[idx];
+    }
+
+    // fill-up the nodes
+    for(size_t idx = 0; idx < nodes.size(); ++idx) {
+      tmp->_nodes()[idx] = nodes[idx];
+    }
+
+    // fill-up the inputs
+    for(size_t idx = 0; idx < in.size(); ++idx) {
+      tmp->_input_tensors()[idx] = in[idx];
+    }
+
+    // fill-up the outputs
+    tmp->_output_tensors()[0] = out;
 
     // return the created pointer
     return std::move(tmp);

@@ -38,6 +38,7 @@ class reservation_station_t {
   [[nodiscard]] command_ptr_t get_next_move_command();
   [[nodiscard]] command_ptr_t get_next_apply_command();
   [[nodiscard]] command_ptr_t get_next_reduce_command();
+  [[nodiscard]] command_ptr_t get_next_stack_command();
 
   // register the tensor that was added externally,
   // that is it was not created through the execution of a command
@@ -145,6 +146,7 @@ class reservation_station_t {
   std::deque<command_ptr_t> _execute_ud;
   std::deque<command_ptr_t> _execute_move;
   std::deque<command_ptr_t> _execute_reduce;
+  std::deque<command_ptr_t> _execute_stack;
 
   // the local commands and the number of tensors they are waiting for
   std::unordered_map<command_id_t, std::pair<command_ptr_t, int32_t>> _local_commands;

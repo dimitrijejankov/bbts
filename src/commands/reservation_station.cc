@@ -277,6 +277,32 @@ bbts::command_ptr_t bbts::reservation_station_t::get_next_reduce_command() {
   return std::move(tmp);
 }
 
+bbts::command_ptr_t bbts::reservation_station_t::get_next_stack_command() {
+
+  // wait until we have something here
+  std::unique_lock<std::mutex> lk(_m);
+  _cv.wait(lk, [&]{ return (!_execute_stack.empty() && _is_executing)  || _shutdown ; });
+
+  // if we have shutdown return null as we have no command left...
+  if(_shutdown) {
+    return nullptr;
+  }
+
+  // pop the unique pointer of the vector
+  auto tmp = std::move(_execute_stack.front());
+  _execute_stack.pop_front();
+
+  // call the hook if necessary
+  if constexpr (static_config::enable_hooks) {
+
+    // mark that we have scheduled this command
+    _command_scheduled_hook(tmp->id);
+  }
+
+  // return it
+  return std::move(tmp);
+}
+
 bbts::tid_t bbts::reservation_station_t::get_to_remove() {
 
   // wait until we have something to delete
@@ -807,6 +833,7 @@ void bbts::reservation_station_t::_schedule_for_execution(bbts::command_ptr_t _c
     case command_t::op_type_t::APPLY: _execute_ud.emplace_back(std::move(_cmd)); break;
     case command_t::op_type_t::MOVE: _execute_move.emplace_back(std::move(_cmd)); break;
     case command_t::op_type_t::REDUCE: _execute_reduce.emplace_back(std::move(_cmd)); break;
+    case command_t::op_type_t::STACK: _execute_stack.emplace_back(std::move(_cmd)); break;
     default: assert(false); // this is not supposed to happen
   }
 

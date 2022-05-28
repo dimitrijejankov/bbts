@@ -42,3 +42,17 @@ bbts::ud_func_ptr_t bbts::get_matrix_uniform_udf() {
   );
 }
 
+//// 4.STACK
+bbts::ud_func_ptr_t bbts::get_matrix_stack_udf() {
+  return std::make_unique<bbts::ud_func_t>(
+      bbts::ud_func_t {
+          .ud_name = "stack",
+          .is_ass = true,
+          .is_com = false,
+          .num_in = 2,
+          .num_out = 1,
+          .impls = {},
+      }
+  );
+}
+

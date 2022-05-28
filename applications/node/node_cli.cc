@@ -10,6 +10,7 @@
 #include <string>
 #include <unistd.h>
 #include <filesystem>
+#include <vector>
 #include "../../src/tensor/tensor.h"
 #include "../../src/tensor/tensor_factory.h"
 #include "../../src/server/node.h"
@@ -218,7 +219,7 @@ bool load_tensors(std::ostream &out, bbts::node_t &node, const std::string &file
     } 
 
 
-    // right now it is hardcoded to add  tensors in front of it
+    // right now it is hardcoded to add tensors in front of it
 
     // store this <tid, type, filepath>
     parsed_file_list.push_back({parsed_tid, values[1], "tensors/" + values[2]});
@@ -239,6 +240,48 @@ bool load_tensors(std::ostream &out, bbts::node_t &node, const std::string &file
 
   return false;
 }
+
+
+// // STACK TENSORS
+// bool stack_tensors(std::ostream &out, bbts::node_t &node, const std::string &tensor_id_string) {
+
+//   // kick off a loading message
+//   std::atomic_bool b; b = false;
+//   auto t = loading_message(out, "Stacking tensors from storage", b);
+//   std::vector<bbts::tid_t> tensor_id_list;
+//   auto values = split(tensor_id_string, ",");
+
+//   // Check if every value is an integer, since tids are integer
+//   for (std::string item: values){
+//     std::string tid_string = item.c_str();
+//     // Check if tid is a non-negative integer
+//     for (int i = 0; i < tid_string.size(); i++){
+//       if (!isdigit(tid_string[i])){
+//         b = true; t.join();
+//         out << bbts::red << "\nThe tid must be an integer \n" << bbts::reset;
+//         return false;
+//       }  
+//     }
+//     bbts::tid_t parsed_tid = std::atoi(item.c_str());
+//     tensor_id_list.push_back(parsed_tid);
+//   }
+
+//   auto [did_stack, message] = node.stack_tensor_list(tensor_id_list);
+
+//   // finish the registering message
+//   b = true; t.join();
+
+//   if(!did_stack) {
+//     out << bbts::red << "Failed to stack the tensor list : \"" << message << "\"\n" << bbts::reset;
+//     return false;
+//   } else {
+//     out << bbts::green << message << bbts::reset;
+//     return true;
+//   }
+//   return false;
+// }
+
+
 
 void compile_einkorn_commands(std::ostream &out, bbts::node_t &node, int max_kernel_size, 
                               const std::string &file_path, std::vector<std::string> file_args) {
@@ -609,6 +652,14 @@ void prompt(bbts::node_t &node) {
     load_tensors(out, node, file_list);
 
   },"Load tensors from filelist. Usage : load tensors <path_to_file_list>\n");
+
+  // TENSOR STACKING 
+  // stack tid1,tid2,...
+  // rootMenu->Insert("stack",[&](std::ostream &out, const std::string &tensor_id_string) {
+
+  //   stack_tensors(out, node, tensor_id_string);
+
+  // },"Stacking tensors from the storage. Usage : stack <tid1>,<tid2>, ...\n");
 
   rootMenu->Insert(std::move(loadSubMenu));
 

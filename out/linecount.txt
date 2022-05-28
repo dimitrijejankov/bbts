@@ -1,0 +1,737 @@
+===============================================================================
+EXTENSION NAME : linecount
+EXTENSION VERSION : 0.1.7
+-------------------------------------------------------------------------------
+count time : 2022-03-29 17:37:41
+count workspace : /home/ding/bbts
+total files : 725
+total code lines : 40774
+total comment lines : 6503
+total blank lines : 9493
+
+.cache/clangd/index/abstract_command.h.83574D9A61CF599B.idx, it is a binary file.
+.cache/clangd/index/blob.cc.CE6A56FB8327AF92.idx, it is a binary file.
+.cache/clangd/index/broadcast_op.cc.2BAAFD30E70B43F1.idx, it is a binary file.
+.cache/clangd/index/broadcast_op.h.FBA63B39A6FDAD64.idx, it is a binary file.
+.cache/clangd/index/builtin_formats.cc.3580F9E6C72FF8CD.idx, it is a binary file.
+.cache/clangd/index/builtin_formats.h.AD79BA1129C8A131.idx, it is a binary file.
+.cache/clangd/index/builtin_functions.cc.38A00083DA8FAE89.idx, it is a binary file.
+.cache/clangd/index/builtin_functions.h.D4DB3EB01F4B039F.idx, it is a binary file.
+.cache/clangd/index/cli.h.9171EBAC572C70A6.idx, it is a binary file.
+.cache/clangd/index/clifilesession.h.EC18E091090A68A7.idx, it is a binary file.
+.cache/clangd/index/colorprofile.h.4ABA8B909C77001D.idx, it is a binary file.
+.cache/clangd/index/command.h.9C180ECD7CB0B987.idx, it is a binary file.
+.cache/clangd/index/command_loader.h.0319695AEB411E9C.idx, it is a binary file.
+.cache/clangd/index/command_runner.cc.CF8C56F5C68E1794.idx, it is a binary file.
+.cache/clangd/index/command_runner.h.1C5982368AD3A09B.idx, it is a binary file.
+.cache/clangd/index/command_utils.h.51641F9B85A60E57.idx, it is a binary file.
+.cache/clangd/index/communicator.cc.37AAFD2AE49B272F.idx, it is a binary file.
+.cache/clangd/index/communicator.h.718DAC16DB17702E.idx, it is a binary file.
+.cache/clangd/index/compile_source_file.h.85925A32C582D722.idx, it is a binary file.
+.cache/clangd/index/concurent_queue.h.DA07E5BD67AFFACD.idx, it is a binary file.
+.cache/clangd/index/coordinator.cc.780001A6731B5078.idx, it is a binary file.
+.cache/clangd/index/coordinator.h.E98ED6B91F752C7E.idx, it is a binary file.
+.cache/clangd/index/coordinator_ops.h.8EDD08145A218BB0.idx, it is a binary file.
+.cache/clangd/index/cost_model.h.0B862440498F8677.idx, it is a binary file.
+.cache/clangd/index/dense_matrix_add.cc.8DA64290F4A1C492.idx, it is a binary file.
+.cache/clangd/index/dense_matrix_add.h.6A4C97BBEB69D5DB.idx, it is a binary file.
+.cache/clangd/index/dense_matrix_gpu_add.h.2816412709DE5C1D.idx, it is a binary file.
+.cache/clangd/index/dense_matrix_gpu_mult.h.7C29B3A6A949CC2B.idx, it is a binary file.
+.cache/clangd/index/dense_matrix_hadamard.cc.FA60E142A90A4D59.idx, it is a binary file.
+.cache/clangd/index/dense_matrix_hadamard.h.067C79BB7DBA589A.idx, it is a binary file.
+.cache/clangd/index/dense_matrix_mult.cc.5E7BBA18113AE605.idx, it is a binary file.
+.cache/clangd/index/dense_matrix_mult.h.41442B9995D52830.idx, it is a binary file.
+.cache/clangd/index/dense_matrix_relu.cc.9924681F00FC815B.idx, it is a binary file.
+.cache/clangd/index/dense_matrix_relu.h.B19252DC6D6BE124.idx, it is a binary file.
+.cache/clangd/index/dense_matrix_relu_dif.cc.BED83A35325DE97D.idx, it is a binary file.
+.cache/clangd/index/dense_matrix_relu_dif.h.D9433D5BCE97F9E7.idx, it is a binary file.
+.cache/clangd/index/dense_matrix_sigmoid.cc.2FDB7D9807E657FA.idx, it is a binary file.
+.cache/clangd/index/dense_matrix_sigmoid.h.304FA53D250AD8CF.idx, it is a binary file.
+.cache/clangd/index/dense_matrix_weighted_sum.cc.97715B733E040346.idx, it is a binary file.
+.cache/clangd/index/dense_matrix_weighted_sum.h.4B4760524820187A.idx, it is a binary file.
+.cache/clangd/index/dense_uniform.cc.28EF34D744CC1BA0.idx, it is a binary file.
+.cache/clangd/index/dense_uniform.h.3397358ABFD2944F.idx, it is a binary file.
+.cache/clangd/index/ffnn_activation_mult.cc.D8EB2BA3AF20A693.idx, it is a binary file.
+.cache/clangd/index/ffnn_activation_mult.h.09996D5239CC211F.idx, it is a binary file.
+.cache/clangd/index/ffnn_add.cc.531D5EC495FBAAA2.idx, it is a binary file.
+.cache/clangd/index/ffnn_add.h.8929E7C2805C5286.idx, it is a binary file.
+.cache/clangd/index/ffnn_back_mult.cc.311011F94DA82998.idx, it is a binary file.
+.cache/clangd/index/ffnn_back_mult.h.3437C36FFE3D77F6.idx, it is a binary file.
+.cache/clangd/index/ffnn_lib_init.cc.EDB539A90911E427.idx, it is a binary file.
+.cache/clangd/index/ffnn_matrix_hadamard.cc.C2663095C9F0C0FD.idx, it is a binary file.
+.cache/clangd/index/ffnn_matrix_hadamard.h.2AD95B34A5E38C07.idx, it is a binary file.
+.cache/clangd/index/ffnn_mult.cc.287AB4B9157B3722.idx, it is a binary file.
+.cache/clangd/index/ffnn_mult.h.D6D915D806825D72.idx, it is a binary file.
+.cache/clangd/index/ffnn_types.cc.EA16587A2556D99F.idx, it is a binary file.
+.cache/clangd/index/ffnn_types.h.BF58194321C16234.idx, it is a binary file.
+.cache/clangd/index/ffnn_uniform_data.cc.73E5FE4851ACF378.idx, it is a binary file.
+.cache/clangd/index/ffnn_uniform_data.h.2B92F07B00E8A400.idx, it is a binary file.
+.cache/clangd/index/ffnn_uniform_sparse_data.cc.4258E47CF5DF0D46.idx, it is a binary file.
+.cache/clangd/index/ffnn_uniform_sparse_data.h.2BD5C13BF4C23E8A.idx, it is a binary file.
+.cache/clangd/index/ffnn_uniform_weights.cc.B638A3503E4E705E.idx, it is a binary file.
+.cache/clangd/index/ffnn_uniform_weights.h.ADA8AD4F42FB6013.idx, it is a binary file.
+.cache/clangd/index/ffnn_weighted_sum.cc.E3F8DD5D7F850808.idx, it is a binary file.
+.cache/clangd/index/ffnn_weighted_sum.h.59E1F6C5F132C4A8.idx, it is a binary file.
+.cache/clangd/index/ffnn_weighted_sum_sparse_dense.cc.7E831CF9DC0AE1D4.idx, it is a binary file.
+.cache/clangd/index/ffnn_weighted_sum_sparse_dense.h.1F6AB52E0349B2EE.idx, it is a binary file.
+.cache/clangd/index/fromstring.h.BF8E3A7BBD19F3C9.idx, it is a binary file.
+.cache/clangd/index/generate_bmm.cc.372CBDF649BBBDC2.idx, it is a binary file.
+.cache/clangd/index/generate_cpmm.cc.2268DCAB4FAD0C48.idx, it is a binary file.
+.cache/clangd/index/generate_ffnn.cc.33F435A8904F6503.idx, it is a binary file.
+.cache/clangd/index/generate_matrix_addition.cc.0E6B3375BF74E910.idx, it is a binary file.
+.cache/clangd/index/generate_multiplication_chain.cc.0E46A4385142F7C3.idx, it is a binary file.
+.cache/clangd/index/gpu.h.1816D57441B7236E.idx, it is a binary file.
+.cache/clangd/index/gpu_scheduler.h.6EC4E923E0F95E9B.idx, it is a binary file.
+.cache/clangd/index/gpu_scheduler_impl.cc.7DC89DDC433C582A.idx, it is a binary file.
+.cache/clangd/index/gpu_scheduler_impl.h.AAFCFC006E708E7F.idx, it is a binary file.
+.cache/clangd/index/helper_string.h.A85D8D34B61E73E1.idx, it is a binary file.
+.cache/clangd/index/history.h.B6CDE35F26A7596A.idx, it is a binary file.
+.cache/clangd/index/historystorage.h.3DE7FC7AEB0C7BCE.idx, it is a binary file.
+.cache/clangd/index/local_reduce_op.cc.806A52B194ECBB5D.idx, it is a binary file.
+.cache/clangd/index/local_reduce_op.h.7FCE916D3A4528B9.idx, it is a binary file.
+.cache/clangd/index/logger.h.BD8825266B4CEA3C.idx, it is a binary file.
+.cache/clangd/index/memory_storage.cc.F07289A4E07F819F.idx, it is a binary file.
+.cache/clangd/index/memory_storage.h.9589EA0DFDC0119C.idx, it is a binary file.
+.cache/clangd/index/move_op.cc.0D41AF7E70BB0EC1.idx, it is a binary file.
+.cache/clangd/index/move_op.h.09C538FDDBF70061.idx, it is a binary file.
+.cache/clangd/index/node.cc.BD9A451A579E1E2C.idx, it is a binary file.
+.cache/clangd/index/node.h.762DF9E3FE4CD040.idx, it is a binary file.
+.cache/clangd/index/node_cli.cc.DD3D6C27322B4A5C.idx, it is a binary file.
+.cache/clangd/index/node_config.h.F1BC5F5E38421861.idx, it is a binary file.
+.cache/clangd/index/null_gpu_scheduler.h.816A814265C16508.idx, it is a binary file.
+.cache/clangd/index/nvme_storage.cc.8A0C0E28AF1BBF6C.idx, it is a binary file.
+.cache/clangd/index/nvme_storage.h.A0DB53CB3F9052FD.idx, it is a binary file.
+.cache/clangd/index/parsed_command.h.021CD3AECC6ECF16.idx, it is a binary file.
+.cache/clangd/index/rang.h.FBD1A10E2983AF07.idx, it is a binary file.
+.cache/clangd/index/raw_vector.h.B1BA5F1C86D352AC.idx, it is a binary file.
+.cache/clangd/index/reduce_op.cc.B50508359A4B54D5.idx, it is a binary file.
+.cache/clangd/index/reduce_op.h.D02318102629B43D.idx, it is a binary file.
+.cache/clangd/index/reservation_station.cc.E84FE829035F03B3.idx, it is a binary file.
+.cache/clangd/index/reservation_station.h.1E0C6A3B0B747656.idx, it is a binary file.
+.cache/clangd/index/split.h.EBC99D8E3F4270C7.idx, it is a binary file.
+.cache/clangd/index/static_config.h.EC20B0BFFE61A2E6.idx, it is a binary file.
+.cache/clangd/index/storage.h.EF1D05107B4F3219.idx, it is a binary file.
+.cache/clangd/index/tensor.h.12134760AECF8B7A.idx, it is a binary file.
+.cache/clangd/index/tensor_factory.cc.BBBBF555DAC123E4.idx, it is a binary file.
+.cache/clangd/index/tensor_factory.h.AB9D40C8048D5546.idx, it is a binary file.
+.cache/clangd/index/tensor_notifier.cc.E1B4C9F7F92D2457.idx, it is a binary file.
+.cache/clangd/index/tensor_notifier.h.CB17F33353357001.idx, it is a binary file.
+.cache/clangd/index/terminal_color.h.4BAA728BA0A2FAFD.idx, it is a binary file.
+.cache/clangd/index/test_bench_uds.cc.6B63845322141E4C.idx, it is a binary file.
+.cache/clangd/index/test_broadcast.cc.D8E7D7EBBE63911B.idx, it is a binary file.
+.cache/clangd/index/test_builtin_dense.cc.272D45197B837179.idx, it is a binary file.
+.cache/clangd/index/test_builtin_ud.cc.A12F55103A86C6E6.idx, it is a binary file.
+.cache/clangd/index/test_move.cc.197FC0F0ACCDCB72.idx, it is a binary file.
+.cache/clangd/index/test_parsed_command.cc.D4723B45E12A8C36.idx, it is a binary file.
+.cache/clangd/index/test_reduce.cc.DF87712B52B39E56.idx, it is a binary file.
+.cache/clangd/index/test_reservation_station.cc.468A31D262FF6CA5.idx, it is a binary file.
+.cache/clangd/index/test_simulated_bmm.cc.E05EBD19B3171FF9.idx, it is a binary file.
+.cache/clangd/index/test_simulated_cmm.cc.04EEA3AA8EE002BF.idx, it is a binary file.
+.cache/clangd/index/test_storage.cc.A98C6435A7802726.idx, it is a binary file.
+.cache/clangd/index/test_two_phase_command_compiler.cc.27F0A9B761526F93.idx, it is a binary file.
+.cache/clangd/index/two_layer_compiler.h.D918AAA791B3BB16.idx, it is a binary file.
+.cache/clangd/index/ud_function.cc.88CC77CE2A62E9A3.idx, it is a binary file.
+.cache/clangd/index/ud_function.h.8DE1593AD1EDA4CD.idx, it is a binary file.
+.cache/clangd/index/udf_manager.cc.89A8A8C684EE1282.idx, it is a binary file.
+.cache/clangd/index/udf_manager.h.114832C915E523FD.idx, it is a binary file.
+.cache/clangd/index/volatilehistorystorage.h.122C9AC2A48B4B71.idx, it is a binary file.
+.gitignore, code is 8, comment is 18, blank is 0.
+.gitmodules, code is 3, comment is 1, blank is 0.
+applications/Applications.cmake, code is 17, comment is 0, blank is 5.
+applications/bmm/CMakeLists.txt, code is 10, comment is 0, blank is 6.
+applications/bmm/generate_bmm.cc, code is 182, comment is 46, blank is 63.
+applications/cpmm/CMakeLists.txt, code is 10, comment is 0, blank is 3.
+applications/cpmm/generate_cpmm.cc, code is 187, comment is 48, blank is 64.
+applications/ffnn-gpu/CMakeLists.txt, code is 25, comment is 0, blank is 5.
+applications/ffnn-gpu/ffnn_activation_mult.cu, code is 82, comment is 19, blank is 27.
+applications/ffnn-gpu/ffnn_activation_mult.h, code is 15, comment is 4, blank is 9.
+applications/ffnn-gpu/ffnn_add.cu, code is 94, comment is 27, blank is 31.
+applications/ffnn-gpu/ffnn_add.h, code is 21, comment is 4, blank is 10.
+applications/ffnn-gpu/ffnn_back_mult.cu, code is 75, comment is 22, blank is 26.
+applications/ffnn-gpu/ffnn_back_mult.h, code is 15, comment is 4, blank is 9.
+applications/ffnn-gpu/ffnn_lib_init.cc, code is 121, comment is 0, blank is 19.
+applications/ffnn-gpu/ffnn_matrix_hadamard.cu, code is 73, comment is 23, blank is 29.
+applications/ffnn-gpu/ffnn_matrix_hadamard.h, code is 15, comment is 4, blank is 9.
+applications/ffnn-gpu/ffnn_mult.cc, code is 72, comment is 21, blank is 26.
+applications/ffnn-gpu/ffnn_mult.h, code is 15, comment is 4, blank is 9.
+applications/ffnn-gpu/ffnn_types.cc, code is 59, comment is 14, blank is 24.
+applications/ffnn-gpu/ffnn_types.h, code is 61, comment is 20, blank is 28.
+applications/ffnn-gpu/ffnn_uniform_data.cc, code is 58, comment is 17, blank is 23.
+applications/ffnn-gpu/ffnn_uniform_data.h, code is 16, comment is 4, blank is 9.
+applications/ffnn-gpu/ffnn_uniform_sparse_data.cc, code is 46, comment is 14, blank is 20.
+applications/ffnn-gpu/ffnn_uniform_sparse_data.h, code is 16, comment is 4, blank is 9.
+applications/ffnn-gpu/ffnn_uniform_weights.cc, code is 60, comment is 17, blank is 23.
+applications/ffnn-gpu/ffnn_uniform_weights.h, code is 16, comment is 4, blank is 9.
+applications/ffnn-gpu/ffnn_weighted_sum.cu, code is 59, comment is 20, blank is 23.
+applications/ffnn-gpu/ffnn_weighted_sum.h, code is 14, comment is 4, blank is 9.
+applications/ffnn-gpu/ffnn_weighted_sum_sparse_dense.cc, code is 58, comment is 18, blank is 22.
+applications/ffnn-gpu/ffnn_weighted_sum_sparse_dense.h, code is 14, comment is 4, blank is 9.
+applications/ffnn-gpu/generate_ffnn.cc, code is 288, comment is 32, blank is 82.
+applications/ffnn/CMakeLists.txt, code is 22, comment is 0, blank is 7.
+applications/ffnn/ffnn_activation_mult.cc, code is 73, comment is 18, blank is 23.
+applications/ffnn/ffnn_activation_mult.h, code is 15, comment is 4, blank is 9.
+applications/ffnn/ffnn_add.cc, code is 98, comment is 18, blank is 29.
+applications/ffnn/ffnn_add.h, code is 23, comment is 6, blank is 13.
+applications/ffnn/ffnn_back_mult.cc, code is 66, comment is 19, blank is 22.
+applications/ffnn/ffnn_back_mult.h, code is 15, comment is 4, blank is 9.
+applications/ffnn/ffnn_lib_init.cc, code is 121, comment is 0, blank is 19.
+applications/ffnn/ffnn_matrix_hadamard.cc, code is 66, comment is 18, blank is 21.
+applications/ffnn/ffnn_matrix_hadamard.h, code is 15, comment is 4, blank is 9.
+applications/ffnn/ffnn_mult.cc, code is 69, comment is 21, blank is 26.
+applications/ffnn/ffnn_mult.h, code is 15, comment is 4, blank is 9.
+applications/ffnn/ffnn_types.cc, code is 59, comment is 14, blank is 24.
+applications/ffnn/ffnn_types.h, code is 61, comment is 20, blank is 28.
+applications/ffnn/ffnn_uniform_data.cc, code is 59, comment is 19, blank is 24.
+applications/ffnn/ffnn_uniform_data.h, code is 16, comment is 4, blank is 9.
+applications/ffnn/ffnn_uniform_sparse_data.cc, code is 46, comment is 14, blank is 20.
+applications/ffnn/ffnn_uniform_sparse_data.h, code is 16, comment is 4, blank is 9.
+applications/ffnn/ffnn_uniform_weights.cc, code is 58, comment is 19, blank is 24.
+applications/ffnn/ffnn_uniform_weights.h, code is 16, comment is 4, blank is 9.
+applications/ffnn/ffnn_weighted_sum.cc, code is 61, comment is 17, blank is 20.
+applications/ffnn/ffnn_weighted_sum.h, code is 14, comment is 4, blank is 9.
+applications/ffnn/ffnn_weighted_sum_sparse_dense.cc, code is 58, comment is 18, blank is 22.
+applications/ffnn/ffnn_weighted_sum_sparse_dense.h, code is 14, comment is 4, blank is 9.
+applications/ffnn/generate_ffnn.cc, code is 289, comment is 32, blank is 82.
+applications/matrix_addition/CMakeLists.txt, code is 10, comment is 0, blank is 3.
+applications/matrix_addition/generate_matrix_addition.cc, code is 69, comment is 12, blank is 24.
+applications/multiplication_chain/CMakeLists.txt, code is 10, comment is 0, blank is 3.
+applications/multiplication_chain/generate_multiplication_chain.cc, code is 163, comment is 13, blank is 38.
+applications/node/CMakeLists.txt, code is 10, comment is 0, blank is 3.
+applications/node/node_cli.cc, code is 464, comment is 142, blank is 201.
+awesome_commands.sbbts, code is 31, comment is 0, blank is 0.
+bin/a, code is 37, comment is 0, blank is 0.
+bin/b, code is 101, comment is 0, blank is 0.
+bin/generate_bmm, it is a binary file.
+bin/generate_cpmm, it is a binary file.
+bin/generate_ffnn, it is a binary file.
+bin/generate_matrix_addition, it is a binary file.
+bin/generate_multiplication_chain, it is a binary file.
+bin/node_cli, it is a binary file.
+bin/test_bench_uds, it is a binary file.
+bin/test_broadcast, it is a binary file.
+bin/test_builtin_dense, it is a binary file.
+bin/test_builtin_ud, it is a binary file.
+bin/test_move, it is a binary file.
+bin/test_parsed_command, it is a binary file.
+bin/test_reduce, it is a binary file.
+bin/test_reservation_station, it is a binary file.
+bin/test_simulated_bmm, it is a binary file.
+bin/test_simulated_cmm, it is a binary file.
+bin/test_storage, it is a binary file.
+bin/test_two_phase_command_compiler, it is a binary file.
+build/.cmake/api/v1/query/client-vscode/query.json, code is 1, comment is 0, blank is 0.
+build/.cmake/api/v1/reply/cache-v2-90ae5df0caa233481f40.json, code is 1551, comment is 0, blank is 0.
+build/.cmake/api/v1/reply/codemodel-v2-fa3f6d7e01fd052efcea.json, code is 338, comment is 0, blank is 0.
+build/.cmake/api/v1/reply/index-2022-03-29T20-47-02-0932.json, code is 94, comment is 0, blank is 0.
+build/.cmake/api/v1/reply/target-applications-Debug-3e1494689559b0dbd7fb.json, code is 212, comment is 0, blank is 2.
+build/.cmake/api/v1/reply/target-bbts-common-Debug-52cea1e23188abbd5b2c.json, code is 271, comment is 0, blank is 2.
+build/.cmake/api/v1/reply/target-blob-Debug-0d8c9f2794cf6cb1a3e6.json, code is 178, comment is 0, blank is 2.
+build/.cmake/api/v1/reply/target-commands-Debug-ac82231efab058615dc5.json, code is 123, comment is 0, blank is 2.
+build/.cmake/api/v1/reply/target-communication-Debug-2560efeea4936c668ed1.json, code is 101, comment is 0, blank is 2.
+build/.cmake/api/v1/reply/target-ffnn_lib-Debug-c7a0438acf96d530c505.json, code is 237, comment is 0, blank is 2.
+build/.cmake/api/v1/reply/target-generate_bmm-Debug-81a9a55898b84fe99e5e.json, code is 206, comment is 0, blank is 2.
+build/.cmake/api/v1/reply/target-generate_cpmm-Debug-4f55b19c610b4f5fc923.json, code is 206, comment is 0, blank is 2.
+build/.cmake/api/v1/reply/target-generate_ffnn-Debug-df9ef00d4e3fd2a1f23a.json, code is 206, comment is 0, blank is 2.
+build/.cmake/api/v1/reply/target-generate_matrix_addition-Debug-750c3f977f2666635f01.json, code is 206, comment is 0, blank is 2.
+build/.cmake/api/v1/reply/target-generate_multiplication_chain-Debug-7ed432e1c2f309c27988.json, code is 206, comment is 0, blank is 2.
+build/.cmake/api/v1/reply/target-integration-tests-Debug-22d97eecf67eb5e1e1c3.json, code is 99, comment is 0, blank is 2.
+build/.cmake/api/v1/reply/target-libraries-Debug-3c3d8dfbf475cf57c1fd.json, code is 59, comment is 0, blank is 2.
+build/.cmake/api/v1/reply/target-node_cli-Debug-b978d92f7699117898e4.json, code is 206, comment is 0, blank is 2.
+build/.cmake/api/v1/reply/target-operations-Debug-ec360cc7a11f43b44ceb.json, code is 134, comment is 0, blank is 2.
+build/.cmake/api/v1/reply/target-server-Debug-f8063222cb12f2e6719d.json, code is 112, comment is 0, blank is 2.
+build/.cmake/api/v1/reply/target-storage-Debug-d5f3fc5bd22a92910de8.json, code is 112, comment is 0, blank is 2.
+build/.cmake/api/v1/reply/target-tensor-Debug-1627c32744534b48f94b.json, code is 112, comment is 0, blank is 2.
+build/.cmake/api/v1/reply/target-test_bench_uds-Debug-37e9b4dca122ca0a5131.json, code is 210, comment is 0, blank is 2.
+build/.cmake/api/v1/reply/target-test_broadcast-Debug-6e1d6afcbcef609b9602.json, code is 188, comment is 0, blank is 2.
+build/.cmake/api/v1/reply/target-test_builtin_dense-Debug-4a090e79af2216af3f9d.json, code is 210, comment is 0, blank is 2.
+build/.cmake/api/v1/reply/target-test_builtin_ud-Debug-0783c4350d0ab41d0650.json, code is 210, comment is 0, blank is 2.
+build/.cmake/api/v1/reply/target-test_move-Debug-1d95a39bbb82a435f6c9.json, code is 188, comment is 0, blank is 2.
+build/.cmake/api/v1/reply/target-test_parsed_command-Debug-3bc01883a01f9659e2c2.json, code is 210, comment is 0, blank is 2.
+build/.cmake/api/v1/reply/target-test_reduce-Debug-5fd4ae836c4538474663.json, code is 188, comment is 0, blank is 2.
+build/.cmake/api/v1/reply/target-test_reservation_station-Debug-13322f0e28e77c736211.json, code is 210, comment is 0, blank is 2.
+build/.cmake/api/v1/reply/target-test_simulated_bmm-Debug-0b5a7f999f2b4af78043.json, code is 188, comment is 0, blank is 2.
+build/.cmake/api/v1/reply/target-test_simulated_cmm-Debug-ad8fc1fe363fa6cc618d.json, code is 188, comment is 0, blank is 2.
+build/.cmake/api/v1/reply/target-test_storage-Debug-b962146ee324d83637c1.json, code is 210, comment is 0, blank is 2.
+build/.cmake/api/v1/reply/target-test_two_phase_command_compiler-Debug-7a0b9fa2d3ba0ffbac18.json, code is 210, comment is 0, blank is 2.
+build/.cmake/api/v1/reply/target-ud_functions-Debug-a295a9338bed49d9a0ad.json, code is 222, comment is 0, blank is 2.
+build/.cmake/api/v1/reply/target-unit-tests-Debug-539429de4ae6f1019071.json, code is 119, comment is 0, blank is 2.
+build/cmake_install.cmake, code is 42, comment is 0, blank is 7.
+build/CMakeCache.txt, code is 190, comment is 195, blank is 80.
+build/CMakeFiles/3.16.3/CMakeCXXCompiler.cmake, code is 70, comment is 0, blank is 18.
+build/CMakeFiles/3.16.3/CMakeDetermineCompilerABI_CXX.bin, it is a binary file.
+build/CMakeFiles/3.16.3/CMakeSystem.cmake, code is 10, comment is 0, blank is 5.
+build/CMakeFiles/3.16.3/CompilerIdCXX/a.out, it is a binary file.
+build/CMakeFiles/3.16.3/CompilerIdCXX/CMakeCXXCompilerId.cpp, code is 491, comment is 52, blank is 117.
+build/CMakeFiles/applications.dir/build.make, code is 44, comment is 0, blank is 28.
+build/CMakeFiles/applications.dir/cmake_clean.cmake, code is 4, comment is 0, blank is 1.
+build/CMakeFiles/applications.dir/DependInfo.cmake, code is 9, comment is 0, blank is 2.
+build/CMakeFiles/applications.dir/progress.make, code is 0, comment is 0, blank is 1.
+build/CMakeFiles/bbts-common.dir/build.make, code is 35, comment is 0, blank is 22.
+build/CMakeFiles/bbts-common.dir/cmake_clean.cmake, code is 6, comment is 0, blank is 3.
+build/CMakeFiles/bbts-common.dir/cmake_clean_target.cmake, code is 2, comment is 0, blank is 1.
+build/CMakeFiles/bbts-common.dir/depend.internal, code is 2, comment is 0, blank is 1.
+build/CMakeFiles/bbts-common.dir/depend.make, code is 2, comment is 0, blank is 1.
+build/CMakeFiles/bbts-common.dir/DependInfo.cmake, code is 9, comment is 0, blank is 2.
+build/CMakeFiles/bbts-common.dir/flags.make, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/bbts-common.dir/link.txt, code is 2, comment is 0, blank is 0.
+build/CMakeFiles/bbts-common.dir/progress.make, code is 1, comment is 0, blank is 1.
+build/CMakeFiles/blob.dir/build.make, code is 35, comment is 0, blank is 22.
+build/CMakeFiles/blob.dir/cmake_clean.cmake, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/blob.dir/depend.make, code is 2, comment is 0, blank is 0.
+build/CMakeFiles/blob.dir/DependInfo.cmake, code is 18, comment is 0, blank is 10.
+build/CMakeFiles/blob.dir/flags.make, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/blob.dir/link.txt, code is 1, comment is 0, blank is 0.
+build/CMakeFiles/blob.dir/progress.make, code is 2, comment is 0, blank is 1.
+build/CMakeFiles/CheckFunctionExists/CheckFunctionExists.cxx, code is 24, comment is 0, blank is 4.
+build/CMakeFiles/CheckLibraryExists/CheckFunctionExists.cxx, code is 24, comment is 0, blank is 4.
+build/CMakeFiles/cmake.check_cache, code is 1, comment is 0, blank is 0.
+build/CMakeFiles/CMakeDirectoryInformation.cmake, code is 12, comment is 0, blank is 4.
+build/CMakeFiles/CMakeError.log, code is 45, comment is 0, blank is 11.
+build/CMakeFiles/CMakeOutput.log, code is 246, comment is 0, blank is 29.
+build/CMakeFiles/commands.dir/build.make, code is 35, comment is 0, blank is 22.
+build/CMakeFiles/commands.dir/cmake_clean.cmake, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/commands.dir/CXX.includecache, code is 1, comment is 0, blank is 0.
+build/CMakeFiles/commands.dir/depend.internal, code is 84, comment is 0, blank is 1.
+build/CMakeFiles/commands.dir/depend.make, code is 81, comment is 0, blank is 4.
+build/CMakeFiles/commands.dir/DependInfo.cmake, code is 15, comment is 0, blank is 9.
+build/CMakeFiles/commands.dir/flags.make, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/commands.dir/progress.make, code is 3, comment is 0, blank is 1.
+build/CMakeFiles/commands.dir/src/commands/command_runner.cc.o, it is a binary file.
+build/CMakeFiles/commands.dir/src/commands/reservation_station.cc.o, it is a binary file.
+build/CMakeFiles/commands.dir/src/commands/tensor_notifier.cc.o, it is a binary file.
+build/CMakeFiles/communication.dir/build.make, code is 35, comment is 0, blank is 22.
+build/CMakeFiles/communication.dir/cmake_clean.cmake, code is 6, comment is 0, blank is 2.
+build/CMakeFiles/communication.dir/CXX.includecache, code is 1, comment is 0, blank is 0.
+build/CMakeFiles/communication.dir/depend.internal, code is 19, comment is 0, blank is 1.
+build/CMakeFiles/communication.dir/depend.make, code is 18, comment is 0, blank is 2.
+build/CMakeFiles/communication.dir/DependInfo.cmake, code is 15, comment is 0, blank is 7.
+build/CMakeFiles/communication.dir/flags.make, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/communication.dir/progress.make, code is 1, comment is 0, blank is 1.
+build/CMakeFiles/communication.dir/src/communication/communicator.cc.o, it is a binary file.
+build/CMakeFiles/ffnn_lib.dir/build.make, code is 35, comment is 0, blank is 22.
+build/CMakeFiles/ffnn_lib.dir/cmake_clean.cmake, code is 6, comment is 0, blank is 15.
+build/CMakeFiles/ffnn_lib.dir/depend.make, code is 2, comment is 0, blank is 0.
+build/CMakeFiles/ffnn_lib.dir/DependInfo.cmake, code is 18, comment is 0, blank is 20.
+build/CMakeFiles/ffnn_lib.dir/flags.make, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/ffnn_lib.dir/link.txt, code is 1, comment is 0, blank is 0.
+build/CMakeFiles/ffnn_lib.dir/progress.make, code is 13, comment is 0, blank is 1.
+build/CMakeFiles/FindMPI/test_mpi.cpp, code is 35, comment is 0, blank is 3.
+build/CMakeFiles/FindMPI/test_mpi_CXX.bin, it is a binary file.
+build/CMakeFiles/generate_bmm.dir/build.make, code is 35, comment is 0, blank is 22.
+build/CMakeFiles/generate_bmm.dir/cmake_clean.cmake, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/generate_bmm.dir/depend.make, code is 2, comment is 0, blank is 0.
+build/CMakeFiles/generate_bmm.dir/DependInfo.cmake, code is 15, comment is 0, blank is 8.
+build/CMakeFiles/generate_bmm.dir/flags.make, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/generate_bmm.dir/link.txt, code is 1, comment is 0, blank is 0.
+build/CMakeFiles/generate_bmm.dir/progress.make, code is 2, comment is 0, blank is 1.
+build/CMakeFiles/generate_cpmm.dir/build.make, code is 35, comment is 0, blank is 22.
+build/CMakeFiles/generate_cpmm.dir/cmake_clean.cmake, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/generate_cpmm.dir/depend.make, code is 2, comment is 0, blank is 0.
+build/CMakeFiles/generate_cpmm.dir/DependInfo.cmake, code is 15, comment is 0, blank is 8.
+build/CMakeFiles/generate_cpmm.dir/flags.make, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/generate_cpmm.dir/link.txt, code is 1, comment is 0, blank is 0.
+build/CMakeFiles/generate_cpmm.dir/progress.make, code is 2, comment is 0, blank is 1.
+build/CMakeFiles/generate_ffnn.dir/build.make, code is 35, comment is 0, blank is 22.
+build/CMakeFiles/generate_ffnn.dir/cmake_clean.cmake, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/generate_ffnn.dir/depend.make, code is 2, comment is 0, blank is 0.
+build/CMakeFiles/generate_ffnn.dir/DependInfo.cmake, code is 15, comment is 0, blank is 8.
+build/CMakeFiles/generate_ffnn.dir/flags.make, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/generate_ffnn.dir/link.txt, code is 1, comment is 0, blank is 0.
+build/CMakeFiles/generate_ffnn.dir/progress.make, code is 2, comment is 0, blank is 1.
+build/CMakeFiles/generate_matrix_addition.dir/applications/matrix_addition/generate_matrix_addition.cc.o, it is a binary file.
+build/CMakeFiles/generate_matrix_addition.dir/build.make, code is 35, comment is 0, blank is 22.
+build/CMakeFiles/generate_matrix_addition.dir/cmake_clean.cmake, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/generate_matrix_addition.dir/CXX.includecache, code is 1, comment is 0, blank is 0.
+build/CMakeFiles/generate_matrix_addition.dir/depend.internal, code is 29, comment is 0, blank is 1.
+build/CMakeFiles/generate_matrix_addition.dir/depend.make, code is 28, comment is 0, blank is 2.
+build/CMakeFiles/generate_matrix_addition.dir/DependInfo.cmake, code is 15, comment is 0, blank is 8.
+build/CMakeFiles/generate_matrix_addition.dir/flags.make, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/generate_matrix_addition.dir/link.txt, code is 1, comment is 0, blank is 0.
+build/CMakeFiles/generate_matrix_addition.dir/progress.make, code is 2, comment is 0, blank is 1.
+build/CMakeFiles/generate_multiplication_chain.dir/build.make, code is 35, comment is 0, blank is 22.
+build/CMakeFiles/generate_multiplication_chain.dir/cmake_clean.cmake, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/generate_multiplication_chain.dir/depend.make, code is 2, comment is 0, blank is 0.
+build/CMakeFiles/generate_multiplication_chain.dir/DependInfo.cmake, code is 15, comment is 0, blank is 8.
+build/CMakeFiles/generate_multiplication_chain.dir/flags.make, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/generate_multiplication_chain.dir/link.txt, code is 1, comment is 0, blank is 0.
+build/CMakeFiles/generate_multiplication_chain.dir/progress.make, code is 2, comment is 0, blank is 1.
+build/CMakeFiles/integration-tests.dir/build.make, code is 44, comment is 0, blank is 28.
+build/CMakeFiles/integration-tests.dir/cmake_clean.cmake, code is 4, comment is 0, blank is 1.
+build/CMakeFiles/integration-tests.dir/DependInfo.cmake, code is 9, comment is 0, blank is 2.
+build/CMakeFiles/integration-tests.dir/progress.make, code is 0, comment is 0, blank is 1.
+build/CMakeFiles/libraries.dir/build.make, code is 44, comment is 0, blank is 28.
+build/CMakeFiles/libraries.dir/cmake_clean.cmake, code is 4, comment is 0, blank is 1.
+build/CMakeFiles/libraries.dir/DependInfo.cmake, code is 9, comment is 0, blank is 2.
+build/CMakeFiles/libraries.dir/progress.make, code is 0, comment is 0, blank is 1.
+build/CMakeFiles/Makefile.cmake, code is 16, comment is 0, blank is 89.
+build/CMakeFiles/Makefile2, code is 801, comment is 0, blank is 221.
+build/CMakeFiles/node_cli.dir/applications/node/node_cli.cc.o, it is a binary file.
+build/CMakeFiles/node_cli.dir/build.make, code is 35, comment is 0, blank is 22.
+build/CMakeFiles/node_cli.dir/cmake_clean.cmake, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/node_cli.dir/CXX.includecache, code is 1, comment is 0, blank is 0.
+build/CMakeFiles/node_cli.dir/depend.internal, code is 53, comment is 0, blank is 1.
+build/CMakeFiles/node_cli.dir/depend.make, code is 52, comment is 0, blank is 2.
+build/CMakeFiles/node_cli.dir/DependInfo.cmake, code is 15, comment is 0, blank is 8.
+build/CMakeFiles/node_cli.dir/flags.make, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/node_cli.dir/link.txt, code is 1, comment is 0, blank is 0.
+build/CMakeFiles/node_cli.dir/progress.make, code is 2, comment is 0, blank is 1.
+build/CMakeFiles/operations.dir/build.make, code is 35, comment is 0, blank is 22.
+build/CMakeFiles/operations.dir/cmake_clean.cmake, code is 6, comment is 0, blank is 5.
+build/CMakeFiles/operations.dir/CXX.includecache, code is 1, comment is 0, blank is 0.
+build/CMakeFiles/operations.dir/depend.internal, code is 130, comment is 0, blank is 1.
+build/CMakeFiles/operations.dir/depend.make, code is 126, comment is 0, blank is 5.
+build/CMakeFiles/operations.dir/DependInfo.cmake, code is 15, comment is 0, blank is 10.
+build/CMakeFiles/operations.dir/flags.make, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/operations.dir/progress.make, code is 4, comment is 0, blank is 1.
+build/CMakeFiles/operations.dir/src/operations/broadcast_op.cc.o, it is a binary file.
+build/CMakeFiles/operations.dir/src/operations/local_reduce_op.cc.o, it is a binary file.
+build/CMakeFiles/operations.dir/src/operations/move_op.cc.o, it is a binary file.
+build/CMakeFiles/operations.dir/src/operations/reduce_op.cc.o, it is a binary file.
+build/CMakeFiles/progress.marks, code is 1, comment is 0, blank is 0.
+build/CMakeFiles/server.dir/build.make, code is 35, comment is 0, blank is 22.
+build/CMakeFiles/server.dir/cmake_clean.cmake, code is 6, comment is 0, blank is 3.
+build/CMakeFiles/server.dir/CXX.includecache, code is 1, comment is 0, blank is 0.
+build/CMakeFiles/server.dir/depend.internal, code is 87, comment is 0, blank is 1.
+build/CMakeFiles/server.dir/depend.make, code is 85, comment is 0, blank is 3.
+build/CMakeFiles/server.dir/DependInfo.cmake, code is 15, comment is 0, blank is 8.
+build/CMakeFiles/server.dir/flags.make, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/server.dir/progress.make, code is 2, comment is 0, blank is 1.
+build/CMakeFiles/server.dir/src/server/coordinator.cc.o, it is a binary file.
+build/CMakeFiles/server.dir/src/server/node.cc.o, it is a binary file.
+build/CMakeFiles/storage.dir/build.make, code is 35, comment is 0, blank is 22.
+build/CMakeFiles/storage.dir/cmake_clean.cmake, code is 6, comment is 0, blank is 3.
+build/CMakeFiles/storage.dir/CXX.includecache, code is 1, comment is 0, blank is 0.
+build/CMakeFiles/storage.dir/depend.internal, code is 40, comment is 0, blank is 1.
+build/CMakeFiles/storage.dir/depend.make, code is 38, comment is 0, blank is 3.
+build/CMakeFiles/storage.dir/DependInfo.cmake, code is 15, comment is 0, blank is 8.
+build/CMakeFiles/storage.dir/flags.make, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/storage.dir/progress.make, code is 2, comment is 0, blank is 1.
+build/CMakeFiles/storage.dir/src/storage/memory_storage.cc.o, it is a binary file.
+build/CMakeFiles/storage.dir/src/storage/nvme_storage.cc.o, it is a binary file.
+build/CMakeFiles/TargetDirectories.txt, code is 35, comment is 0, blank is 0.
+build/CMakeFiles/tensor.dir/build.make, code is 35, comment is 0, blank is 22.
+build/CMakeFiles/tensor.dir/cmake_clean.cmake, code is 6, comment is 0, blank is 3.
+build/CMakeFiles/tensor.dir/CXX.includecache, code is 1, comment is 0, blank is 0.
+build/CMakeFiles/tensor.dir/depend.internal, code is 11, comment is 0, blank is 1.
+build/CMakeFiles/tensor.dir/depend.make, code is 9, comment is 0, blank is 3.
+build/CMakeFiles/tensor.dir/DependInfo.cmake, code is 15, comment is 0, blank is 8.
+build/CMakeFiles/tensor.dir/flags.make, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/tensor.dir/progress.make, code is 2, comment is 0, blank is 1.
+build/CMakeFiles/tensor.dir/src/tensor/builtin_formats.cc.o, it is a binary file.
+build/CMakeFiles/tensor.dir/src/tensor/tensor_factory.cc.o, it is a binary file.
+build/CMakeFiles/test_bench_uds.dir/build.make, code is 35, comment is 0, blank is 22.
+build/CMakeFiles/test_bench_uds.dir/cmake_clean.cmake, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/test_bench_uds.dir/depend.make, code is 2, comment is 0, blank is 0.
+build/CMakeFiles/test_bench_uds.dir/DependInfo.cmake, code is 18, comment is 0, blank is 10.
+build/CMakeFiles/test_bench_uds.dir/flags.make, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/test_bench_uds.dir/link.txt, code is 1, comment is 0, blank is 0.
+build/CMakeFiles/test_bench_uds.dir/progress.make, code is 2, comment is 0, blank is 1.
+build/CMakeFiles/test_broadcast.dir/build.make, code is 35, comment is 0, blank is 22.
+build/CMakeFiles/test_broadcast.dir/cmake_clean.cmake, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/test_broadcast.dir/depend.make, code is 2, comment is 0, blank is 0.
+build/CMakeFiles/test_broadcast.dir/DependInfo.cmake, code is 15, comment is 0, blank is 8.
+build/CMakeFiles/test_broadcast.dir/flags.make, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/test_broadcast.dir/link.txt, code is 1, comment is 0, blank is 0.
+build/CMakeFiles/test_broadcast.dir/progress.make, code is 2, comment is 0, blank is 1.
+build/CMakeFiles/test_builtin_dense.dir/build.make, code is 35, comment is 0, blank is 22.
+build/CMakeFiles/test_builtin_dense.dir/cmake_clean.cmake, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/test_builtin_dense.dir/depend.make, code is 2, comment is 0, blank is 0.
+build/CMakeFiles/test_builtin_dense.dir/DependInfo.cmake, code is 18, comment is 0, blank is 10.
+build/CMakeFiles/test_builtin_dense.dir/flags.make, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/test_builtin_dense.dir/link.txt, code is 1, comment is 0, blank is 0.
+build/CMakeFiles/test_builtin_dense.dir/progress.make, code is 2, comment is 0, blank is 1.
+build/CMakeFiles/test_builtin_ud.dir/build.make, code is 35, comment is 0, blank is 22.
+build/CMakeFiles/test_builtin_ud.dir/cmake_clean.cmake, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/test_builtin_ud.dir/depend.make, code is 2, comment is 0, blank is 0.
+build/CMakeFiles/test_builtin_ud.dir/DependInfo.cmake, code is 18, comment is 0, blank is 10.
+build/CMakeFiles/test_builtin_ud.dir/flags.make, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/test_builtin_ud.dir/link.txt, code is 1, comment is 0, blank is 0.
+build/CMakeFiles/test_builtin_ud.dir/progress.make, code is 2, comment is 0, blank is 1.
+build/CMakeFiles/test_move.dir/build.make, code is 35, comment is 0, blank is 22.
+build/CMakeFiles/test_move.dir/cmake_clean.cmake, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/test_move.dir/depend.make, code is 2, comment is 0, blank is 0.
+build/CMakeFiles/test_move.dir/DependInfo.cmake, code is 15, comment is 0, blank is 8.
+build/CMakeFiles/test_move.dir/flags.make, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/test_move.dir/link.txt, code is 1, comment is 0, blank is 0.
+build/CMakeFiles/test_move.dir/progress.make, code is 2, comment is 0, blank is 1.
+build/CMakeFiles/test_parsed_command.dir/build.make, code is 35, comment is 0, blank is 22.
+build/CMakeFiles/test_parsed_command.dir/cmake_clean.cmake, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/test_parsed_command.dir/depend.make, code is 2, comment is 0, blank is 0.
+build/CMakeFiles/test_parsed_command.dir/DependInfo.cmake, code is 18, comment is 0, blank is 10.
+build/CMakeFiles/test_parsed_command.dir/flags.make, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/test_parsed_command.dir/link.txt, code is 1, comment is 0, blank is 0.
+build/CMakeFiles/test_parsed_command.dir/progress.make, code is 2, comment is 0, blank is 1.
+build/CMakeFiles/test_reduce.dir/build.make, code is 35, comment is 0, blank is 22.
+build/CMakeFiles/test_reduce.dir/cmake_clean.cmake, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/test_reduce.dir/depend.make, code is 2, comment is 0, blank is 0.
+build/CMakeFiles/test_reduce.dir/DependInfo.cmake, code is 15, comment is 0, blank is 8.
+build/CMakeFiles/test_reduce.dir/flags.make, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/test_reduce.dir/link.txt, code is 1, comment is 0, blank is 0.
+build/CMakeFiles/test_reduce.dir/progress.make, code is 2, comment is 0, blank is 1.
+build/CMakeFiles/test_reservation_station.dir/build.make, code is 35, comment is 0, blank is 22.
+build/CMakeFiles/test_reservation_station.dir/cmake_clean.cmake, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/test_reservation_station.dir/depend.make, code is 2, comment is 0, blank is 0.
+build/CMakeFiles/test_reservation_station.dir/DependInfo.cmake, code is 18, comment is 0, blank is 10.
+build/CMakeFiles/test_reservation_station.dir/flags.make, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/test_reservation_station.dir/link.txt, code is 1, comment is 0, blank is 0.
+build/CMakeFiles/test_reservation_station.dir/progress.make, code is 2, comment is 0, blank is 1.
+build/CMakeFiles/test_simulated_bmm.dir/build.make, code is 35, comment is 0, blank is 22.
+build/CMakeFiles/test_simulated_bmm.dir/cmake_clean.cmake, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/test_simulated_bmm.dir/depend.make, code is 2, comment is 0, blank is 0.
+build/CMakeFiles/test_simulated_bmm.dir/DependInfo.cmake, code is 15, comment is 0, blank is 8.
+build/CMakeFiles/test_simulated_bmm.dir/flags.make, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/test_simulated_bmm.dir/link.txt, code is 1, comment is 0, blank is 0.
+build/CMakeFiles/test_simulated_bmm.dir/progress.make, code is 2, comment is 0, blank is 1.
+build/CMakeFiles/test_simulated_cmm.dir/build.make, code is 35, comment is 0, blank is 22.
+build/CMakeFiles/test_simulated_cmm.dir/cmake_clean.cmake, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/test_simulated_cmm.dir/depend.make, code is 2, comment is 0, blank is 0.
+build/CMakeFiles/test_simulated_cmm.dir/DependInfo.cmake, code is 15, comment is 0, blank is 8.
+build/CMakeFiles/test_simulated_cmm.dir/flags.make, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/test_simulated_cmm.dir/link.txt, code is 1, comment is 0, blank is 0.
+build/CMakeFiles/test_simulated_cmm.dir/progress.make, code is 2, comment is 0, blank is 1.
+build/CMakeFiles/test_storage.dir/build.make, code is 35, comment is 0, blank is 22.
+build/CMakeFiles/test_storage.dir/cmake_clean.cmake, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/test_storage.dir/depend.make, code is 2, comment is 0, blank is 0.
+build/CMakeFiles/test_storage.dir/DependInfo.cmake, code is 18, comment is 0, blank is 10.
+build/CMakeFiles/test_storage.dir/flags.make, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/test_storage.dir/link.txt, code is 1, comment is 0, blank is 0.
+build/CMakeFiles/test_storage.dir/progress.make, code is 2, comment is 0, blank is 1.
+build/CMakeFiles/test_two_phase_command_compiler.dir/build.make, code is 35, comment is 0, blank is 22.
+build/CMakeFiles/test_two_phase_command_compiler.dir/cmake_clean.cmake, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/test_two_phase_command_compiler.dir/CXX.includecache, code is 1, comment is 0, blank is 0.
+build/CMakeFiles/test_two_phase_command_compiler.dir/depend.internal, code is 29, comment is 0, blank is 1.
+build/CMakeFiles/test_two_phase_command_compiler.dir/depend.make, code is 28, comment is 0, blank is 2.
+build/CMakeFiles/test_two_phase_command_compiler.dir/DependInfo.cmake, code is 18, comment is 0, blank is 10.
+build/CMakeFiles/test_two_phase_command_compiler.dir/flags.make, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/test_two_phase_command_compiler.dir/link.txt, code is 1, comment is 0, blank is 0.
+build/CMakeFiles/test_two_phase_command_compiler.dir/progress.make, code is 2, comment is 0, blank is 1.
+build/CMakeFiles/test_two_phase_command_compiler.dir/tests/test_two_phase_command_compiler.cc.o, it is a binary file.
+build/CMakeFiles/ud_functions.dir/build.make, code is 35, comment is 0, blank is 22.
+build/CMakeFiles/ud_functions.dir/cmake_clean.cmake, code is 6, comment is 0, blank is 13.
+build/CMakeFiles/ud_functions.dir/CXX.includecache, code is 1, comment is 0, blank is 0.
+build/CMakeFiles/ud_functions.dir/depend.internal, code is 153, comment is 0, blank is 1.
+build/CMakeFiles/ud_functions.dir/depend.make, code is 141, comment is 0, blank is 13.
+build/CMakeFiles/ud_functions.dir/DependInfo.cmake, code is 15, comment is 0, blank is 18.
+build/CMakeFiles/ud_functions.dir/flags.make, code is 6, comment is 0, blank is 4.
+build/CMakeFiles/ud_functions.dir/progress.make, code is 12, comment is 0, blank is 1.
+build/CMakeFiles/ud_functions.dir/src/ud_functions/builtin_functions.cc.o, it is a binary file.
+build/CMakeFiles/ud_functions.dir/src/ud_functions/gpu_scheduler_impl.cc.o, it is a binary file.
+build/CMakeFiles/ud_functions.dir/src/ud_functions/impls/dense_matrix_add.cc.o, it is a binary file.
+build/CMakeFiles/ud_functions.dir/src/ud_functions/impls/dense_matrix_hadamard.cc.o, it is a binary file.
+build/CMakeFiles/ud_functions.dir/src/ud_functions/impls/dense_matrix_mult.cc.o, it is a binary file.
+build/CMakeFiles/ud_functions.dir/src/ud_functions/impls/dense_matrix_relu.cc.o, it is a binary file.
+build/CMakeFiles/ud_functions.dir/src/ud_functions/impls/dense_matrix_relu_dif.cc.o, it is a binary file.
+build/CMakeFiles/ud_functions.dir/src/ud_functions/impls/dense_matrix_sigmoid.cc.o, it is a binary file.
+build/CMakeFiles/ud_functions.dir/src/ud_functions/impls/dense_matrix_weighted_sum.cc.o, it is a binary file.
+build/CMakeFiles/ud_functions.dir/src/ud_functions/impls/dense_uniform.cc.o, it is a binary file.
+build/CMakeFiles/ud_functions.dir/src/ud_functions/ud_function.cc.o, it is a binary file.
+build/CMakeFiles/ud_functions.dir/src/ud_functions/udf_manager.cc.o, it is a binary file.
+build/CMakeFiles/unit-tests.dir/build.make, code is 44, comment is 0, blank is 28.
+build/CMakeFiles/unit-tests.dir/cmake_clean.cmake, code is 4, comment is 0, blank is 1.
+build/CMakeFiles/unit-tests.dir/DependInfo.cmake, code is 9, comment is 0, blank is 2.
+build/CMakeFiles/unit-tests.dir/progress.make, code is 0, comment is 0, blank is 1.
+build/compile_commands.json, code is 287, comment is 0, blank is 0.
+build/CTestTestfile.cmake, code is 6, comment is 0, blank is 0.
+build/libbbts-common.a, it is a binary file.
+build/Makefile, code is 1651, comment is 0, blank is 653.
+build/Testing/Temporary/LastTest.log, code is 3, comment is 0, blank is 0.
+cmake/Findcurand.cmake, code is 37, comment is 0, blank is 6.
+CMakeLists.txt, code is 126, comment is 0, blank is 44.
+integration_tests/Integration.cmake, code is 20, comment is 0, blank is 7.
+integration_tests/test_broadcast.cc, code is 59, comment is 23, blank is 27.
+integration_tests/test_move.cc, code is 50, comment is 22, blank is 26.
+integration_tests/test_reduce.cc, code is 69, comment is 23, blank is 34.
+integration_tests/test_simulated_bmm.cc, code is 201, comment is 65, blank is 83.
+integration_tests/test_simulated_cmm.cc, code is 193, comment is 65, blank is 83.
+libraries/blob.cc, code is 108, comment is 13, blank is 28.
+libraries/libblob.so, it is a binary file.
+libraries/libffnn_lib.so, it is a binary file.
+libraries/Libraries.cmake, code is 12, comment is 0, blank is 4.
+README.md, code is 5, comment is 0, blank is 1.
+scripts/profile_on_gpu.sh, code is 4, comment is 3, blank is 3.
+scripts/run_integration.sh, code is 1, comment is 2, blank is 1.
+scripts/run_nvidia_profile.sh, code is 3, comment is 2, blank is 1.
+scripts/run_on_gpu.sh, code is 4, comment is 3, blank is 3.
+src/commands/abstract_command.h, code is 135, comment is 22, blank is 41.
+src/commands/command.h, code is 337, comment is 125, blank is 145.
+src/commands/command_loader.h, code is 123, comment is 24, blank is 37.
+src/commands/command_runner.cc, code is 209, comment is 92, blank is 111.
+src/commands/command_runner.h, code is 31, comment is 11, blank is 17.
+src/commands/command_utils.h, code is 11, comment is 2, blank is 4.
+src/commands/compile_source_file.h, code is 33, comment is 10, blank is 18.
+src/commands/cost_model.h, code is 135, comment is 42, blank is 55.
+src/commands/parsed_command.h, code is 258, comment is 42, blank is 85.
+src/commands/reservation_station.cc, code is 422, comment is 190, blank is 219.
+src/commands/reservation_station.h, code is 78, comment is 56, blank is 57.
+src/commands/tensor_notifier.cc, code is 30, comment is 6, blank is 12.
+src/commands/tensor_notifier.h, code is 18, comment is 7, blank is 13.
+src/commands/two_layer_compiler.h, code is 816, comment is 173, blank is 220.
+src/communication/communicator.cc, code is 277, comment is 86, blank is 115.
+src/communication/communicator.h, code is 93, comment is 54, blank is 62.
+src/operations/broadcast_op.cc, code is 82, comment is 16, blank is 24.
+src/operations/broadcast_op.h, code is 51, comment is 16, blank is 25.
+src/operations/local_reduce_op.cc, code is 52, comment is 18, blank is 21.
+src/operations/local_reduce_op.h, code is 30, comment is 3, blank is 14.
+src/operations/move_op.cc, code is 36, comment is 7, blank is 11.
+src/operations/move_op.h, code is 24, comment is 9, blank is 13.
+src/operations/reduce_op.cc, code is 152, comment is 52, blank is 70.
+src/operations/reduce_op.h, code is 37, comment is 42, blank is 26.
+src/server/coordinator.cc, code is 432, comment is 152, blank is 162.
+src/server/coordinator.h, code is 115, comment is 51, blank is 68.
+src/server/coordinator_ops.h, code is 28, comment is 18, blank is 14.
+src/server/logger.h, code is 34, comment is 3, blank is 16.
+src/server/node.cc, code is 202, comment is 60, blank is 103.
+src/server/node.h, code is 89, comment is 43, blank is 54.
+src/server/node_config.h, code is 16, comment is 10, blank is 14.
+src/server/static_config.h, code is 20, comment is 4, blank is 9.
+src/storage/memory_storage.cc, code is 140, comment is 42, blank is 67.
+src/storage/memory_storage.h, code is 101, comment is 54, blank is 58.
+src/storage/nvme_storage.cc, code is 333, comment is 137, blank is 171.
+src/storage/nvme_storage.h, code is 238, comment is 111, blank is 124.
+src/storage/storage.h, code is 22, comment is 2, blank is 8.
+src/tensor/builtin_formats.cc, code is 74, comment is 50, blank is 40.
+src/tensor/builtin_formats.h, code is 26, comment is 8, blank is 13.
+src/tensor/tensor.h, code is 33, comment is 22, blank is 23.
+src/tensor/tensor_factory.cc, code is 59, comment is 29, blank is 27.
+src/tensor/tensor_factory.h, code is 22, comment is 17, blank is 19.
+src/ud_functions/builtin_functions.cc, code is 37, comment is 3, blank is 4.
+src/ud_functions/builtin_functions.h, code is 12, comment is 3, blank is 6.
+src/ud_functions/gpu_scheduler.h, code is 13, comment is 1, blank is 5.
+src/ud_functions/gpu_scheduler_impl.cc, code is 87, comment is 25, blank is 42.
+src/ud_functions/gpu_scheduler_impl.h, code is 51, comment is 22, blank is 29.
+src/ud_functions/impls/dense_matrix_add.cc, code is 42, comment is 15, blank is 18.
+src/ud_functions/impls/dense_matrix_add.h, code is 14, comment is 4, blank is 9.
+src/ud_functions/impls/dense_matrix_gpu_add.cu, code is 43, comment is 19, blank is 23.
+src/ud_functions/impls/dense_matrix_gpu_add.h, code is 14, comment is 4, blank is 9.
+src/ud_functions/impls/dense_matrix_gpu_mult.cu, code is 49, comment is 16, blank is 20.
+src/ud_functions/impls/dense_matrix_gpu_mult.h, code is 15, comment is 4, blank is 9.
+src/ud_functions/impls/dense_matrix_hadamard.cc, code is 44, comment is 15, blank is 18.
+src/ud_functions/impls/dense_matrix_hadamard.h, code is 15, comment is 4, blank is 9.
+src/ud_functions/impls/dense_matrix_mult.cc, code is 48, comment is 17, blank is 20.
+src/ud_functions/impls/dense_matrix_mult.h, code is 15, comment is 4, blank is 9.
+src/ud_functions/impls/dense_matrix_relu.cc, code is 39, comment is 14, blank is 18.
+src/ud_functions/impls/dense_matrix_relu.h, code is 15, comment is 4, blank is 9.
+src/ud_functions/impls/dense_matrix_relu_dif.cc, code is 39, comment is 14, blank is 18.
+src/ud_functions/impls/dense_matrix_relu_dif.h, code is 15, comment is 4, blank is 9.
+src/ud_functions/impls/dense_matrix_sigmoid.cc, code is 41, comment is 14, blank is 18.
+src/ud_functions/impls/dense_matrix_sigmoid.h, code is 15, comment is 4, blank is 9.
+src/ud_functions/impls/dense_matrix_weighted_sum.cc, code is 46, comment is 16, blank is 19.
+src/ud_functions/impls/dense_matrix_weighted_sum.h, code is 14, comment is 4, blank is 9.
+src/ud_functions/impls/dense_uniform.cc, code is 42, comment is 16, blank is 21.
+src/ud_functions/impls/dense_uniform.h, code is 16, comment is 4, blank is 9.
+src/ud_functions/null_gpu_scheduler.h, code is 19, comment is 5, blank is 10.
+src/ud_functions/ud_function.cc, code is 11, comment is 2, blank is 3.
+src/ud_functions/ud_function.h, code is 159, comment is 68, blank is 62.
+src/ud_functions/udf_manager.cc, code is 93, comment is 38, blank is 42.
+src/ud_functions/udf_manager.h, code is 33, comment is 15, blank is 22.
+src/utils/concurent_queue.h, code is 24, comment is 11, blank is 18.
+src/utils/raw_vector.h, code is 43, comment is 12, blank is 18.
+src/utils/terminal_color.h, code is 33, comment is 0, blank is 8.
+tensors/filelist.txt, code is 4, comment is 0, blank is 0.
+tensors/t1, code is 1, comment is 0, blank is 0.
+tensors/t2, code is 1, comment is 0, blank is 0.
+tensors/t3, code is 1, comment is 0, blank is 0.
+tensors/t4, code is 1, comment is 0, blank is 0.
+tests/test_bench_uds.cc, code is 74, comment is 14, blank is 24.
+tests/test_builtin_dense.cc, code is 58, comment is 19, blank is 24.
+tests/test_builtin_ud.cc, code is 48, comment is 17, blank is 21.
+tests/test_builtin_ud_gpu.cu, code is 73, comment is 22, blank is 31.
+tests/test_concurent_cublas.cu, code is 91, comment is 19, blank is 31.
+tests/test_parsed_command.cc, code is 98, comment is 4, blank is 45.
+tests/test_reservation_station.cc, code is 837, comment is 281, blank is 294.
+tests/test_serial_cublas.cu, code is 60, comment is 4, blank is 20.
+tests/test_storage.cc, code is 328, comment is 122, blank is 151.
+tests/test_two_phase_command_compiler.cc, code is 350, comment is 88, blank is 100.
+tests/Tests.cmake, code is 34, comment is 0, blank is 15.
+third_party/cli/.github/FUNDING.yml, code is 11, comment is 0, blank is 1.
+third_party/cli/.github/workflows/ccpp.yml, code is 24, comment is 0, blank is 4.
+third_party/cli/.gitignore, code is 60, comment is 0, blank is 9.
+third_party/cli/CHANGELOG.md, code is 14, comment is 0, blank is 6.
+third_party/cli/cli.pc.in, code is 7, comment is 1, blank is 1.
+third_party/cli/cliConfig.cmake.in, code is 7, comment is 0, blank is 3.
+third_party/cli/CMakeLists.txt, code is 42, comment is 0, blank is 6.
+third_party/cli/CODE_OF_CONDUCT.md, code is 5, comment is 0, blank is 4.
+third_party/cli/CONTRIBUTING.md, code is 4, comment is 0, blank is 3.
+third_party/cli/doc/doxy/Doxyfile, code is 63, comment is 0, blank is 1.
+third_party/cli/doc/uml/cli.uml, code is 4893, comment is 5, blank is 0.
+third_party/cli/doc/uml/cmdhandlers.png, it is a binary file.
+third_party/cli/doc/uml/implementation.png, it is a binary file.
+third_party/cli/examples/asyncsession.cpp, code is 78, comment is 31, blank is 14.
+third_party/cli/examples/boostasio_nonowner_iocontext.cpp, code is 85, comment is 38, blank is 12.
+third_party/cli/examples/CMakeLists.txt, code is 57, comment is 0, blank is 4.
+third_party/cli/examples/complete.cpp, code is 163, comment is 42, blank is 16.
+third_party/cli/examples/complete_vsprj/common.props, code is 16, comment is 0, blank is 0.
+third_party/cli/examples/complete_vsprj/complete.vcxproj, code is 129, comment is 0, blank is 0.
+third_party/cli/examples/examples.sln, code is 81, comment is 0, blank is 0.
+third_party/cli/examples/filesession.cpp, code is 62, comment is 30, blank is 12.
+third_party/cli/examples/filesession_vsprj/filesession.vcxproj, code is 133, comment is 0, blank is 0.
+third_party/cli/examples/input.txt, code is 3, comment is 0, blank is 0.
+third_party/cli/examples/Makefile.boostasio, code is 35, comment is 0, blank is 6.
+third_party/cli/examples/makefile.boostasio.win, code is 47, comment is 0, blank is 8.
+third_party/cli/examples/Makefile.noasio, code is 35, comment is 0, blank is 6.
+third_party/cli/examples/makefile.noasio.win, code is 46, comment is 0, blank is 8.
+third_party/cli/examples/Makefile.standaloneasio, code is 35, comment is 0, blank is 6.
+third_party/cli/examples/makefile.standaloneasio.win, code is 46, comment is 0, blank is 8.
+third_party/cli/examples/makefile.win, code is 47, comment is 0, blank is 8.
+third_party/cli/examples/pluginmanager.cpp, code is 238, comment is 47, blank is 34.
+third_party/cli/examples/pluginmanager_vsprj/pluginmanager.vcxproj, code is 133, comment is 0, blank is 0.
+third_party/cli/examples/simplelocalsession.cpp, code is 49, comment is 30, blank is 12.
+third_party/cli/examples/simplelocalsession_vsprj/simplelocalsession.vcxproj, code is 133, comment is 0, blank is 0.
+third_party/cli/examples/standaloneasio_nonowner_iocontext.cpp, code is 73, comment is 34, blank is 10.
+third_party/cli/include/cli/boostasiocliasyncsession.h, code is 6, comment is 29, blank is 6.
+third_party/cli/include/cli/boostasioremotecli.h, code is 6, comment is 29, blank is 5.
+third_party/cli/include/cli/boostasioscheduler.h, code is 6, comment is 29, blank is 4.
+third_party/cli/include/cli/cli.h, code is 863, comment is 96, blank is 147.
+third_party/cli/include/cli/clifilesession.h, code is 46, comment is 33, blank is 8.
+third_party/cli/include/cli/clilocalsession.h, code is 25, comment is 32, blank is 12.
+third_party/cli/include/cli/colorprofile.h, code is 34, comment is 30, blank is 14.
+third_party/cli/include/cli/detail/boostasiolib.h, code is 11, comment is 33, blank is 6.
+third_party/cli/include/cli/detail/commonprefix.h, code is 31, comment is 33, blank is 9.
+third_party/cli/include/cli/detail/fromstring.h, code is 198, comment is 42, blank is 48.
+third_party/cli/include/cli/detail/genericasioremotecli.h, code is 393, comment is 169, blank is 47.
+third_party/cli/include/cli/detail/genericasioscheduler.h, code is 38, comment is 32, blank is 20.
+third_party/cli/include/cli/detail/genericcliasyncsession.h, code is 59, comment is 34, blank is 12.
+third_party/cli/include/cli/detail/history.h, code is 107, comment is 50, blank is 16.
+third_party/cli/include/cli/detail/inputdevice.h, code is 30, comment is 31, blank is 14.
+third_party/cli/include/cli/detail/inputhandler.h, code is 91, comment is 32, blank is 14.
+third_party/cli/include/cli/detail/keyboard.h, code is 24, comment is 29, blank is 6.
+third_party/cli/include/cli/detail/linuxkeyboard.h, code is 99, comment is 35, blank is 16.
+third_party/cli/include/cli/detail/newboostasiolib.h, code is 42, comment is 31, blank is 13.
+third_party/cli/include/cli/detail/newstandaloneasiolib.h, code is 42, comment is 31, blank is 12.
+third_party/cli/include/cli/detail/oldboostasiolib.h, code is 37, comment is 31, blank is 12.
+third_party/cli/include/cli/detail/oldstandaloneasiolib.h, code is 38, comment is 31, blank is 14.
+third_party/cli/include/cli/detail/rang.h, code is 255, comment is 1, blank is 43.
+third_party/cli/include/cli/detail/server.h, code is 107, comment is 34, blank is 21.
+third_party/cli/include/cli/detail/split.h, code is 156, comment is 64, blank is 21.
+third_party/cli/include/cli/detail/standaloneasiolib.h, code is 11, comment is 33, blank is 6.
+third_party/cli/include/cli/detail/terminal.h, code is 144, comment is 49, blank is 24.
+third_party/cli/include/cli/detail/winkeyboard.h, code is 93, comment is 36, blank is 11.
+third_party/cli/include/cli/filehistorystorage.h, code is 50, comment is 30, blank is 7.
+third_party/cli/include/cli/historystorage.h, code is 16, comment is 34, blank is 6.
+third_party/cli/include/cli/loopscheduler.h, code is 58, comment is 35, blank is 12.
+third_party/cli/include/cli/scheduler.h, code is 13, comment is 37, blank is 7.
+third_party/cli/include/cli/standaloneasiocliasyncsession.h, code is 6, comment is 29, blank is 6.
+third_party/cli/include/cli/standaloneasioremotecli.h, code is 6, comment is 29, blank is 6.
+third_party/cli/include/cli/standaloneasioscheduler.h, code is 6, comment is 29, blank is 4.
+third_party/cli/include/cli/volatilehistorystorage.h, code is 34, comment is 30, blank is 6.
+third_party/cli/LICENSE, code is 20, comment is 0, blank is 3.
+third_party/cli/README.md, code is 56, comment is 10, blank is 24.
+third_party/cli/test/cli_test_history, code is 0, comment is 0, blank is 0.
+third_party/cli/test/CMakeLists.txt, code is 63, comment is 0, blank is 6.
+third_party/cli/test/driver.cpp, code is 3, comment is 29, blank is 1.
+third_party/cli/test/Makefile, code is 56, comment is 0, blank is 10.
+third_party/cli/test/makefile.win, code is 86, comment is 0, blank is 17.
+third_party/cli/test/scheduler_test_templates.h, code is 45, comment is 29, blank is 7.
+third_party/cli/test/test_boostasioscheduler.cpp, code is 27, comment is 28, blank is 8.
+third_party/cli/test/test_cli.cpp, code is 294, comment is 47, blank is 69.
+third_party/cli/test/test_commonprefix.cpp, code is 13, comment is 28, blank is 5.
+third_party/cli/test/test_filehistorystorage.cpp, code is 40, comment is 34, blank is 15.
+third_party/cli/test/test_history.cpp, code is 140, comment is 28, blank is 39.
+third_party/cli/test/test_loopscheduler.cpp, code is 18, comment is 28, blank is 7.
+third_party/cli/test/test_menu.cpp, code is 51, comment is 53, blank is 20.
+third_party/cli/test/test_split.cpp, code is 104, comment is 84, blank is 34.
+third_party/cli/test/test_standaloneasioscheduler.cpp, code is 27, comment is 28, blank is 8.
+third_party/cli/test/test_volatilehistorystorage.cpp, code is 21, comment is 30, blank is 9.
+third_party/cuda/gpu.h, code is 667, comment is 79, blank is 226.
+third_party/cuda/helper_string.h, code is 255, comment is 68, blank is 57.
+===============================================================================

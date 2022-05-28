@@ -354,7 +354,7 @@ public:
       auto [transfer_cost, cpu_cost, gpu_cost, gpu_transfer] =
           calculate_cost(node, p, commands, tensor_locations, gpu_assigment);
 
-      // update the costs
+      // update the cos
       _node_costs[node].transfer_cost += transfer_cost;
       _node_costs[node].compute_cost += cpu_cost;
       _node_costs[node].gpu_cost += gpu_cost;
@@ -689,7 +689,7 @@ public:
         command_t::create_broadcast(cmd_id, cmd->get_input(0), out);
   }
 
-  // this will generate the
+  // this will generate the commands
   void
   generate_for_node(const std::list<uint32_t> &cmd,
                     const std::vector<abstract_command_t> &commands,
@@ -701,8 +701,10 @@ public:
     // if the first command is an apply we need to create a bunch of move
     // commands for the tensor that are not present otherwise the reduce takes
     // care of that by itself
+
+    // I think stack could also use this logic to generate moves
     auto root_cmd = commands[cmd.front()];
-    if (root_cmd.type == abstract_command_type_t::APPLY) {
+    if (root_cmd.type == abstract_command_type_t::APPLY || root_cmd.type == abstract_command_type_t::STACK) {
       auto &present_tensors = tensor_locations[node];
       for (auto in : root_cmd.input_tids) {
         if (present_tensors.find(in) == present_tensors.end()) {
@@ -752,6 +754,49 @@ public:
         gen = command_t::create_apply(
             cmd_id, *is_gpu ? ud_info.gpu->impl_id : ud_info.cpu->impl_id,
             *is_gpu, params, inputs, outputs);
+      } else if (c.type == abstract_command_type_t::STACK){
+        // similar to apply
+        
+        // init the inputs
+        // init the inputs
+        std::vector<command_t::tid_node_id_t> inputs(c.input_tids.size());
+        for (int32_t idx = 0; idx < c.input_tids.size(); ++idx) {
+          inputs[idx] =
+              command_t::tid_node_id_t{.tid = c.input_tids[idx], .node = node};
+        }
+
+        // check if each tensor is not on this node
+        // if it is we need to insert at least one move so that STACK will work
+        assert(!inputs.empty());
+        // QUESTION: why does this only checks if # tensors needed to fetch is equal to the input size
+        // Shouldn't it be that if num_to_fetch != 0 ?
+        // if (num_to_fetch != 0) {
+        //   inputs.begin()->node = node;
+        //   generate_or_update_move(inputs.begin()->tid, node, tensor_locations,
+        //                           generated_cmds);
+        // }
+
+        // we need to move all input tensors to one node for the stack to happen
+
+        // init the outputs
+        // for stack, we are only creating one tensor for output 
+        command_t::tid_node_id_t output{.tid = c.output_tids[0], .node = node};
+        tensor_locations[node].insert(c.output_tids[0]);
+
+        // init the parameters
+        std::vector<command_param_t> params(c.params.size());
+        for (int32_t idx = 0; idx < c.params.size(); ++idx) {
+          params[idx] = c.params[idx];
+        }
+
+        // gives us the info abou
+        auto ud_info = cost_model->get_ud_choice(c.ud_id);
+
+        // create the stack
+        auto cmd_id = generated_cmds.size();
+        gen = command_t::create_stack(
+            cmd_id, *is_gpu ? ud_info.gpu->impl_id : ud_info.cpu->impl_id,
+            *is_gpu, params, inputs, output);
 
       } else {
 

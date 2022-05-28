@@ -12,6 +12,7 @@
 #include "../utils/terminal_color.h"
 #include "coordinator_ops.h"
 #include "node_config.h"
+#include "../../src/operations/move_op.h"
 
 using namespace std::chrono;
 
@@ -93,6 +94,10 @@ void bbts::coordinator_t::accept() {
         _load_tensor_list(ss, op._val);
         break;
       }
+      // case coordinator_op_types_t:: STACK_TENSOR : {
+      //   _stack_tensor_list(ss, op._stack_list);
+      //   break;
+      // }
       default: {
         throw std::runtime_error("This op is not supposed to be handled here.");
       }
@@ -451,6 +456,47 @@ std::tuple<bool, std::string> bbts::coordinator_t::load_tensor_list(const std::v
   return out;
 }
 
+// For now I'm trying to send all the tensors to node 0 and let node 0 do the stacking - will modify it once this works
+// std::tuple<bool, std::string> bbts::coordinator_t::stack_tensor_list(std::vector<bbts::tid_t> tensor_id_list) {
+
+//   if(!_comm->send_coord_op(coordinator_op_t{._type = coordinator_op_types_t::STACK_TENSOR, ._val = tensor_id_list.size()})) {
+//     return {false, "Failed to stack the list of tensors!\n"};
+//   }
+
+//   std::stringstream ss;
+//   auto num_nodes = _comm->get_num_nodes();
+//   auto current_node = _comm->get_rank();
+
+//   for(auto my_tensor : tensor_id_list) {
+
+//     size_t my_tensor_size;
+
+//     // if the tensor is there
+//     if (!(_storage->has_tensor(my_tensor))){
+//       return {false, "The tensor with tid " + std::to_string(my_tensor) + " is not there!\n"};
+//     }
+//     else{
+//       my_tensor_size = _storage -> get_tensor_size(my_tensor);
+//       // for every tensor in the id list, we try to send it to node 0
+//       // TODO: need to check parameters of move
+//       auto move = bbts::move_op_t(*_comm, _comm->get_rank(), my_tensor_size, my_tensor, true, *_storage, 0);
+//      move.apply();
+//     }
+//   }
+
+//   if (current_node == 0){
+//     _stack_tensor(ss, tensor_id_list);
+//   }
+
+//   // sync everything
+//   std::tuple<bool, std::string> out;
+//   out = {true, ss.str()};
+//   _collect(out);
+
+//   // return the output
+//   return out;
+// }
+
 void bbts::coordinator_t::_schedule(coordinator_op_t op, std::stringstream &ss) {
 
   // expect all the commands
@@ -604,6 +650,38 @@ void bbts::coordinator_t::_load_tensor(std::stringstream &ss, tid_t tid, tfid_t 
     _tf->deserialize_tensor(res.create.front().tensor, type, file_data);
   });
 }
+
+// void bbts::coordinator_t::_stack_tensor(std::stringstream &ss, std::vector<bbts::tid_t> tensor_id_list) {
+
+//   // get the meta so we can calculate the size
+//   tensor_meta_t meta{};
+//   // At this point we should be at node 0, and we should have all the tensors and just need to output a big tensor
+//   // TODO: Here we need to collect meta information from all tensors with tid in the list 
+//   std::vector<tensor_meta_t> meta_list_to_stack;
+//   std::vector<std::tuple<bbts::tid_t, bbts::tensor_meta_t>> all_meta = _storage-> extract_meta();
+//   for (bbts::tid_t single_tensor: tensor_id_list){
+//     for (std::tuple<bbts::tid_t, bbts::tensor_meta_t> single_meta: all_meta){
+//       bbts::tid_t my_current_tid = std::get<0>(single_meta);
+//       if (single_tensor == my_current_tid){
+//         meta_list_to_stack.push_back(std::get<1>(single_meta)); 
+//         break;
+//       }
+//     }
+//   }
+//   // now we have a list of tensor metas and we need to create a meta with num_row = sum(row of a single tensor); num_col = num_col of a single tensor (error check this)
+//   _tf->create_stack_meta(meta, meta_list_to_stack);
+
+//   // calculate the size and allocate the memory for out deserialized tensor
+//   auto num_bytes = _tf->get_tensor_size(meta);
+
+//     // TODO: Load the tensor data
+//     // Now come to the real question: how should we get to tensors; can't find it in memory storage
+//   // _storage->local_transaction({}, {{tid, num_bytes}}, [&](const storage_t::reservation_result_t &res) {
+
+//   //   // we deserialize the tensor here
+//   //   _tf->create_stack_tensor(res.create.front().tensor, meta_list_to_stack);
+//   // });
+// }
 
 bool bbts::coordinator_t::_register_from_bytes(char* file_bytes, size_t file_size, std::stringstream &ss) {
 

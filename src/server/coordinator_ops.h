@@ -1,6 +1,9 @@
 #pragma once
 
 #include <cstdint>
+#include <vector>
+#include "../tensor/tensor.h"
+
 
 namespace bbts {
 
@@ -19,6 +22,7 @@ enum class coordinator_op_types_t : int32_t {
   FETCH_META, // fetches meta data from each node
   LOAD_TENSOR_LIST, // loads a list of tensors
   LOAD_TENSOR // loads a tensor
+  // STACK_TENSOR // stacks a bunch of tensors
 };
 
 struct coordinator_op_t {
@@ -34,6 +38,8 @@ struct coordinator_op_t {
 
   // used for 32 bit values like tids etc...
   std::int32_t _small_val_2;
+
+  std::vector<bbts::tid_t> _stack_list;
 };
 
 
