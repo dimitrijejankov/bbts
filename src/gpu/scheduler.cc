@@ -100,18 +100,54 @@ void multi_gpu_scheduler_t::gpu_to_gpu_thread(int32_t dst_dev) {
   cudaStreamCreate(&cpy_stream);
 
   // kick off the copy process
+  std::list<kernel_prep_ptr_t> priority_kernels;
   while (true) {
 
-    // get a kernel run
-    kernel_prep_ptr_t prep{};
-    gpu2gpu_queue[dst_dev].wait_dequeue(prep);
+    kernel_prep_ptr_t prep = nullptr;
+    for(auto it = priority_kernels.begin(); it != priority_kernels.end(); ++it) {
 
-    // check if we are done
-    if (prep == nullptr) {
-      break;
+      // make sure all the dependencies are resolved
+      bool has_dependencies = false;
+      for(auto ct : (*it)->gpu_transfers) {
+
+        // check if this transfer has a dependency
+        if(ct->depends == nullptr) { continue; }
+
+        // try to lock access to the and check if finished
+        std::unique_lock<std::mutex> lck(ct->depends->m, std::defer_lock);
+        if(!lck.try_lock() || !ct->depends->is_finished) {
+          has_dependencies = true;
+          break;
+        } 
+      }
+
+      // did we find one if we did set it are remove it from the priority kernels
+      if(!has_dependencies) {
+        prep = (*it);
+        priority_kernels.erase(it);
+        break;
+      }
     }
 
-    // log that we are doing the GPU2GPU copy
+    // do we have a priority kernel we want to run? if not we need to inspect the queue
+    int32_t res;
+    if(prep == nullptr) {
+
+      // we don't can we fetch one from the try queue
+      res = gpu2gpu_queue[dst_dev].try_dequeue(prep);
+      
+      // shutdown if we have nothing left to do
+      if(res == CONCURENT_QUEUE_SHUTDOWN && priority_kernels.empty()) { break; }
+
+      // if the queue has no kernels spin
+      else if (res == CONCURENT_QUEUE_NO) { continue; }
+    }
+
+    // make sure we have a kernel prep at this point it time
+    assert(prep != nullptr);
+
+    // log that we are doing the GPU2GPU copy 
+    // since at this point we have a valid kernel
     profiler.log_gpu_copy_begin(dst_dev);
 
     // we keep all the finished transfers here
@@ -187,7 +223,7 @@ void multi_gpu_scheduler_t::gpu_to_gpu_thread(int32_t dst_dev) {
     if(!prep->gpu_transfers.empty()) {
 
       // if we did not manage to process all copy requests reschedule it
-      gpu2gpu_queue[dst_dev].enqueue_copy(prep);
+      priority_kernels.push_back(prep);
       continue;
     }
 
@@ -205,17 +241,52 @@ void multi_gpu_scheduler_t::cpu_to_gpu_thread(int32_t numa_node) {
   cudaStream_t cpy_stream;
   cudaStreamCreate(&cpy_stream);
 
+  std::list<kernel_prep_ptr_t> priority_kernels;
   std::vector<cpu_to_gpu_transfer_ptr_t> done_transfers;
   while (true) {
 
-    // get a kernel run
-    kernel_prep_ptr_t prep{};
-    cpu2gpu_queue[numa_node].wait_dequeue(prep);
+    kernel_prep_ptr_t prep = nullptr;
+    for(auto it = priority_kernels.begin(); it != priority_kernels.end(); ++it) {
 
-    // check if we are done
-    if (prep == nullptr) {
-      break;
+      // make sure all the dependencies are resolved
+      bool has_dependencies = false;
+      for(auto ct : (*it)->cpu_transfers) {
+
+        // check if this transfer has a dependency
+        if(ct->depends == nullptr) { continue; }
+
+        // try to lock access to the 
+        std::unique_lock<std::mutex> lck(ct->depends->m, std::defer_lock);
+
+        // check if 
+        if(!lck.try_lock() || !ct->depends->evicted) {
+          has_dependencies = true;
+          break;
+        } 
+      }
+
+      if(!has_dependencies) {
+        prep = (*it);
+        priority_kernels.erase(it);
+        break;
+      }
     }
+
+    // do we have a priority kernel we want to run?
+    if(prep == nullptr) {
+
+      // we don't can we fetch one from the try queue
+      auto res = cpu2gpu_queue[numa_node].try_dequeue(prep);
+      
+      // shutdown if we have nothing left to do
+      if(res == CONCURENT_QUEUE_SHUTDOWN && priority_kernels.empty()) { break; }
+
+      // if the queue has no kernels spin
+      else if (res == CONCURENT_QUEUE_NO) { continue; }
+    }
+
+    // make sure we have a kernel prep at this point it time
+    assert(prep != nullptr);
 
     // schedule all the copies
     done_transfers.clear();
@@ -236,7 +307,7 @@ void multi_gpu_scheduler_t::cpu_to_gpu_thread(int32_t numa_node) {
       // lock so that we can perform the copy
       std::unique_lock<std::mutex> lck(t->m);
 
-      // check if there is 
+      // check if there is an eviction request we need to wait on first 
       if(t->depends != nullptr) {
 
         // try to lock access to the 
@@ -296,7 +367,7 @@ void multi_gpu_scheduler_t::cpu_to_gpu_thread(int32_t numa_node) {
     if(!prep->cpu_transfers.empty()) {
 
       // if we did not manage to process all copy requests reschedule it
-      cpu2gpu_queue[numa_node].enqueue_copy(prep);
+      priority_kernels.push_back(prep);
       continue;
     }
 
@@ -815,13 +886,13 @@ void multi_gpu_scheduler_t::_perform_shutdown() {
   auto kp_done = kernel_prep_ptr_t(nullptr);
   auto gc_done = gc_request_ptr_t(nullptr);
   for(auto dev = 0; dev < _num_gpus; ++dev) {
-    gpu2gpu_queue[dev].enqueue_copy(kp_done);
+    gpu2gpu_queue[dev].shutdown();
     run_queue[dev].enqueue_copy(kp_done);
     gc_queue[dev].enqueue_copy(gc_done);
   }
   
   for(auto numa = 0; numa < get_num_numa(); numa++) {
-    cpu2gpu_queue[numa].enqueue_copy(kp_done);
+    cpu2gpu_queue[numa].shutdown();
   }
 
   _deleted_tensors.shutdown();

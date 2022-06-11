@@ -11,6 +11,10 @@
 
 namespace bbts {
 
+#define CONCURENT_QUEUE_YES 1
+#define CONCURENT_QUEUE_NO 0
+#define CONCURENT_QUEUE_SHUTDOWN -1
+
 template <typename T>
 class concurent_queue {
 
@@ -52,6 +56,22 @@ class concurent_queue {
     _internal_queue.pop();
     return true;
   };
+
+  inline int try_dequeue(T &item) {
+
+    std::unique_lock<std::mutex> lk(_m);
+
+    // if we have shutdown now finish
+    if(_shutdown && _internal_queue.empty()) { return CONCURENT_QUEUE_SHUTDOWN; }
+
+    // we have nothing go wait a bit
+    if(_internal_queue.empty()) { return CONCURENT_QUEUE_NO; }
+
+    // grab the element and pop the queue
+    item = std::move(_internal_queue.front());
+    _internal_queue.pop();
+    return CONCURENT_QUEUE_YES;
+  }
 
   inline bool wait_dequeue_all(std::vector<T> &container) {
 
@@ -96,7 +116,6 @@ class concurent_queue {
     // notify all the threads that are waiting
     _cv.notify_all();
   }
-
 };
 
 }
