@@ -135,7 +135,7 @@ $.getJSON("api/logs/" + param, function (profiling_data) {
             else if (segment.label === kernels_run) {
                 device_idx = segment.group.split(" ")[1];
                 t = profiling_data.device_logs[device_idx].kernels_stats[segment.val];
-                t = profiling_data.device_logs[device_idx].kernels_scheduled[t.kernel_run_idx];
+                //t = profiling_data.device_logs[device_idx].kernels_scheduled[t.kernel_run_idx];
                 json_to_table(t);
             }
             else if (segment.label === evictions) {

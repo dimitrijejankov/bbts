@@ -357,10 +357,12 @@ void multi_gpu_scheduler_t::command_prep_thread() {
     // 3. check for finished transfers
     for(auto &gpu_transfer : req->gpu_transfers) {
       mem.mark_transfer_done(gpu_transfer);
+      heuristic.tensor_loaded(gpu_transfer->tid, gpu_transfer->dst_dev);
     }
 
     for(auto &cpu_transfer : req->cpu_transfers) {
       mem.mark_transfer_done(cpu_transfer);
+      heuristic.tensor_loaded(cpu_transfer->tid, cpu_transfer->dst_dev);
     }
 
     // 2. check for finished kernels

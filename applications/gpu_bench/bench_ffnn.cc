@@ -21,15 +21,14 @@ int32_t batch_block = 1000;
 int32_t num_features = 32000;
 int32_t features_block = 4000;
 
-int32_t embedding_size = 2000;
-int32_t embedding_block = 2000;
+int32_t embedding_size = 8000;
+int32_t embedding_block = 4000;
 
 int32_t num_labels = 16000;
 int32_t labels_block = 4000;
 
 
-
-int32_t num_gpus = 2;
+int32_t num_gpus = 4;
 
 bbts::command_id_t cmd_id = 0;
 bbts::tid_t currentTID = 0;
@@ -451,7 +450,7 @@ int main() {
 
   // make the scheduler
   auto scheduler = std::make_shared<bbts::multi_gpu_scheduler_t>(
-      num_gpus, 14lu * 1024lu * 1024lu * 1024lu, 2, storage, udf_manager, factory);
+      num_gpus, 14lu * 1024lu * 1024lu * 1024lu, 1, storage, udf_manager, factory);
 
   // run all the scheduler threads
   auto scheduler_threads = run_threads(scheduler, storage);
