@@ -235,14 +235,7 @@ void bbts::gpu_profiler_t::log_gc_scheduled(const gc_request_ptr_t &gc_req) {
   auto ks = dl.add_gc_scheduled();
   
   ks->set_dev(gc_req->dev);
-  ks->set_free_memory_used(gc_req->free_memory_used);
   ks->set_kernel_run_id(gc_req->to_run->kernel_prep_id);
-
-  for(auto free_me : gc_req->to_free) {
-    auto free = ks->add_to_free();
-    free->set_num_bytes(free_me->num_bytes);
-    free->set_tid(free_me->tid);
-  }
 
   for(auto evict_me : gc_req->to_evict) {
     auto evict = ks->add_to_evict();

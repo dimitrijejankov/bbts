@@ -62,6 +62,11 @@ public:
 
 private: 
 
+  // do we allow offloading to RAM
+  bool gc_allowed = false;
+
+  // tells us if the last time the scheduler failed to allocate or not
+  bool falied_to_allocate = false;
 
   // how many GPUs are connected per numa node
   size_t gpus_per_num_node;

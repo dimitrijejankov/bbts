@@ -13,10 +13,12 @@
 
 float learning_rate = 1.0f;
 
-size_t num_iter = 10;
+size_t num_iter = 20;
 
-int32_t num_batch = 1000;
-int32_t batch_block = 1000;
+// 4000/4000	32000/4000	8000/4000	16000/4000
+
+int32_t num_batch = 4000;
+int32_t batch_block = 4000;
 
 int32_t num_features = 32000;
 int32_t features_block = 4000;
@@ -28,7 +30,7 @@ int32_t num_labels = 16000;
 int32_t labels_block = 4000;
 
 
-int32_t num_gpus = 4;
+int32_t num_gpus = 1;
 
 bbts::command_id_t cmd_id = 0;
 bbts::tid_t currentTID = 0;

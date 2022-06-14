@@ -202,13 +202,8 @@ using gc_request_free_ptr_t = std::shared_ptr<gc_request_free_t>;
 
 struct gc_request_evict_t {
 
-  gc_request_evict_t(bool evicted, 
-                     const std::shared_ptr<tensor_t> &tensor, 
-                     tid_t tid, 
-                     size_t num_bytes) : evicted(evicted), 
-                                         tensor(tensor), 
-                                         tid(tid), 
-                                         num_bytes(num_bytes) {}
+  gc_request_evict_t() = default;
+
 
   std::mutex m;
 
@@ -226,9 +221,6 @@ struct gc_request_t {
   // the device for which the request is for
   int32_t dev;
 
-  // list of tensors we are supposed to free
-  std::vector<gc_request_free_ptr_t> to_free;
-
   // list of tensors we are supposed to evict
   std::vector<gc_request_evict_ptr_t> to_evict;
 
@@ -238,9 +230,6 @@ struct gc_request_t {
 
   // the kernel prep to run once the request is finished
   kernel_prep_ptr_t to_run;
-
-  // total memory free
-  size_t free_memory_used;
 };
 using gc_request_ptr_t = std::shared_ptr<gc_request_t>;
 

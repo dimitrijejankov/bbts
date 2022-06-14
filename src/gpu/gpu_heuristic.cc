@@ -36,19 +36,19 @@ void gpu_heuristic_t::tensor_loaded(tid_t id, int dev) {
     if (command_type == command_t::APPLY) {
 
       // update the counts
-      apply_cmds[command_id].inputs_available += just_created;
-      apply_cmds[command_id].inputs_on_devices[dev]++;
-      apply_cmds[command_id].loaded_inputs += t.gpu_copies == 1;
+      auto &apply = apply_cmds[command_id];
+      apply.inputs_available += just_created;
+      apply.inputs_on_devices[dev]++;
+      apply.loaded_inputs += t.gpu_copies == 1;
 
       // can we schedule it
-      if (apply_cmds[command_id].loaded_inputs ==
-          apply_cmds[command_id].num_inputs) {
+      if (apply.loaded_inputs == apply.num_inputs) {
         apply_in_gpu_memory.insert(command_id);
       }
 
       // can we schedule it on a single device
-      if (apply_cmds[command_id].inputs_on_devices[dev] ==
-          apply_cmds[command_id].num_inputs) {
+      if (apply.inputs_on_devices[dev] ==
+          apply.num_inputs) {
         on_apply_single_gpu[dev].insert(command_id);
       }
 
@@ -108,18 +108,22 @@ void gpu_heuristic_t::tensor_unloaded(tid_t id, int dev) {
            command_type == command_t::REDUCE);
 
     if (command_type == command_t::APPLY) {
-      apply_cmds[command_id].inputs_on_devices[dev]--;
-      apply_cmds[command_id].loaded_inputs -= t.gpu_copies == 0;
+
+      auto &apply = apply_cmds[command_id];
+
+      apply.inputs_on_devices[dev]--;
+      apply.loaded_inputs -= t.gpu_copies == 0;
+      apply.inputs_available -= (t.gpu_copies == 0 && !t.on_cpu); 
 
       // should we unschedule it
-      if (apply_cmds[command_id].loaded_inputs !=
-          apply_cmds[command_id].num_inputs) {
+      if (apply.loaded_inputs !=
+          apply.num_inputs) {
         apply_in_gpu_memory.erase(command_id);
       }
 
       // should we unschedule it from a particular device
-      if (apply_cmds[command_id].inputs_on_devices[dev] !=
-          apply_cmds[command_id].num_inputs) {
+      if (apply.inputs_on_devices[dev] !=
+          apply.num_inputs) {
         on_apply_single_gpu[dev].erase(command_id);
       }
     } else if (command_type == command_t::REDUCE) {
@@ -777,6 +781,7 @@ void gpu_heuristic_t::tensor_on_cpu(tid_t id) {
   bool is_new = !(t.on_cpu || t.gpu_copies > 0);
 
   // mark that is available
+  assert(!t.on_cpu);
   t.on_cpu = true;
 
   // go and update the heuristic

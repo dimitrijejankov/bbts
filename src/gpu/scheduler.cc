@@ -509,6 +509,9 @@ void multi_gpu_scheduler_t::command_prep_thread() {
     // 5. check for resource freed
     for (auto &gc_req : req->finished_gc) {
 
+      // update the heuristic since now these tensors are on CPU
+      for(auto e : gc_req->to_evict) { heuristic.tensor_on_cpu(e->tid); }
+
       // schedule them for execution (finish reaper_request and add to execution queue)
       mem.finish_gc_request(gc_req);
       mem.preallocate(gc_req->to_run, gc_req->dev);
@@ -967,20 +970,39 @@ bool multi_gpu_scheduler_t::_schedule_for_execution(kernel_prep_ptr_t kernel_pre
     
     // go to the next device
     preffered_dev = (preffered_dev + 1) % _num_gpus;
+    
+    // we just allocated set the flag
+    falied_to_allocate = false;
 
     return true;
   }
+
+  // if we have no kernels scheduled and last time we failed to allocate - time to pull out the big guns...
+  falied_to_allocate = true;
+  gc_allowed = gc_allowed || (num_unfinished_kernels == 0 && falied_to_allocate);
+
+  // we are done here if gc is not allowed
+  if(!gc_allowed) {
+    return false;
+  }
+
   // check if we can run garbage collection and then run the kernel
-  else if ((dev = mem.can_gc(kernel_prep, target_dev)) != -1) {
+  auto gc_approval = mem.can_gc(kernel_prep, target_dev);
+  if (gc_allowed && gc_approval.dev != -1) {
 
     // make a garbage collection request
-    gc_request_ptr_t gc_request = mem.get_gc_request(kernel_prep, dev);
+    gc_request_ptr_t gc_request = mem.get_gc_request(kernel_prep, gc_approval);
     
     // log that the garbage collection is scheduled
     profiler.log_gc_scheduled(gc_request);
 
+    // mark all the evicted tensors as unloaded
+    for(auto &e : gc_approval.plan_to_gc) {
+      heuristic.tensor_unloaded(std::get<2>(e), gc_request->dev); 
+    }
+
     // schedule the request
-    gc_queue[dev].enqueue_copy(gc_request);
+    gc_queue[gc_approval.dev].enqueue_copy(gc_request);
 
     // we jusst schduled a kernel
     num_unfinished_kernels++;
@@ -990,7 +1012,6 @@ bool multi_gpu_scheduler_t::_schedule_for_execution(kernel_prep_ptr_t kernel_pre
 
     return true;
   }
-  
   return false;
 }
 

@@ -22,6 +22,22 @@ public:
 
   ~gpu_memory_t();
 
+  struct gc_approval_t {
+    
+    // tensors that are to be unpinned once the request is finished
+    // this is unpinned by the GPU memory
+    std::vector<std::tuple<tid_t, size_t>> to_unpin;
+
+    // we keep here a list of tensors we want to free if we fail to GC
+    std::vector<std::tuple<std::shared_ptr<tensor_t>, size_t>> free_if_fail;  
+
+    // all the tensors we pan to GC
+    std::vector<std::tuple<uint32_t, uint32_t, tid_t, bool>> plan_to_gc; 
+
+    // if this is -1 the GC request was not approved..
+    int32_t dev;
+  };
+
   // mark that a tensor has already been used, returns tro if it should be removed 
   [[nodiscard]] bool mark_as_used(tid_t id);
 
@@ -70,10 +86,11 @@ public:
 
   // can an we run garbage collection
   // if we can it returns the device othewise it returns -1
-  int can_gc(kernel_prep_ptr_t kp, int32_t target_dev);
+  gc_approval_t can_gc(kernel_prep_ptr_t kp, int32_t target_dev);
 
   // get the garbage collection request
-  gc_request_ptr_t get_gc_request(kernel_prep_ptr_t kp, int dev);
+  gc_request_ptr_t get_gc_request(kernel_prep_ptr_t kp, 
+                                  gpu_memory_t::gc_approval_t &approval);
 
   // finish the garbage collection request
   void finish_gc_request(const gc_request_ptr_t &req);
@@ -89,6 +106,13 @@ public:
 
 private:
 
+  // sorted by num_copies (first), num_uses (second)
+  using unpinned_t = std::multimap<std::tuple<uint32_t, uint32_t>, tid_t>;
+
+  // num_copies (first), num_uses (second), tid
+  std::tuple<uint32_t, uint32_t, tid_t, std::shared_ptr<tensor_t>, bool>
+  _try_to_find_gc(const kernel_prep_ptr_t &kp, size_t num_bytes, int32_t dev);
+
   // mark that we are going to use all the inputs from the apply
   void _mark_apply_for_use(const gpu_command_schedule_ptr_t &apply);
 
@@ -97,9 +121,9 @@ private:
 
   // performs the actual remove
   void _remove(tid_t id, size_t num_bytes);
-  
-  // sorted by num_copies (first), num_uses (second)
-  using unpinned_t = std::multimap<std::tuple<uint32_t, uint32_t>, tid_t>;
+
+  // free all tensors
+  void _free_all(int32_t dev);
 
   struct gpu_mem_tensor_t {
 

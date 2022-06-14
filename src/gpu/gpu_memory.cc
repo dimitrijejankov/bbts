@@ -4,6 +4,7 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <unordered_set>
 
 #ifdef ENABLE_GPU
 #include <cuda.h>
@@ -37,6 +38,41 @@ gpu_memory_t::gpu_memory_t(size_t num_devices, size_t mem_per_gpu)
 };
 
 gpu_memory_t::~gpu_memory_t() {}
+
+std::tuple<uint32_t, uint32_t, tid_t, std::shared_ptr<tensor_t>, bool>
+gpu_memory_t::_try_to_find_gc(const kernel_prep_ptr_t &kp, 
+                              size_t num_bytes,
+                              int32_t dev) {  
+
+  for (auto it = _unpinned_tensors[dev].begin(); it != _unpinned_tensors[dev].end(); ++it) {
+
+    // if this is one of the input tensors skip
+    if (std::find(kp->input.begin(), kp->input.end(), it->second) != kp->input.end()) {
+      continue;
+    }
+
+    // did we find one
+    auto &t = _tensors[it->second];
+    if (t.num_bytes == num_bytes) {
+
+      // of we found it erase it and return it
+      std::tuple<uint32_t, uint32_t, tid_t, std::shared_ptr<tensor_t>, bool> out =
+      {
+        std::get<0>(it->first), 
+        std::get<1>(it->first), 
+        it->second,
+        t.data[dev],
+        t.num_copies <= 1 && !t.is_on_cpu
+      };
+
+      _unpinned_tensors[dev].erase(it);
+      return out;
+    }
+  }
+
+  // we did not find anything return
+  return {0, 0, -1, nullptr, false};
+}
 
 void gpu_memory_t::_mark_apply_for_use(const gpu_command_schedule_ptr_t &apply) {
 
@@ -347,6 +383,7 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
         assert(t.cpu_transfer->dst != nullptr);
 
         // set the transfer to the kernel prep
+        assert(t.is_on_cpu);
         kp->cpu_transfers.push_back(t.cpu_transfer);
       }
       // next check if the tensor is on any GPU? so that we can fetch it from there
@@ -451,6 +488,7 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
         // store the transfer
         _cpu_to_gpu_transfer[transfer->id] = transfer;
         t.cpu_transfer = transfer;
+        assert(t.is_on_cpu && transfer->depends == nullptr);
         kp->cpu_transfers.push_back(t.cpu_transfer);
       }
     }
@@ -528,163 +566,193 @@ void gpu_memory_t::mark_transfer_done(gpu_to_gpu_transfer_ptr_t kp) {
   _gpu_to_gpu_transfer.erase(kp->id);
 }
 
-int gpu_memory_t::can_gc(kernel_prep_ptr_t kp, int32_t target_dev) { 
-  // return _fits_memory(kp, target_dev, [&](int32_t dev) {
+gpu_memory_t::gc_approval_t gpu_memory_t::can_gc(kernel_prep_ptr_t kp, int32_t target_dev) { 
 
-  //   return _total_unpinned[dev] + 
-  //          _total_free[dev] + 
-  //          _total_to_free[dev];
-  // }, [&](tid_t tid, int32_t cur_dev) {
-  //   return !_is_pinned(tid, cur_dev);
-  // });
-  return -1;
+  std::shared_ptr<tensor_t> tmp;
+
+  // we keep here a list of tensors we want to free if we fail to GC
+  std::vector<std::tuple<std::shared_ptr<tensor_t>, size_t>> free_if_fail;  
+
+  // all the tensors we pan to GC
+  std::vector<std::tuple<uint32_t, uint32_t, tid_t, bool>> plan_to_gc;  
+
+  // to unpin later
+  std::vector<std::tuple<tid_t, size_t>> to_unpin;
+  
+  for(auto dev = 0; dev < _num_devices; ++dev) {
+
+    // figure out the current device
+    int32_t cur_dev = (dev + target_dev) % _num_devices;
+    
+    // free all tensors
+    _free_all(cur_dev);
+
+    // 1. allocate all the output tensors we can and if we can not try to find some to flush...
+    kp->output_tensor_ptrs.clear();
+    kp->output_tensor_ptrs.resize(kp->output.size());
+
+    bool success = true;
+    for(auto out_idx = 0; out_idx < kp->output.size(); out_idx++) {
+
+      // try to allocate the tensor
+      auto out_size = kp->output_sizes[out_idx];
+      tmp = _allocate_tensor(out_size, cur_dev);
+
+      // well we could not allocate try to find an unpinned tensor with the right size
+      if(tmp == nullptr) {
+
+        // try to GC this
+        auto to_gc = _try_to_find_gc(kp, out_size, cur_dev);
+        
+        // if we failed we go and free all
+        if(std::get<2>(to_gc) == -1) {
+          goto free_all;
+        }
+
+        // try to GC this one
+        tmp = std::get<3>(to_gc);
+        plan_to_gc.push_back({std::get<0>(to_gc), 
+                              std::get<1>(to_gc), 
+                              std::get<2>(to_gc),
+                              std::get<4>(to_gc)});
+      }
+
+      // set it
+      kp->output_tensor_ptrs[out_idx] = tmp;
+      free_if_fail.push_back({std::move(tmp), out_size});
+    }
+
+    // 2. allocate all the input tensors we can
+    kp->input_tensor_ptrs.clear();
+    kp->input_tensor_ptrs.resize(kp->input.size());
+    for(auto in_idx = 0; in_idx < kp->input.size(); ++in_idx) {
+
+      auto in = kp->input[in_idx];
+      auto in_size = kp->input_sizes[in_idx];
+
+      if(!_is_on_device(in, cur_dev) && !_is_transfered_to_device(in, cur_dev)) {
+
+        tmp = _allocate_tensor(in_size, cur_dev);
+        if(tmp == nullptr) {
+
+          // try to GC this
+          auto to_gc = _try_to_find_gc(kp, in_size, cur_dev);
+          
+          // if we failed we go and free all
+          if(std::get<2>(to_gc) == -1) {
+            goto free_all;
+          }
+
+          // try to GC this one
+          tmp = std::get<3>(to_gc);
+          plan_to_gc.push_back({std::get<0>(to_gc), 
+                                std::get<1>(to_gc), 
+                                std::get<2>(to_gc),
+                                std::get<4>(to_gc)});
+        }
+
+        kp->input_tensor_ptrs[in_idx] = tmp;
+        free_if_fail.push_back({std::move(tmp), in_size});
+      }
+      else {
+
+        // we are going to later set this in prealloc
+        kp->input_tensor_ptrs[in_idx] = nullptr;
+
+        // pin the tensor and mark it later to unpin
+        _pin_tensor(kp->input[in_idx], dev, kp->input_sizes[in_idx]);
+        to_unpin.push_back({kp->input[in_idx], kp->input_sizes[in_idx]});
+      }
+    }
+
+  // we are good just return it
+  return {.to_unpin = to_unpin,
+          .free_if_fail = free_if_fail,
+          .plan_to_gc = plan_to_gc, 
+          .dev = cur_dev};
+
+free_all:
+
+    // unpin all the tensors that we pinned....
+    for(auto u : to_unpin) {
+      auto [tid, num_bytes] = u;
+      _unpin_tensor(tid, cur_dev, num_bytes);
+    }
+
+    // return all the unpinned tensors
+    for(auto &gc : plan_to_gc) {
+      _tensors[std::get<2>(gc)].unpinned_its[cur_dev] =
+          _unpinned_tensors[cur_dev].insert(
+              {{std::get<0>(gc), std::get<1>(gc)}, std::get<2>(gc)});
+    }
+
+    // 3. if not free all the tensors and go to the next one
+    for(auto &tmp : free_if_fail) {
+      auto &[t, num_bytes] = tmp;
+      _mem_pools[cur_dev]->free(t->get_data_ptr<void*>(), num_bytes);
+    }
+    free_if_fail.clear();
+  }
+
+  return {.free_if_fail = {}, .plan_to_gc = {}, .dev = -1};
 };
 
-gc_request_ptr_t gpu_memory_t::get_gc_request(kernel_prep_ptr_t kp, int dev) {
+gc_request_ptr_t gpu_memory_t::get_gc_request(kernel_prep_ptr_t kp, 
+                                              gpu_memory_t::gc_approval_t &approval) {
 
-  // sum all the output bytes
+  // make the request and set the device
   gc_request_ptr_t request = std::make_shared<gc_request_t>();
-  size_t output_bytes_required = 0;
-  for(auto out_size : kp->output_sizes) {
-    output_bytes_required += out_size;
-  }
-
-  // go through each device and check if we can put it there
-  int64_t required = output_bytes_required; 
-  for(auto in_idx = 0; in_idx < kp->input.size(); ++in_idx) {
-    if(!_is_on_device(kp->input[in_idx], dev) &&
-       !_is_transfered_to_device(kp->input[in_idx], dev)) {
-      required += kp->input_sizes[in_idx];
-    }
-    else {
-      _pin_tensor(kp->input[in_idx], dev, kp->input_sizes[in_idx]);
-      request->to_unpin.push_back({kp->input[in_idx], kp->input_sizes[in_idx]});
-    }
-  }
-
-  // make sure we actually have space
-  assert((_total_unpinned[dev] + _total_free[dev] + _total_to_free[dev]) >= required);
-
-  // how much do we need to free
-  int64_t need_to_free = _total_free[dev] > required ? 0  : required - _total_free[dev];
-  int64_t free_mem_used = _total_free[dev] > required ? required : _total_free[dev];
-  _total_free[dev] -= free_mem_used;
-  request->free_memory_used = free_mem_used;
-
-  // go through all the tensors we need to free
-  for(int64_t idx = _to_free_tensors[dev].size() - 1; idx >= 0; --idx) {
-    
-    // are we done?
-    if(need_to_free <= 0) {
-      break;
-    }
-
-    // we are freeing this one
-    auto &free_me = _to_free_tensors[dev][idx]; 
-    
-    // decrement the memory
-    auto it = _tensors.find(free_me);
-    auto &t = it->second;
-    need_to_free -= t.num_bytes;
-
-    // claim this memory
-    _total_to_free[dev] -= t.num_bytes;
-
-    auto gc_req_free = std::make_shared<gc_request_free_t>(t.data[dev], free_me, t.num_bytes);
-    request->to_free.emplace_back(gc_req_free);
-      
-    assert(t.data[dev] != nullptr);
-    t.data[dev] = nullptr;
-
-    // remove it from the free cache
-    assert(t.free_its[dev] != _free_cache[dev].end());
-    _free_cache[dev].erase(t.free_its[dev]);
-
-    // we are killing a copy of this
-    if(--t.num_left_to_remove == 0) {
-      _tensors.erase(it);
-    }
-
-    // remove the last one
-    _to_free_tensors[dev].pop_back();
-  }
-
-  // go through all the tensors we need to evict
-  while (true) {
-
-    // are we done?
-    if(need_to_free <= 0) {
-      break;
-    }
-    
-    // this is never supposed to happen because we called @see can_gc.
-    assert(!_unpinned_tensors[dev].empty());
-
-    // decrement the required memory
-    auto evict = _unpinned_tensors[dev].begin();
-    auto &t = _tensors[evict->second];
-    need_to_free -= t.num_bytes;
-
-    // do we have to evict it or can we kill it
-    if(!t.is_on_cpu && t.num_copies == 1) {
-      assert(t.data[dev].get()->get_data_ptr<void>() != nullptr);
-
-      // make the eviction requests
-      auto gc_req_evict = std::make_shared<gc_request_evict_t>(false, t.data[dev], 
-                                                               evict->second, t.num_bytes);
-      t.eviction_request = gc_req_evict;
-      request->to_evict.emplace_back(gc_req_evict);
-    }
-    else {
-      auto gc_req_free = std::make_shared<gc_request_free_t>(t.data[dev], evict->second, t.num_bytes);
-      request->to_free.emplace_back(gc_req_free);
-    }
-
-    // claim this memory
-    _total_unpinned[dev] -= t.num_bytes;
-    assert(t.data[dev] != nullptr);
-    t.data[dev] = nullptr;
-
-    // we just killed a copy
-    t.num_copies--;
-    t.is_loaded_on_gpu[dev] = false;
-
-    // remove it from the unpinned list
-    assert(t.unpinned_its[dev] == evict);
-    _unpinned_tensors[dev].erase(t.unpinned_its[dev]);
-    t.unpinned_its[dev] = _unpinned_tensors[dev].end();
-  }
-
-  // the kernel to run
+  request->dev = approval.dev;
   request->to_run = kp;
-  request->dev = dev;
+  request->to_unpin = std::move(approval.to_unpin);
+
+  // setup all the tensors we want to evict
+  for(auto to_evict : approval.plan_to_gc) {
+    
+    // ge the tensor
+    auto tid = std::get<2>(to_evict);
+    auto need_evict = std::get<3>(to_evict);
+    auto &t = _tensors[tid];
+
+    // setup the request
+    if(need_evict) {
+
+      // create an eviction request
+      request->to_evict.push_back(std::make_shared<gc_request_evict_t>());
+      request->to_evict.back()->evicted = false;
+      request->to_evict.back()->num_bytes = t.num_bytes;
+      request->to_evict.back()->tensor = t.data[kp->dev];
+      request->to_evict.back()->tid = tid;
+      t.eviction_request = request->to_evict.back();
+    }
+
+    // remove the tensor we just evicted and set the eviction request
+    t.data[kp->dev] = nullptr;
+    t.num_copies -= 1;
+    t.is_loaded_on_gpu[kp->dev] = false;
+    t.unpinned_its[kp->dev] = _unpinned_tensors[kp->dev].end();
+
+    // we used the unpinned memory
+    _total_unpinned[kp->dev] -= t.num_bytes;
+  }
 
   // make sure it is 
-  assert(need_to_free <= 0);
   return std::move(request);
 };
 
 void gpu_memory_t::finish_gc_request(const gc_request_ptr_t &req) {
 
-  // increase the free memeory for each tensor we have freed
-  for(auto r : req->to_free) {
-    _total_free[req->dev] += r->num_bytes;
-    _mem_pools[req->dev]->free(r->tensor->get_data_ptr<void>(), r->num_bytes);
+  // null out the eviction requests
+  for(auto to_evict : req->to_evict) {
+    _tensors[to_evict->tid].is_on_cpu = true;
+    _tensors[to_evict->tid].eviction_request = nullptr;
   }
 
-  // increase the free memory for each tensor we have evicted
-  for(auto &r : req->to_evict) {
-    _total_free[req->dev] += r->num_bytes;
-    _mem_pools[req->dev]->free(r->tensor->get_data_ptr<void>(), r->num_bytes);
-  }
-
-  // unpin all the tensors
+  // unpin all the tensors that we pinned....
   for(auto u : req->to_unpin) {
     auto [tid, num_bytes] = u;
     _unpin_tensor(tid, req->dev, num_bytes);
   }
-
-  _total_free[req->dev] += req->free_memory_used;
 }
 
 bool gpu_memory_t::get_tensors_to_flush(std::vector<std::tuple<tensor_t*, tid_t, size_t>> &to_flush) {
@@ -751,6 +819,43 @@ void gpu_memory_t::_remove(tid_t id, size_t num_bytes) {
     // make sure it is not pinned anywhere
     assert(_pinned_tensors[dev].find(id) == _pinned_tensors[dev].end()); 
   }
+}
+
+void gpu_memory_t::_free_all(int32_t dev) {
+
+  // free all the tensors we can free
+  for (auto it = _free_cache[dev].begin(); it != _free_cache[dev].end(); ++it) {
+
+    // we got a chuck from the free cache we should be able to use it...
+    auto t = _tensors.find(it->second);
+
+    // claim this memory
+    _total_to_free[dev] -= t->second.num_bytes;
+    _total_free[dev] += t->second.num_bytes;
+
+    // null the data just in case
+    assert(t->second.data[dev] != nullptr);
+    auto kmp = t->second.data[dev]->get_data_ptr<void*>();
+    t->second.data[dev] = nullptr;
+
+    // we are killing a copy of this
+    if(--t->second.num_left_to_remove == 0) {
+      _tensors.erase(t);
+    }
+
+    // remove it from the free tensors
+    auto jt = std::find(_to_free_tensors[dev].begin(), 
+                        _to_free_tensors[dev].end(), 
+                        it->second);
+    std::iter_swap(jt, (_to_free_tensors[dev].end() - 1));
+    _to_free_tensors[dev].pop_back();
+
+    // free it from the memory pool
+    _mem_pools[dev]->free(kmp, t->second.num_bytes);
+  }
+
+  // clear all the free on this device
+  _free_cache[dev].clear();
 }
 
 gpu_memory_t::gpu_mem_tensor_t &gpu_memory_t::_init_tensor(tid_t id, 
@@ -830,39 +935,8 @@ std::shared_ptr<tensor_t> gpu_memory_t::_allocate_tensor(size_t num_bytes, int32
   // ok we can allocate space in any way lets 
   if(tmp == nullptr) {
 
-    // free all the tensors we can free
-    for (auto it = _free_cache[dev].begin(); it != _free_cache[dev].end(); ++it) {
-
-      // we got a chuck from the free cache we should be able to use it...
-      auto t = _tensors.find(it->second);
-
-      // claim this memory
-      _total_to_free[dev] -= t->second.num_bytes;
-      _total_free[dev] += t->second.num_bytes;
-
-      // null the data just in case
-      assert(t->second.data[dev] != nullptr);
-      auto kmp = t->second.data[dev]->get_data_ptr<void*>();
-      t->second.data[dev] = nullptr;
-
-      // we are killing a copy of this
-      if(--t->second.num_left_to_remove == 0) {
-        _tensors.erase(t);
-      }
-
-      // remove it from the free tensors
-      auto jt = std::find(_to_free_tensors[dev].begin(), 
-                          _to_free_tensors[dev].end(), 
-                          it->second);
-      std::iter_swap(jt, (_to_free_tensors[dev].end() - 1));
-      _to_free_tensors[dev].pop_back();
-
-      // free it from the memory pool
-      _mem_pools[dev]->free(kmp, t->second.num_bytes);
-    }
-
-    // clear all the free on this device
-    _free_cache[dev].clear();
+    // free all tensors
+    _free_all(dev);
 
     // try to allocate again
     tmp = _mem_pools[dev]->allocate(num_bytes);
