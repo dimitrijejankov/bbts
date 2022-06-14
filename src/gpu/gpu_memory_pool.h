@@ -34,7 +34,7 @@ public:
     }
 
     // align the address
-    auto to_offset = real_offset % target_aligment != 0 ? target_aligment - (real_offset % target_aligment) : 0;
+    size_t to_offset = real_offset % target_aligment != 0 ? target_aligment - (real_offset % target_aligment) : 0;
     auto aligned_offset = real_offset + to_offset;
 
     // store the offsets

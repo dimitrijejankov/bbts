@@ -65,6 +65,7 @@ gpu_memory_t::_try_to_find_gc(const kernel_prep_ptr_t &kp,
         t.num_copies <= 1 && !t.is_on_cpu
       };
 
+      t.unpinned_its[dev] = _unpinned_tensors[dev].end();
       _unpinned_tensors[dev].erase(it);
       return out;
     }
@@ -316,7 +317,6 @@ free_all:
       auto &[t, num_bytes] = tmp;
       _mem_pools[cur_dev]->free(t->get_data_ptr<void*>(), num_bytes);
     }
-    
     tensors.clear();
     continue;
   }
@@ -383,7 +383,7 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
         assert(t.cpu_transfer->dst != nullptr);
 
         // set the transfer to the kernel prep
-        assert(t.is_on_cpu);
+        assert(t.is_on_cpu || t.cpu_transfer->depends != nullptr);
         kp->cpu_transfers.push_back(t.cpu_transfer);
       }
       // next check if the tensor is on any GPU? so that we can fetch it from there
@@ -488,7 +488,7 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
         // store the transfer
         _cpu_to_gpu_transfer[transfer->id] = transfer;
         t.cpu_transfer = transfer;
-        assert(t.is_on_cpu && transfer->depends == nullptr);
+        assert(t.is_on_cpu || transfer->depends != nullptr);
         kp->cpu_transfers.push_back(t.cpu_transfer);
       }
     }
@@ -678,6 +678,7 @@ free_all:
       auto [tid, num_bytes] = u;
       _unpin_tensor(tid, cur_dev, num_bytes);
     }
+    to_unpin.clear();
 
     // return all the unpinned tensors
     for(auto &gc : plan_to_gc) {
@@ -685,6 +686,7 @@ free_all:
           _unpinned_tensors[cur_dev].insert(
               {{std::get<0>(gc), std::get<1>(gc)}, std::get<2>(gc)});
     }
+    plan_to_gc.clear();
 
     // 3. if not free all the tensors and go to the next one
     for(auto &tmp : free_if_fail) {
@@ -731,6 +733,10 @@ gc_request_ptr_t gpu_memory_t::get_gc_request(kernel_prep_ptr_t kp,
     t.num_copies -= 1;
     t.is_loaded_on_gpu[kp->dev] = false;
     t.unpinned_its[kp->dev] = _unpinned_tensors[kp->dev].end();
+
+    for(auto fc : _free_cache[kp->dev]) {
+      assert(fc.second != tid);
+    }
 
     // we used the unpinned memory
     _total_unpinned[kp->dev] -= t.num_bytes;
@@ -909,6 +915,7 @@ std::shared_ptr<tensor_t> gpu_memory_t::_allocate_tensor(size_t num_bytes, int32
     // null the data just in case
     assert(t->second.data[dev] != nullptr);
     tmp = t->second.data[dev]->get_data_ptr<void*>();
+    assert(tmp != nullptr);
     t->second.data[dev] = nullptr;
 
     // we are killing a copy of this

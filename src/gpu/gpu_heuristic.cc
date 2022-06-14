@@ -152,6 +152,9 @@ void gpu_heuristic_t::tensor_unloaded(tid_t id, int dev) {
         if(t.on_cpu) {
           cmd.cpu_inputs.push_back(id);
         }
+
+        // stuff changed update the heuristic
+        _update_heuristic_for_reduce(command_id);
       }
 
       // find the tensor and remove it, not finding it is a bug
@@ -240,14 +243,15 @@ void gpu_heuristic_t::_update_heuristic_for_reduce(command_id_t id) {
   // remove it necessary
   auto &reduce_cmd = reduce_cmds[id];
 
-  // check if we should even update it
-  if((reduce_cmd.cpu_inputs.size() + reduce_cmd.gpu_inputs.size()) < 2) {
-    return;
-  }
-
   // remove the previous entry if necessary
   if(reduce_cmd.it != goodness_heuristic.end()) {
     goodness_heuristic.erase(reduce_cmd.it);
+    reduce_cmd.it = goodness_heuristic.end();
+  }
+
+  // check if we should even update it
+  if((reduce_cmd.cpu_inputs.size() + reduce_cmd.gpu_inputs.size()) < 2) {
+    return;
   }
 
   // since the reduce kernel must be binary the only question is whether we already have an input on the GPU or not

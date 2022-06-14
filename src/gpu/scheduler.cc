@@ -982,7 +982,7 @@ bool multi_gpu_scheduler_t::_schedule_for_execution(kernel_prep_ptr_t kernel_pre
   gc_allowed = gc_allowed || (num_unfinished_kernels == 0 && falied_to_allocate);
 
   // we are done here if gc is not allowed
-  if(!gc_allowed) {
+  if(!gc_allowed || num_unfinished_kernels >= max_gc_allowed) {
     return false;
   }
 
