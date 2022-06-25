@@ -46,7 +46,6 @@ void gpu_heuristic_t::tensor_loaded(tid_t id, int dev) {
 
       // can we schedule it
       if (apply.loaded_inputs == apply.num_inputs) {
-        apply_in_gpu_memory.insert(command_id);
         _apply_in_gpu_memory_insert(command_id);
       }
 
@@ -82,7 +81,6 @@ void gpu_heuristic_t::tensor_loaded(tid_t id, int dev) {
 
       // if there are at least two inputs of a reduce it can be scheduled
       if (cmd.gpu_inputs.size() == 2) {
-        reduce_in_gpu_memory.insert(command_id);
         _reduce_in_gpu_memory_insert(command_id);
       }
 
@@ -125,7 +123,6 @@ void gpu_heuristic_t::tensor_unloaded(tid_t id, int dev) {
       // should we unschedule it
       if (apply.loaded_inputs !=
           apply.num_inputs) {
-        apply_in_gpu_memory.erase(command_id);
         _apply_in_gpu_memory_remove(command_id);
       }
 
@@ -153,7 +150,6 @@ void gpu_heuristic_t::tensor_unloaded(tid_t id, int dev) {
 
         // if we dropped to one input we need to unschedule it
         if (cmd.gpu_inputs.size() == 1) {
-          reduce_in_gpu_memory.erase(command_id);
           _reduce_in_gpu_memory_remove(command_id);
         }
 
@@ -443,7 +439,6 @@ void gpu_heuristic_t::register_apply(bbts::gpu_command_schedule_ptr_t &apply_sch
 
   // check if we have enough inputs on any GPU
   if (apply_cmd.loaded_inputs == apply_cmd.num_inputs) {
-    apply_in_gpu_memory.insert(apply_cmd.id);
     _apply_in_gpu_memory_insert(apply_cmd.id);
   }
 
@@ -539,7 +534,6 @@ void gpu_heuristic_t::register_reduce(bbts::gpu_command_schedule_ptr_t &reduce_s
 
   // check if we have enough inputs on any GPU
   if (reduce_cmd.gpu_inputs.size() >= 2) {
-    reduce_in_gpu_memory.insert(reduce_cmd.id);
     _reduce_in_gpu_memory_insert(reduce_cmd.id);
   }
 
@@ -684,10 +678,8 @@ kernel_prep_ptr_t gpu_heuristic_t::get_next_on_any(int32_t preffered_dev) {
       continue;
     }
 
-    if (!apply_in_gpu_memory.empty()) {
-      auto cmd = *apply_in_gpu_memory.begin();
-      return _create_apply(cmd);
-    }
+    auto cmd = std::get<0>(apply_gpu_goodness_heuristic[cur_dev].begin()->second);
+    return _create_apply(cmd);
   }
 
   return nullptr;
@@ -711,7 +703,6 @@ void gpu_heuristic_t::mark_as_scheduled(const kernel_prep_ptr_t &prep) {
     // remove them from all the schedulings
     _apply_in_gpu_memory_remove(cmd);
     apply_cmds.erase(apply_cmd_it);
-    apply_in_gpu_memory.erase(cmd);
     for (auto &asg : on_apply_single_gpu) {
       asg.erase(cmd);
     }
@@ -764,7 +755,6 @@ void gpu_heuristic_t::mark_as_scheduled(const kernel_prep_ptr_t &prep) {
 
     // 3.1. if we don't have anything else to run unschedule it
     if (reduce_op.gpu_inputs.size() < 2) {
-      reduce_in_gpu_memory.erase(cmd);
       _reduce_in_gpu_memory_remove(cmd);
     }
 

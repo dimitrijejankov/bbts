@@ -205,7 +205,6 @@ private:
 
   // manages the information about the apply commands
   std::unordered_map<command_id_t, es_apply_command_nfo_t> apply_cmds;
-  std::unordered_set<command_id_t> apply_in_gpu_memory;
   std::vector<std::unordered_set<command_id_t>> on_apply_single_gpu;
   
   // (number of inputs not on this GPU, where less is better, number of tensors used by other commands more is better)
@@ -213,7 +212,6 @@ private:
 
   // manages the information about the reduce commands 
   std::unordered_map<command_id_t, es_reduce_command_nfo_t> reduce_cmds;
-  std::unordered_set<command_id_t> reduce_in_gpu_memory;
   std::vector<std::unordered_set<command_id_t>> on_reduce_single_gpu;
   
   // (number of inputs not on this GPU where less is better, number of tensors used by other commands more is better)
