@@ -556,7 +556,7 @@ void multi_gpu_scheduler_t::command_prep_thread() {
     }
     // 6.2. othwerwise check if we have commands that have inputs on at least
     // one of the GPUs ex. APPLY 1 2 3 -> 4 | GPU 0 has 1 2 | GPU 1 has 3
-    else if ((kernel_prep = heuristic.get_next_on_any()) != nullptr) {
+    else if ((kernel_prep = heuristic.get_next_on_any(preffered_dev)) != nullptr) {
 
       // schedule them for execution, if it fails to schedule put it to sleep
       bool scheduled = _schedule_for_execution(kernel_prep, preffered_dev);

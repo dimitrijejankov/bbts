@@ -32,7 +32,7 @@ public:
   get_next_on_same(int32_t preffered_dev);
 
   // returns a kernel that needs just GPU copies
-  kernel_prep_ptr_t get_next_on_any();
+  kernel_prep_ptr_t get_next_on_any(int32_t preffered_dev);
 
   // return a kernel that need CPU copies
   kernel_prep_ptr_t get_next_heuristic();
@@ -113,6 +113,9 @@ private:
     
     // the iterator to the heuristic
     heuristic_map_t::iterator it;
+
+    // apply iterators
+    std::array<heuristic_map_t::iterator, BBTS_MAX_GPU_DEVICES> jts;
   };
 
   struct es_reduce_command_nfo_t {
@@ -146,6 +149,9 @@ private:
 
     // the iterator to the heuristic
     heuristic_map_t::iterator it;
+
+    // reduce iterators
+    std::array<heuristic_map_t::iterator, BBTS_MAX_GPU_DEVICES> jts;
   };
 
   struct es_tensor_nfo {
@@ -164,13 +170,13 @@ private:
   };
 
   uint32_t _calculate_heuristic_apply(const std::vector<tid_t> inputs);
+  uint32_t _calculate_gpu_heuristic_apply(const std::vector<tid_t> inputs, int32_t dev);
 
   uint32_t _calculate_heuristic_reduce(const std::vector<tid_t> inputs);
+  uint32_t _calculate_gpu_heuristic_reduce(const std::vector<tid_t> inputs, int32_t dev);
 
   void _update_heuristic_for_apply(command_id_t id);
-
   void _update_heuristic_for_reduce(command_id_t id);
-
   void _update_heuristic_for_inputs(const std::vector<tid_t> &inputs);
 
   kernel_prep_ptr_t _create_reduce(command_id_t cmd);
@@ -179,10 +185,20 @@ private:
 
   void _unlink_command_from_tensor(tid_t id, command_id_t cmd);
 
+  void _update_gpu_heuristic_for_inputs(const std::vector<tid_t> &inputs);
+
+  void _update_gpu_heuristic_for_apply(command_id_t id);
+  void _apply_in_gpu_memory_insert(command_id_t cmd);
+  void _apply_in_gpu_memory_remove(command_id_t cmd);
+
+  void _update_gpu_heuristic_for_reduce(command_id_t id);
+  void _reduce_in_gpu_memory_insert(command_id_t cmd);
+  void _reduce_in_gpu_memory_remove(command_id_t cmd);
+
   // how many gpus do we actually have
   uint32_t num_devices = 1;
 
-  // (number of inputs not on GPU, where less is better, number of tensors used by other commands more is better)
+  // (number of inputs not on GPU where less is better, number of tensors used by other commands more is better)
   heuristic_map_t goodness_heuristic;
 
   std::unordered_multimap<tid_t, std::tuple<command_id_t, command_t::op_type_t>> tensors_to_cmds;
@@ -192,11 +208,17 @@ private:
   std::unordered_set<command_id_t> apply_in_gpu_memory;
   std::vector<std::unordered_set<command_id_t>> on_apply_single_gpu;
   
+  // (number of inputs not on this GPU, where less is better, number of tensors used by other commands more is better)
+  std::vector<heuristic_map_t> apply_gpu_goodness_heuristic;
+
   // manages the information about the reduce commands 
   std::unordered_map<command_id_t, es_reduce_command_nfo_t> reduce_cmds;
   std::unordered_set<command_id_t> reduce_in_gpu_memory;
   std::vector<std::unordered_set<command_id_t>> on_reduce_single_gpu;
   
+  // (number of inputs not on this GPU where less is better, number of tensors used by other commands more is better)
+  std::vector<heuristic_map_t> reduce_gpu_goodness_heuristic;
+
   // keeps track of all the tensors on the GPU (we need that)
   std::unordered_map<tid_t, es_tensor_nfo> tensors;
 
