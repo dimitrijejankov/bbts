@@ -44,8 +44,9 @@ void gpu_heuristic_t::tensor_loaded(tid_t id, int dev) {
       apply.inputs_on_devices[dev]++;
       apply.loaded_inputs += t.gpu_copies == 1;
 
-      // can we schedule it
-      if (apply.loaded_inputs == apply.num_inputs) {
+      // only schedule it if all the inputs are in GPU memory 
+      //and this and this tensor just arrived 
+      if (apply.loaded_inputs == apply.num_inputs && t.gpu_copies == 1) {
         _apply_in_gpu_memory_insert(command_id);
       }
 
@@ -615,6 +616,7 @@ kernel_prep_ptr_t gpu_heuristic_t::_create_apply(command_id_t cmd) {
   ret->output = apply_cmd.output_tids;
   ret->output_sizes = apply_cmd.output_sizes;
   ret->run_me = apply_cmd.run_me;
+  assert(apply_cmd.run_me != nullptr);
 
   return std::move(ret);
 }

@@ -13,7 +13,7 @@
 
 float learning_rate = 1.0f;
 
-size_t num_iter = 10;
+size_t num_iter = 20;
 
 // 4000/4000	32000/4000	8000/4000	16000/4000
 

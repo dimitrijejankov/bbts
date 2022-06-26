@@ -516,6 +516,9 @@ void multi_gpu_scheduler_t::command_prep_thread() {
       mem.finish_gc_request(gc_req);
       mem.preallocate(gc_req->to_run, gc_req->dev);
 
+      // log that the kernel scheduled
+      profiler.log_kernel_scheduled(gc_req->to_run);
+
       // schedule the CPU transfers
       gc_req->to_run->cpu_done = gc_req->to_run->cpu_transfers.empty();
       if (!gc_req->to_run->cpu_transfers.empty()) {
@@ -534,9 +537,6 @@ void multi_gpu_scheduler_t::command_prep_thread() {
          gc_req->to_run->gpu_transfers.empty()) {
         run_queue[gc_req->dev].enqueue_copy(gc_req->to_run);
       }
-
-      // log that the kernel scheduled
-      profiler.log_kernel_scheduled(gc_req->to_run);
     }
 
     // 6.1. check if we have a command that we can run immeidately (all the

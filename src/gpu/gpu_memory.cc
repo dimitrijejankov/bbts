@@ -55,6 +55,7 @@ gpu_memory_t::_try_to_find_gc(const kernel_prep_ptr_t &kp,
     auto &t = _tensors[it->second];
     if (t.num_bytes == num_bytes) {
 
+      assert(t.data[dev] != nullptr);
       // of we found it erase it and return it
       std::tuple<uint32_t, uint32_t, tid_t, std::shared_ptr<tensor_t>, bool> out =
       {
@@ -62,7 +63,7 @@ gpu_memory_t::_try_to_find_gc(const kernel_prep_ptr_t &kp,
         std::get<1>(it->first), 
         it->second,
         t.data[dev],
-        t.num_copies <= 1 && !t.is_on_cpu
+        t.num_copies <= 1 && !t.is_on_cpu && !t.is_evicting
       };
 
       t.unpinned_its[dev] = _unpinned_tensors[dev].end();
@@ -660,16 +661,16 @@ gpu_memory_t::gc_approval_t gpu_memory_t::can_gc(kernel_prep_ptr_t kp, int32_t t
         kp->input_tensor_ptrs[in_idx] = nullptr;
 
         // pin the tensor and mark it later to unpin
-        _pin_tensor(kp->input[in_idx], dev, kp->input_sizes[in_idx]);
+        _pin_tensor(kp->input[in_idx], cur_dev, kp->input_sizes[in_idx]);
         to_unpin.push_back({kp->input[in_idx], kp->input_sizes[in_idx]});
       }
     }
 
-  // we are good just return it
-  return {.to_unpin = to_unpin,
-          .free_if_fail = free_if_fail,
-          .plan_to_gc = plan_to_gc, 
-          .dev = cur_dev};
+    // we are good just return it
+    return {.to_unpin = to_unpin,
+            .free_if_fail = free_if_fail,
+            .plan_to_gc = plan_to_gc, 
+            .dev = cur_dev};
 
 free_all:
 
@@ -707,6 +708,7 @@ gc_request_ptr_t gpu_memory_t::get_gc_request(kernel_prep_ptr_t kp,
   request->dev = approval.dev;
   request->to_run = kp;
   request->to_unpin = std::move(approval.to_unpin);
+  kp->dev = approval.dev;
 
   // setup all the tensors we want to evict
   for(auto to_evict : approval.plan_to_gc) {
@@ -720,12 +722,15 @@ gc_request_ptr_t gpu_memory_t::get_gc_request(kernel_prep_ptr_t kp,
     if(need_evict) {
 
       // create an eviction request
+      assert(!_tensors[tid].is_on_cpu);
       request->to_evict.push_back(std::make_shared<gc_request_evict_t>());
       request->to_evict.back()->evicted = false;
       request->to_evict.back()->num_bytes = t.num_bytes;
+      assert(t.data[kp->dev] != nullptr);
       request->to_evict.back()->tensor = t.data[kp->dev];
       request->to_evict.back()->tid = tid;
       t.eviction_request = request->to_evict.back();
+      t.is_evicting = true;
     }
 
     // remove the tensor we just evicted and set the eviction request
@@ -751,6 +756,7 @@ void gpu_memory_t::finish_gc_request(const gc_request_ptr_t &req) {
   // null out the eviction requests
   for(auto to_evict : req->to_evict) {
     _tensors[to_evict->tid].is_on_cpu = true;
+    _tensors[to_evict->tid].is_evicting = false;
     _tensors[to_evict->tid].eviction_request = nullptr;
   }
 
