@@ -62,6 +62,9 @@ public:
 
 private: 
 
+  // we can do a GC if we have less kernels scheudled than this
+  int32_t max_gc_allowed = 20;
+
   // do we allow offloading to RAM
   bool gc_allowed = false;
 

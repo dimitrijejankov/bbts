@@ -14,6 +14,9 @@ gpu_heuristic_t::gpu_heuristic_t(uint32_t num_devices)
 
   on_apply_single_gpu.resize(num_devices);
   on_reduce_single_gpu.resize(num_devices);
+
+  apply_gpu_goodness_heuristic.resize(num_devices);
+  reduce_gpu_goodness_heuristic.resize(num_devices);
 }
 void gpu_heuristic_t::tensor_loaded(tid_t id, int dev) {
 
@@ -41,9 +44,10 @@ void gpu_heuristic_t::tensor_loaded(tid_t id, int dev) {
       apply.inputs_on_devices[dev]++;
       apply.loaded_inputs += t.gpu_copies == 1;
 
-      // can we schedule it
-      if (apply.loaded_inputs == apply.num_inputs) {
-        apply_in_gpu_memory.insert(command_id);
+      // only schedule it if all the inputs are in GPU memory 
+      //and this and this tensor just arrived 
+      if (apply.loaded_inputs == apply.num_inputs && t.gpu_copies == 1) {
+        _apply_in_gpu_memory_insert(command_id);
       }
 
       // can we schedule it on a single device
@@ -54,6 +58,7 @@ void gpu_heuristic_t::tensor_loaded(tid_t id, int dev) {
 
       // update the heuristic for the apply
       _update_heuristic_for_apply(command_id);
+      _update_gpu_heuristic_for_apply(command_id);
 
     } else if (command_type == command_t::REDUCE) {
 
@@ -77,7 +82,7 @@ void gpu_heuristic_t::tensor_loaded(tid_t id, int dev) {
 
       // if there are at least two inputs of a reduce it can be scheduled
       if (cmd.gpu_inputs.size() == 2) {
-        reduce_in_gpu_memory.insert(command_id);
+        _reduce_in_gpu_memory_insert(command_id);
       }
 
       // same is true when we look at the per GPU case
@@ -87,6 +92,7 @@ void gpu_heuristic_t::tensor_loaded(tid_t id, int dev) {
 
       // update the heuristic for the reduce
       _update_heuristic_for_reduce(command_id);
+      _update_gpu_heuristic_for_reduce(command_id);
     }
   }
 };
@@ -118,7 +124,7 @@ void gpu_heuristic_t::tensor_unloaded(tid_t id, int dev) {
       // should we unschedule it
       if (apply.loaded_inputs !=
           apply.num_inputs) {
-        apply_in_gpu_memory.erase(command_id);
+        _apply_in_gpu_memory_remove(command_id);
       }
 
       // should we unschedule it from a particular device
@@ -145,13 +151,17 @@ void gpu_heuristic_t::tensor_unloaded(tid_t id, int dev) {
 
         // if we dropped to one input we need to unschedule it
         if (cmd.gpu_inputs.size() == 1) {
-          reduce_in_gpu_memory.erase(command_id);
+          _reduce_in_gpu_memory_remove(command_id);
         }
 
         // if it is exclusively on the cpu set that
         if(t.on_cpu) {
           cmd.cpu_inputs.push_back(id);
         }
+
+        // stuff changed update the heuristic
+        _update_heuristic_for_reduce(command_id);
+        _update_gpu_heuristic_for_reduce(command_id);
       }
 
       // find the tensor and remove it, not finding it is a bug
@@ -189,14 +199,71 @@ uint32_t gpu_heuristic_t::_calculate_heuristic_apply(const std::vector<tid_t> in
   return total;
 }
 
+uint32_t gpu_heuristic_t::_calculate_gpu_heuristic_apply(const std::vector<tid_t> inputs, int32_t dev) {
+
+  uint64_t total = 0;
+  for (auto &in : inputs) {
+
+    // do make sure we don't have it
+    // as othewise we don't need to care about it
+    if (tensors[in].on_device[dev]) {
+      continue;
+    }
+
+    auto range = tensors_to_cmds.equal_range(in);
+    total += std::distance(range.first, range.second);
+  }
+  return total;
+}
+
 uint32_t gpu_heuristic_t::_calculate_heuristic_reduce(const std::vector<tid_t> inputs) {
 
+  auto num_available = 0;
   uint32_t best = 0;
   uint32_t second_best = 0;
   for (auto &in : inputs) {
 
+    num_available += tensors[in].gpu_copies != 0;
     if (tensors[in].gpu_copies != 0) {
       continue;
+    }
+
+    // if there are two inputs that are in GPU memory we will not laod anything if we run the the kernel
+    if(num_available == 2) {
+      return 0;
+    }
+
+    auto range = tensors_to_cmds.equal_range(in);
+    auto value = std::max(best, (uint32_t) std::distance(range.first, range.second));
+
+    if(best < value) {
+      second_best = best;
+      best = value;
+    }
+    else if(second_best < value) {
+      second_best = value;
+    }
+  }
+
+  return best + second_best;
+}
+
+uint32_t gpu_heuristic_t::_calculate_gpu_heuristic_reduce(const std::vector<tid_t> inputs, int32_t dev) {
+
+  auto num_available = 0;
+  uint32_t best = 0;
+  uint32_t second_best = 0;
+  for (auto &in : inputs) {
+
+    num_available += tensors[in].on_device[dev];
+    if (tensors[in].on_device[dev]) {
+      continue;
+    }
+
+    // if there are two inputs that are in GPU memory of a single GPU
+    // we will not laod anything if we run the the kernel as this is already enough
+    if(num_available == 2) {
+      return 0;
     }
 
     auto range = tensors_to_cmds.equal_range(in);
@@ -240,14 +307,15 @@ void gpu_heuristic_t::_update_heuristic_for_reduce(command_id_t id) {
   // remove it necessary
   auto &reduce_cmd = reduce_cmds[id];
 
-  // check if we should even update it
-  if((reduce_cmd.cpu_inputs.size() + reduce_cmd.gpu_inputs.size()) < 2) {
-    return;
-  }
-
   // remove the previous entry if necessary
   if(reduce_cmd.it != goodness_heuristic.end()) {
     goodness_heuristic.erase(reduce_cmd.it);
+    reduce_cmd.it = goodness_heuristic.end();
+  }
+
+  // check if we should even update it
+  if((reduce_cmd.cpu_inputs.size() + reduce_cmd.gpu_inputs.size()) < 2) {
+    return;
   }
 
   // since the reduce kernel must be binary the only question is whether we already have an input on the GPU or not
@@ -274,9 +342,11 @@ void gpu_heuristic_t::_update_heuristic_for_inputs(const std::vector<tid_t> &inp
       assert(type == command_t::APPLY || type == command_t::REDUCE);
       if(type == command_t::APPLY) {
         _update_heuristic_for_apply(command);
+        _update_gpu_heuristic_for_apply(command);
       }
       else {
         _update_heuristic_for_reduce(command);
+        _update_gpu_heuristic_for_reduce(command);
       }
     }
   }
@@ -296,6 +366,9 @@ void gpu_heuristic_t::register_apply(bbts::gpu_command_schedule_ptr_t &apply_sch
   apply_cmd.output_tids.reserve(cmd->get_num_outputs());
   apply_cmd.output_sizes = apply_sch->output_sizes;
   apply_cmd.it = goodness_heuristic.end();
+  for(auto dev = 0; dev < num_devices; ++dev) {
+    apply_cmd.jts[dev] = apply_gpu_goodness_heuristic[dev].end();
+  }
   
   apply_cmd.run_me = std::make_shared<kernel_run_t>();
   apply_cmd.run_me->ud = apply_sch->fn;
@@ -332,6 +405,7 @@ void gpu_heuristic_t::register_apply(bbts::gpu_command_schedule_ptr_t &apply_sch
 
   // are all the inputs available either on CPU or GPU if so we need to add it to the heuristic
   _update_heuristic_for_apply(apply_cmd.id);
+  _update_gpu_heuristic_for_apply(apply_cmd.id);
 
   // next we need to update the heuristic for each other command with same inputs
   for (int32_t idx = 0; idx < cmd->get_num_inputs(); ++idx) {
@@ -350,9 +424,11 @@ void gpu_heuristic_t::register_apply(bbts::gpu_command_schedule_ptr_t &apply_sch
       assert(type == command_t::APPLY || type == command_t::REDUCE);
       if(type == command_t::APPLY) {
         _update_heuristic_for_apply(command);
+        _update_gpu_heuristic_for_apply(command);
       }
       else {
         _update_heuristic_for_reduce(command);
+        _update_gpu_heuristic_for_reduce(command);
       }
     }
   }
@@ -364,7 +440,7 @@ void gpu_heuristic_t::register_apply(bbts::gpu_command_schedule_ptr_t &apply_sch
 
   // check if we have enough inputs on any GPU
   if (apply_cmd.loaded_inputs == apply_cmd.num_inputs) {
-    apply_in_gpu_memory.insert(apply_cmd.id);
+    _apply_in_gpu_memory_insert(apply_cmd.id);
   }
 
   // check if we have enough inputs per GPU
@@ -387,6 +463,9 @@ void gpu_heuristic_t::register_reduce(bbts::gpu_command_schedule_ptr_t &reduce_s
   // TODO: this is not corrent but it will for for testing
   reduce_cmd.output_size = reduce_sch->output_sizes.front();
   reduce_cmd.it = goodness_heuristic.end();
+  for(auto dev = 0; dev < num_devices; ++dev) {
+    reduce_cmd.jts[dev] = reduce_gpu_goodness_heuristic[dev].end();
+  }
 
   // fill out the kernel
   reduce_cmd.run_me = std::make_shared<kernel_run_t>();
@@ -423,6 +502,7 @@ void gpu_heuristic_t::register_reduce(bbts::gpu_command_schedule_ptr_t &reduce_s
 
   // are all the inputs available either on CPU or GPU if so we need to add it to the heuristic
   _update_heuristic_for_reduce(reduce_cmd.id);
+  _update_gpu_heuristic_for_reduce(reduce_cmd.id);
 
   // next we need to update the heuristic for each other command with same inputs
   for (int32_t idx = 0; idx < cmd->get_num_inputs(); ++idx) {
@@ -441,9 +521,11 @@ void gpu_heuristic_t::register_reduce(bbts::gpu_command_schedule_ptr_t &reduce_s
       assert(type == command_t::APPLY || type == command_t::REDUCE);
       if(type == command_t::APPLY) {
         _update_heuristic_for_apply(command);
+        _update_gpu_heuristic_for_apply(command);
       }
       else {
         _update_heuristic_for_reduce(command);
+        _update_gpu_heuristic_for_reduce(command);
       }
     }
   }
@@ -453,7 +535,7 @@ void gpu_heuristic_t::register_reduce(bbts::gpu_command_schedule_ptr_t &reduce_s
 
   // check if we have enough inputs on any GPU
   if (reduce_cmd.gpu_inputs.size() >= 2) {
-    reduce_in_gpu_memory.insert(reduce_cmd.id);
+    _reduce_in_gpu_memory_insert(reduce_cmd.id);
   }
 
   // check if we have enough inputs per GPU
@@ -534,6 +616,7 @@ kernel_prep_ptr_t gpu_heuristic_t::_create_apply(command_id_t cmd) {
   ret->output = apply_cmd.output_tids;
   ret->output_sizes = apply_cmd.output_sizes;
   ret->run_me = apply_cmd.run_me;
+  assert(apply_cmd.run_me != nullptr);
 
   return std::move(ret);
 }
@@ -572,17 +655,35 @@ gpu_heuristic_t::get_next_on_same(int32_t preffered_dev) {
   return {nullptr, -1};
 };
 
-kernel_prep_ptr_t gpu_heuristic_t::get_next_on_any() {
 
-  if (!reduce_in_gpu_memory.empty()) {
-    auto cmd = *reduce_in_gpu_memory.begin();
+kernel_prep_ptr_t gpu_heuristic_t::get_next_on_any(int32_t preffered_dev) {
+
+  // go through each device and try to find a reduce we can run
+  for (int32_t dev = 0; dev < num_devices; ++dev) {
+
+    // we start from the preffered device
+    auto cur_dev = (preffered_dev + dev) % num_devices;
+    if(reduce_gpu_goodness_heuristic[cur_dev].empty()) {
+      continue;
+    }
+
+    // get it from the goodness heuristic
+    auto cmd = std::get<0>(reduce_gpu_goodness_heuristic[cur_dev].begin()->second);
     return _create_reduce(cmd);
   }
 
-  if (!apply_in_gpu_memory.empty()) {
-    auto cmd = *apply_in_gpu_memory.begin();
+  // go through each device and try to find an apply 
+  for (int32_t dev = 0; dev < num_devices; ++dev) {
+
+    auto cur_dev = (preffered_dev + dev) % num_devices;
+    if(apply_gpu_goodness_heuristic[cur_dev].empty()) {
+      continue;
+    }
+
+    auto cmd = std::get<0>(apply_gpu_goodness_heuristic[cur_dev].begin()->second);
     return _create_apply(cmd);
   }
+
   return nullptr;
 };
 
@@ -602,8 +703,8 @@ void gpu_heuristic_t::mark_as_scheduled(const kernel_prep_ptr_t &prep) {
     }
 
     // remove them from all the schedulings
+    _apply_in_gpu_memory_remove(cmd);
     apply_cmds.erase(apply_cmd_it);
-    apply_in_gpu_memory.erase(cmd);
     for (auto &asg : on_apply_single_gpu) {
       asg.erase(cmd);
     }
@@ -656,7 +757,7 @@ void gpu_heuristic_t::mark_as_scheduled(const kernel_prep_ptr_t &prep) {
 
     // 3.1. if we don't have anything else to run unschedule it
     if (reduce_op.gpu_inputs.size() < 2) {
-      reduce_in_gpu_memory.erase(cmd);
+      _reduce_in_gpu_memory_remove(cmd);
     }
 
     // 3.2. we also have to do this on per device basis
@@ -707,6 +808,7 @@ void gpu_heuristic_t::mark_as_scheduled(const kernel_prep_ptr_t &prep) {
 
       // 6.3. update the heuristic if necessary
       _update_heuristic_for_reduce(reduce_op.id);
+      _update_gpu_heuristic_for_reduce(reduce_op.id);
 
       // 6.4. we use this anoymous tid
       inner_anon_id--;
@@ -752,6 +854,100 @@ void gpu_heuristic_t::_unlink_command_from_tensor(tid_t id, command_id_t cmd) {
   }
   std::cerr << "This is not supposed to happen!";
   exit(-1);
+}
+
+void gpu_heuristic_t::_update_gpu_heuristic_for_inputs(const std::vector<tid_t> &inputs) {
+
+  // update the heuristic for the commands that share inputs with it
+  for (int32_t idx = 0; idx < inputs.size(); ++idx) {
+
+    // get the input tid
+    auto in_tid = inputs[idx];
+    auto range = tensors_to_cmds.equal_range(in_tid);
+
+    for(auto it = range.first; it != range.second; ++it) {
+
+      // we just updated this command 
+      auto [command, type] = it->second;
+
+      // make sure it is the one of the two types of commands
+      assert(type == command_t::APPLY || type == command_t::REDUCE);
+      if(type == command_t::APPLY) {
+        _update_gpu_heuristic_for_apply(command);
+      }
+      else {
+        _update_gpu_heuristic_for_reduce(command);
+      }
+    }
+  }
+}
+
+void gpu_heuristic_t::_update_gpu_heuristic_for_apply(command_id_t id) {
+  _apply_in_gpu_memory_remove(id);
+  _apply_in_gpu_memory_insert(id);
+}
+
+void gpu_heuristic_t::_apply_in_gpu_memory_insert(command_id_t cmd) {
+
+  // make sure we have the inptus in GPU memory
+  auto &c = apply_cmds[cmd];
+  if(c.loaded_inputs != c.num_inputs) { return; }
+
+  for(auto dev = 0; dev < num_devices; ++dev) {
+
+    // calculate the right values
+    auto inputs_left = c.num_inputs - c.inputs_on_devices[dev];
+    auto num_used = _calculate_gpu_heuristic_apply(c.input_tids, dev);
+
+    // insert it
+    c.jts[dev] = apply_gpu_goodness_heuristic[dev].insert({{inputs_left, num_used}, {cmd, command_t::APPLY}});
+  }
+}
+
+void gpu_heuristic_t::_apply_in_gpu_memory_remove(command_id_t cmd) {
+  auto it = apply_cmds.find(cmd);
+  for(auto dev = 0; dev < num_devices; ++dev) {
+    if(it->second.jts[dev] == apply_gpu_goodness_heuristic[dev].end()) { continue; }
+    apply_gpu_goodness_heuristic[dev].erase(it->second.jts[dev]);
+    it->second.jts[dev] = apply_gpu_goodness_heuristic[dev].end();
+  }
+}
+
+void gpu_heuristic_t::_update_gpu_heuristic_for_reduce(command_id_t id) {
+  _reduce_in_gpu_memory_remove(id);
+  _reduce_in_gpu_memory_insert(id);
+}
+
+void gpu_heuristic_t::_reduce_in_gpu_memory_insert(command_id_t cmd) {
+
+  // get the command and make sure there are at least two inputs in GPU memory
+  auto &c = reduce_cmds[cmd];
+  if(c.gpu_inputs.size() < 2) { return; }
+
+  for(auto dev = 0; dev < num_devices; ++dev) {
+
+    // figure out if we have enough inputs
+    auto needed_inputs = 0;
+    for (auto &in : c.gpu_inputs) { 
+      needed_inputs += tensors[in].on_device[dev]; 
+      if(needed_inputs == 2) {  break; }
+    }
+
+    // calculate the heuristic
+    int32_t heuristic_val = _calculate_gpu_heuristic_reduce(c.gpu_inputs, dev);
+
+    // insert it 
+    c.jts[dev] = reduce_gpu_goodness_heuristic[dev].insert({{needed_inputs, heuristic_val}, {cmd, command_t::REDUCE}});
+  }
+}
+
+void gpu_heuristic_t::_reduce_in_gpu_memory_remove(command_id_t cmd){
+  auto &c = reduce_cmds[cmd];
+  for(auto dev = 0; dev < num_devices; ++dev) {
+    if(c.jts[dev] == reduce_gpu_goodness_heuristic[dev].end()) { continue; }
+    reduce_gpu_goodness_heuristic[dev].erase(c.jts[dev]);
+    c.jts[dev] = reduce_gpu_goodness_heuristic[dev].end();
+  }
 }
 
 kernel_prep_ptr_t gpu_heuristic_t::get_next_heuristic() { 
@@ -809,6 +1005,7 @@ void gpu_heuristic_t::tensor_on_cpu(tid_t id) {
       // if this is a new tensor make sure that is reflected and update the heuristic
       apply_cmd.inputs_available += is_new;
       _update_heuristic_for_apply(command);
+      _update_gpu_heuristic_for_apply(command);
     }
     else {
 
@@ -821,6 +1018,7 @@ void gpu_heuristic_t::tensor_on_cpu(tid_t id) {
         // update the heuristic
         reduce_cmd.cpu_inputs.push_back(id);
         _update_heuristic_for_reduce(command);
+        _update_gpu_heuristic_for_reduce(command);
       }
     }
   }

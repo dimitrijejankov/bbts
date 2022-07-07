@@ -61,7 +61,7 @@ int main() {
   const int32_t num_gpus = 4;
   float cur_val = 0.0f;
   bbts::tid_t cur_tid = 0;
-  const size_t matrix_size = 8000;
+  const size_t matrix_size = 4000;
   const size_t matrix_blocking = 4;
   const size_t matrix_block_size = matrix_size / matrix_blocking;
 

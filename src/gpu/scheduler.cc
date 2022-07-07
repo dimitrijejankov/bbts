@@ -516,6 +516,9 @@ void multi_gpu_scheduler_t::command_prep_thread() {
       mem.finish_gc_request(gc_req);
       mem.preallocate(gc_req->to_run, gc_req->dev);
 
+      // log that the kernel scheduled
+      profiler.log_kernel_scheduled(gc_req->to_run);
+
       // schedule the CPU transfers
       gc_req->to_run->cpu_done = gc_req->to_run->cpu_transfers.empty();
       if (!gc_req->to_run->cpu_transfers.empty()) {
@@ -534,9 +537,6 @@ void multi_gpu_scheduler_t::command_prep_thread() {
          gc_req->to_run->gpu_transfers.empty()) {
         run_queue[gc_req->dev].enqueue_copy(gc_req->to_run);
       }
-
-      // log that the kernel scheduled
-      profiler.log_kernel_scheduled(gc_req->to_run);
     }
 
     // 6.1. check if we have a command that we can run immeidately (all the
@@ -556,7 +556,7 @@ void multi_gpu_scheduler_t::command_prep_thread() {
     }
     // 6.2. othwerwise check if we have commands that have inputs on at least
     // one of the GPUs ex. APPLY 1 2 3 -> 4 | GPU 0 has 1 2 | GPU 1 has 3
-    else if ((kernel_prep = heuristic.get_next_on_any()) != nullptr) {
+    else if ((kernel_prep = heuristic.get_next_on_any(preffered_dev)) != nullptr) {
 
       // schedule them for execution, if it fails to schedule put it to sleep
       bool scheduled = _schedule_for_execution(kernel_prep, preffered_dev);
@@ -982,7 +982,7 @@ bool multi_gpu_scheduler_t::_schedule_for_execution(kernel_prep_ptr_t kernel_pre
   gc_allowed = gc_allowed || (num_unfinished_kernels == 0 && falied_to_allocate);
 
   // we are done here if gc is not allowed
-  if(!gc_allowed) {
+  if(!gc_allowed || num_unfinished_kernels >= max_gc_allowed) {
     return false;
   }
 

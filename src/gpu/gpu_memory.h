@@ -130,6 +130,9 @@ private:
     // is tensor on the CPU
     bool is_on_cpu = false;
 
+    // is there currently an eviction request
+    bool is_evicting = false;
+
     // make sure this is set when it is marked as deleted
     bool should_delete = true;
     
