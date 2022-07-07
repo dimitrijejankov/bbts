@@ -758,6 +758,14 @@ kernel_prep_ptr_t gpu_heuristic_t::get_next_heuristic() {
 
   if(goodness_heuristic.empty()) { return nullptr; }
 
+  // std::cout << "***PRINTING HEURISTIC ELEMENTS FOUR LINES FOR ONE ELEMENT \n";
+  // for (auto iter = goodness_heuristic.begin(); iter != goodness_heuristic.end(); iter++){
+  //   std::cout << (get<0>(iter->first)) << "\n";
+  //   std::cout << (get<1>(iter->first)) << "\n";
+  //   std::cout << (get<0>(iter->second)) << "\n";
+  //   std::cout << (get<1>(iter->second)) << "\n\n";
+  // }
+
   // get the thing from the goodness heuristic
   auto it = goodness_heuristic.begin();
   auto [cmd, type] = it->second;

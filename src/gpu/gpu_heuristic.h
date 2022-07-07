@@ -68,9 +68,9 @@ private:
                       const std::tuple<int32_t, int32_t> &rhs) const {
 
           if (std::get<0>(lhs) == std::get<0>(rhs)) {
-            return std::get<1>(lhs) < std::get<1>(rhs);
+            return std::get<1>(lhs) > std::get<1>(rhs);
           }
-          return std::get<0>(lhs) > std::get<0>(rhs);
+          return std::get<0>(lhs) < std::get<0>(rhs);
       }
   };
 

@@ -6,7 +6,7 @@
 using namespace bbts;
 
 // just a small function to quickly create an apply
-apply_schedule_ptr_t create_apply(command_id_t id,
+gpu_command_schedule_ptr_t create_apply(command_id_t id,
                                   const std::vector<tid_t> &inputs, 
                                   const std::vector<tid_t> &outputs) {
 
@@ -21,7 +21,7 @@ apply_schedule_ptr_t create_apply(command_id_t id,
   }
 
   // make the actual apply schedule
-  auto apply = std::make_shared<bbts::command_schedule_t>(); 
+  auto apply = std::make_shared<bbts::gpu_command_schedule_t>(); 
   apply->cmd = command_t::create_apply(id, {0, 0}, true, {}, in, out);
 
   // we don't care about this
@@ -32,7 +32,7 @@ apply_schedule_ptr_t create_apply(command_id_t id,
   return std::move(apply);
 }
 
-reduce_schedule_ptr_t create_reduce(command_id_t id,
+gpu_command_schedule_ptr_t create_reduce(command_id_t id,
                                   const std::vector<tid_t> &inputs, 
                                   tid_t output) {
 
@@ -42,12 +42,12 @@ reduce_schedule_ptr_t create_reduce(command_id_t id,
   }
 
   // make the actual reduce schedule
-  auto reduce = std::make_shared<bbts::reduce_schedule_t>(); 
+  auto reduce = std::make_shared<bbts::gpu_command_schedule_t>(); 
   reduce->cmd = command_t::create_reduce(id, {0, 0}, true, {}, in, command_t::tid_node_id_t{.tid = output, .node = 0});
 
   // we don't care about this
   reduce->input_sizes.resize(inputs.size());
-  reduce->output_size = 0;
+  reduce->output_sizes.resize(1);
   reduce->params = {};
   reduce->fn = nullptr;
 
@@ -421,10 +421,12 @@ TEST(TestGPUHeuristic, TestApplyHeuristic1) {
   heuristic.register_apply(cmd2);
 
   // needs 3 copes and 3 is used by 1, 1 is used by 3 and 6 is used by 1, heuristic is (3, 5)
+  // correction:  needs 3 copes and 3 is used by 1, 1 is used by 3 and 6 is used by 1, heuristic is (3, 6)
   auto cmd3 = create_apply(id++, {3, 1, 6}, {10});
   heuristic.register_apply(cmd3);
 
   // needs 2 copies and 4 is used by 2 and 5 used by 1, heuristic is (2, 3)
+  // correction: needs 3 copies: 4 is used by 2; 5 is used by 1; 6 is used by 2; heursitic is (3, 5)
   auto cmd4 = create_apply(id++, {4, 5, 6}, {11});
   heuristic.register_apply(cmd4);
 
