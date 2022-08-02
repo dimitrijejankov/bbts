@@ -17,8 +17,10 @@ run_threads(bbts::multi_gpu_scheduler_ptr_t scheduler,
   threads.push_back(
       std::thread([scheduler]() { scheduler->command_prep_thread(); }));
 
-  threads.push_back(
-      std::thread([scheduler]() { scheduler->cpu_to_gpu_thread(); }));
+  for(auto numa = 0; numa < scheduler->get_num_numa(); ++numa) {
+    threads.push_back(
+        std::thread([scheduler, numa]() { scheduler->cpu_to_gpu_thread(numa); }));
+  }
 
   threads.push_back(std::thread([scheduler, storage]() { 
 
@@ -92,17 +94,17 @@ std::vector<bbts::command_ptr_t> combine(std::vector<bbts::command_ptr_t> &cmds1
 
 int main() {
 
-  const int32_t num_gpus = 4;
+  const int32_t num_gpus = 2;
   float cur_val = 0.0f;
   bbts::tid_t cur_tid = 0;
-  const size_t matrix_size = 10000;
+  const size_t matrix_size = 20000;
   const size_t matrix_blocking = 4;
   const size_t matrix_block_size = matrix_size / matrix_blocking;
 
   // make the storage
   auto config = std::make_shared<bbts::node_config_t>(0, nullptr);
   config->is_dev_cluster = true;
-  config->dev_cluster_ram = 20lu * 1024lu * 1024lu * 1024lu;
+  config->dev_cluster_ram = 100lu * 1024lu * 1024lu * 1024lu;
 
   auto storage = std::make_shared<bbts::storage_t>(nullptr, config);
 
@@ -114,7 +116,8 @@ int main() {
 
   // make the scheduler
   auto scheduler = std::make_shared<bbts::multi_gpu_scheduler_t>(
-      num_gpus, 14lu * 1024lu * 1024lu * 1024lu, storage, udf_manager, factory);
+      num_gpus, 14lu * 1024lu * 1024lu * 1024lu, 1, storage, udf_manager, factory);
+
 
   // run all the scheduler threads
   auto scheduler_threads = run_threads(scheduler, storage);
@@ -181,6 +184,8 @@ int main() {
   std::vector<bbts::command_ptr_t> to_schedule5 = delete_matrix(tmp2_index);
 
   auto to_schedule = combine(to_schedule1, to_schedule2, to_schedule3, to_schedule4, to_schedule5);
+
+  sleep(2);
   scheduler->schedule(to_schedule);
 
   // move all the tensors currently in the GPU back into RAM
