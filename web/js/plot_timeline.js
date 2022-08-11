@@ -9,16 +9,24 @@ free_label = "Free"
 
 $.getJSON("api/logs/" + param, function (profiling_data) {
 
-    console.log(profiling_data.device_logs)
+    var compute_time = [];
+    var start_times = [];
+    var end_times = [];
+
     groups = []
     for (let i = 0; i < profiling_data.device_logs.length; i++) {
 
         data = [];
+        cur_compute_time = 0;
+        cur_start_time = Infinity;
+        cur_end_time = 0;
 
         // add the info about the kernels that were run on this GPU
         kr_dps = [];
         ks = profiling_data.device_logs[i].kernels_stats;
         for (let j = 0; j < ks.length; j++) {
+            cur_compute_time += ks[j].end - ks[j].start;
+            cur_end_time = Math.max(cur_end_time, ks[j].end);
             dp = {
                 timeRange: [ks[j].start * 1e-5, ks[j].end * 1e-5],
                 val: j
@@ -51,6 +59,7 @@ $.getJSON("api/logs/" + param, function (profiling_data) {
         c2g_dps = []
         c2gs = profiling_data.device_logs[i].cpu2gpu_transfer_stats;
         for (let j = 0; j < c2gs.length; j++) {
+            cur_start_time = Math.min(cur_start_time, c2gs[j].start);
             dp = {
                 timeRange: [c2gs[j].start * 1e-5, c2gs[j].end * 1e-5],
                 val: j
@@ -100,8 +109,21 @@ $.getJSON("api/logs/" + param, function (profiling_data) {
             group: "GPU " + i.toString()
         }
         groups.push(group)
+
+        compute_time.push(cur_compute_time);
+        start_times.push(cur_start_time);
+        end_times.push(cur_end_time);
     }
-    console.log(groups);
+    console.log(compute_time);
+    console.log(start_times);
+    console.log(end_times);
+
+    var avg_percentage = 0;
+    for(let i = 0; i < start_times.length; ++i) {
+        avg_percentage += compute_time[i] / (end_times[i] - start_times[i]);
+        console.log(compute_time[i] / (end_times[i] - start_times[i]));
+    }
+    console.log(avg_percentage / start_times.length);
 
     json_to_table = function (tableData) {
 
