@@ -138,8 +138,10 @@ file(GLOB SERVER_SOURCE "src/server/*.cc")
 add_library(server OBJECT ${SERVER_SOURCE})
 
 # the server
+if(${ENABLE_GPU})
 file(GLOB GPU_SOURCE "src/gpu/*.cc")
 add_library(gpu OBJECT ${GPU_SOURCE})
+endif()
 
 # the communication
 file(GLOB COMMUNICATION_SOURCE "src/communication/*.cc")
@@ -161,9 +163,13 @@ add_library(bbts-common $<TARGET_OBJECTS:tensor>
                         $<TARGET_OBJECTS:storage>
                         $<TARGET_OBJECTS:communication>
                         $<TARGET_OBJECTS:server>
-                        $<TARGET_OBJECTS:gpu>
                         $<TARGET_OBJECTS:ud_functions>
                         $<TARGET_OBJECTS:proto_buf>)
+
+# link the GPU library
+if(${ENABLE_GPU})
+target_link_libraries(bbts-common $<TARGET_OBJECTS:gpu>)
+endif()
 
 # to open .so files and stuff
 target_link_libraries(bbts-common ${CMAKE_DL_LIBS})

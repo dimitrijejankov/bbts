@@ -18,7 +18,7 @@ else()
 
 # just use the .cc files
 file(GLOB files "${unit-test-path}/*.cc")
-
+list(FILTER files EXCLUDE REGEX ".*test_gpu_.*")
 endif()
 
 
