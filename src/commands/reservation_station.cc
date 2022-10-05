@@ -11,11 +11,6 @@ bbts::reservation_station_t::reservation_station_t(bbts::node_id_t _node_id, int
   // make one of these for each node
   _remote_tensors.resize(num_nodes);
   _send_status_queue.resize(num_nodes);
-
-  // just empty hooks
-  _command_retired_hook = [](command_id_t _) {};
-  _command_scheduled_hook = [](command_id_t _) {};
-  _command_queued_hook = [](command_id_t _) {};
 }
 
 bool bbts::reservation_station_t::queue_command(bbts::command_ptr_t _command) {
@@ -48,13 +43,6 @@ bool bbts::reservation_station_t::queue_command(bbts::command_ptr_t _command) {
   // unlock here
   lk.unlock();
 
-  // call the hook if necessary
-  if constexpr (static_config::enable_hooks) {
-
-    // notify that we have queued a command
-    _command_queued_hook(cmd_id);
-  }
-
   // we are done get out of here
   return success;
 }
@@ -78,13 +66,6 @@ bool bbts::reservation_station_t::retire_command(bbts::command_ptr_t _command) {
 
   // unlock here
   lk.unlock();
-
-  // call the hook if necessary
-  if constexpr (static_config::enable_hooks) {
-
-    // notify that we have retired a command
-    _command_retired_hook(cmd_id);
-  }
 
   // we are done get out of here
   return success;
@@ -214,13 +195,6 @@ bbts::command_ptr_t bbts::reservation_station_t::get_next_move_command() {
   auto tmp = std::move(_execute_move.front());
   _execute_move.pop_front();
 
-  // call the hook if necessary
-  if constexpr (static_config::enable_hooks) {
-
-    // mark that we have scheduled this command
-    _command_scheduled_hook(tmp->id);
-  }
-
   // return it
   return std::move(tmp);
 }
@@ -240,13 +214,6 @@ bbts::command_ptr_t bbts::reservation_station_t::get_next_apply_command() {
   auto tmp = std::move(_execute_ud.front());
   _execute_ud.pop_front();
 
-  // call the hook if necessary
-  if constexpr (static_config::enable_hooks) {
-
-    // mark that we have scheduled this command
-    _command_scheduled_hook(tmp->id);
-  }
-
   // return it
   return std::move(tmp);
 }
@@ -265,13 +232,6 @@ bbts::command_ptr_t bbts::reservation_station_t::get_next_reduce_command() {
   // pop the unique pointer of the vector
   auto tmp = std::move(_execute_reduce.front());
   _execute_reduce.pop_front();
-
-  // call the hook if necessary
-  if constexpr (static_config::enable_hooks) {
-
-    // mark that we have scheduled this command
-    _command_scheduled_hook(tmp->id);
-  }
 
   // return it
   return std::move(tmp);

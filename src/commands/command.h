@@ -28,9 +28,9 @@ struct command_t {
 
     APPLY = 0,
     REDUCE = 1,
-    MOVE = 2,
-    DELETE = 3,
-    SHUTDOWN = 4 // special command to shutdown the server
+    MOVE = 3,
+    DELETE = 4,
+    SHUTDOWN = 5 // special command to shutdown the server
   };
 
   // specifies exactly what tensor on which node we refer to
@@ -122,19 +122,15 @@ struct command_t {
   }
 
   // is this a local reduce operator
-  [[nodiscard]] bool is_local_reduce(node_id_t _node_id) const {
+  [[nodiscard]] bool is_partial_reduce() const {
 
     // make sure it is actually a reduce
     if(type != op_type_t::REDUCE) {
       return false;
     }
 
-    // check if the output and all inputs are on the same node
-    auto nodes = get_nodes();
-    for(int32_t idx = 0; idx < nodes.size(); idx++) {
-      if(nodes[idx] != _node_id) { return false; }
-    }
-    return true;
+    // check if the output is anonymoyus
+    return get_output(0).tid < 0;
   }
 
   // is remote reduce
@@ -146,7 +142,7 @@ struct command_t {
     }
 
     // if it is not local it is remote
-    return !is_local_reduce(_node_id);
+    return !is_partial_reduce();
   }
 
   // check if command uses a particular node

@@ -34,6 +34,10 @@ class reservation_station_t {
   // notify the reservation station that the tensor on an another node became available
   void notify_available_tensors(node_id_t node, const std::vector<tid_t> &tensors);
 
+  // notifies the reservation station that reduce commands of another node have completed the local reduce operations
+  // therefore this node should be able to kick off the remote reduce in case all nodes are ready
+  void notify_ready_reduce(node_id_t node, const std::vector<command_id_t> &tensors);
+
   // get the next command, you must use the result of this command as it is a unique ptr
   [[nodiscard]] command_ptr_t get_next_move_command();
   [[nodiscard]] command_ptr_t get_next_apply_command();
@@ -63,18 +67,6 @@ class reservation_station_t {
 
   // stop executing all the commands
   void stop_executing();
-
-  // add the hook that is triggered on scheduling
-  template<class fn>
-  void add_queued_hook(fn fun){ _command_queued_hook = fun; }
-
-  // add the hook
-  template<class fn>
-  void add_scheduled_hook(fn fun) { _command_scheduled_hook = fun; }
-
-  // add the retired hook
-  template<class fn>
-  void add_retired_hook(fn fun){ _command_retired_hook = fun; }
 
  private:
 
@@ -174,15 +166,6 @@ class reservation_station_t {
 
   // the tensors we want to delete from storage
   std::vector<tid_t> _to_delete;
-
-  // called when a command is retired on this node
-  std::function<void(command_id_t id)> _command_retired_hook;
-
-  // called when a command is scheduled on this node
-  std::function<void(command_id_t id)> _command_scheduled_hook;
-
-  // called when a command is scheduled on this node
-  std::function<void(command_id_t id)> _command_queued_hook;
 
 };
 

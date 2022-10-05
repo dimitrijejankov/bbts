@@ -2,7 +2,7 @@
 #include "../operations/move_op.h"
 #include "../operations/reduce_op.h"
 #include "../operations/broadcast_op.h"
-#include "../operations/local_reduce_op.h"
+#include "../operations/partial_reduce_op.h"
 #include <cassert>
 #include <thread>
 
@@ -193,7 +193,7 @@ void bbts::command_runner_t::local_reduce_command_runner() {
     }
 
     // check if the reduce is remote or local
-    if (cmd->is_local_reduce(_comm->get_rank())) {
+    if (cmd->is_partial_reduce()) {
 
       // return me that matcher for matrix addition
       auto ud = _udm->get_fn_impl(cmd->fun_id);
@@ -212,13 +212,12 @@ void bbts::command_runner_t::local_reduce_command_runner() {
 
       // create the reduce op
       ud_impl_t::tensor_params_t _params = { ._params = cmd->get_parameters() };
-      local_reduce_op_t op(*_tf, *_ts, inputs, _params,
-                            cmd->get_output(0).tid, *ud);
+      partial_reduce_op_t op(*_tf, *_ts, cmd_inputs[0].tid, cmd_inputs[1].tid, cmd->get_output(0).tid, _params, *ud);
 
       // do the apply
       op.apply();
 
-      _logger->message("LOCAL_REDUCE " + std::to_string(cmd->id) + " on node " + std::to_string(_comm->get_rank()) + '\n');
+      _logger->message("PARTIAL_REDUCE " + std::to_string(cmd->id) + " on node " + std::to_string(_comm->get_rank()) + '\n');
 
       // retire the command so it knows that we have processed the tensors
       _rs->retire_command(std::move(cmd));

@@ -254,7 +254,7 @@ std::tuple<std::thread, std::thread, std::thread> create_command_processing_thre
       }
 
       // check if the reduce is remote or local
-      if (cmd->is_local_reduce(node)) {
+      if (cmd->is_partial_reduce(node)) {
 
         // std::cout << "LOCAL_REDUCE " << cmd->id << " on node " << node <<
         // '\n' << std::flush;
