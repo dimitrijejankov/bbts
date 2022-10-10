@@ -15,7 +15,7 @@
 #include "../commands/command.h"
 #include "../commands/reservation_station.h"
 #include "../commands/command_runner.h"
-#include "../commands/tensor_notifier.h"
+#include "../commands/reduce_notifier.h"
 #include "../ud_functions/gpu_scheduler.h"
 #include "../tensor/tensor_factory.h"
 #include "../ud_functions/udf_manager.h"
@@ -35,7 +35,7 @@ public:
                 bbts::logger_ptr_t _logger,
                 storage_ptr_t _storage,
                 bbts::command_runner_ptr_t _command_runner,
-                bbts::tensor_notifier_ptr_t _tensor_notifier,
+                bbts::reduce_notifier_ptr_t _reduce_notifier,
                 bbts::udf_manager_ptr _udf_manager,
                 bbts::tensor_factory_ptr_t _tf);
 
@@ -122,7 +122,7 @@ private:
     }
 
     // shutdown the tensor notifier
-    _tensor_notifier->shutdown();
+    _reduce_notifier->shutdown();
 
     // mark that the coordinator is down
     _is_down = true;
@@ -172,7 +172,7 @@ private:
   bbts::command_runner_ptr_t _command_runner;
 
   // the notifier
-  bbts::tensor_notifier_ptr_t _tensor_notifier;
+  bbts::reduce_notifier_ptr_t _reduce_notifier;
 
   // tensor factory
   bbts::tensor_factory_ptr_t _tf;

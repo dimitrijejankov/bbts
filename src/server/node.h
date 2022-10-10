@@ -12,7 +12,7 @@
 #include "coordinator.h"
 #include "../ud_functions/udf_manager.h"
 #include "../commands/command_runner.h"
-#include "../commands/tensor_notifier.h"
+#include "../commands/reduce_notifier.h"
 #include "../commands/parsed_command.h"
 #include "../ud_functions/gpu_scheduler.h"
 
@@ -98,16 +98,7 @@ public:
   void add_hook(fn fun) {
 
     // add the relevant hooks
-    if constexpr (event == event_t::COMMAND_QUEUED) {
-      _res_station->add_queued_hook(fun);
-    }
-    else if constexpr (event == event_t::COMMAND_SCHEDULED) {
-      _res_station->add_scheduled_hook(fun);
-    }
-    else if constexpr(event == event_t::COMMAND_RETIRED) {
-      _res_station->add_retired_hook(fun);
-    }
-    else if constexpr (event == event_t::TENSOR_CREATED) {
+    if constexpr (event == event_t::TENSOR_CREATED) {
       _storage->add_created_hook(fun);
     }
     else if constexpr (event == event_t::TENSOR_DELETED) {
@@ -128,7 +119,7 @@ public:
 
   std::thread remote_tensor_notification_sender(node_id_t out_node);
 
-  std::thread tensor_notifier();
+  std::thread reduce_notifier();
 
   std::thread create_coordinator_thread();
 
@@ -160,7 +151,7 @@ public:
   command_runner_ptr_t _command_runner;
 
   // the notifier
-  tensor_notifier_ptr_t _tensor_notifier;
+  reduce_notifier_ptr_t _reduce_notifier;
 
   // the gpu scheduler
   gpu_scheduler_ptr_t _gpu_scheduler;

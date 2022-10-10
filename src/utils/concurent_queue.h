@@ -42,6 +42,11 @@ class concurent_queue {
     _cv.notify_all();
   }
 
+  inline void clear() {
+    std::unique_lock<std::mutex> lk(_m);
+    _internal_queue = {};
+  }
+
   inline bool wait_dequeue(T &item) {
 
     // wait until we have something in the queue

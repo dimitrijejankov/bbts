@@ -88,7 +88,7 @@ void bbts::command_runner_t::local_apply_command_runner() {
   while (true) {
 
     // get the command
-    auto cmd = _rs->get_next_apply_command();
+    auto cmd = _rs->get_next_kernel_command();
     if (cmd == nullptr) {
       break;
     }
@@ -187,7 +187,7 @@ void bbts::command_runner_t::local_reduce_command_runner() {
   while (true) {
 
     // get the command
-    auto cmd = _rs->get_next_reduce_command();
+    auto cmd = _rs->get_distributed_reduce_command();
     if (cmd == nullptr) {
       break;
     }

@@ -126,7 +126,7 @@ std::thread remote_tensor_notification_sender(
           // get tensors to notify the other node
           bool is_done;
           auto tensors =
-              rss[my_node]->tensors_to_notify_node(out_node, is_done);
+              rss[my_node]->reduce_to_notify_node(out_node, is_done);
 
           // if it is node break out
           if (is_done) {
@@ -160,7 +160,7 @@ std::thread tensor_notifier(
       }
 
       // notify that the tensors became available
-      rss[my_node]->notify_available_tensors(tensors.second, tensors.first);
+      rss[my_node]->notify_ready_reduce(tensors.second, tensors.first);
     }
   });
 
@@ -215,7 +215,7 @@ std::tuple<std::thread, std::thread, std::thread> create_command_processing_thre
     while (true) {
 
       // get the command
-      auto cmd = rss[node]->get_next_apply_command();
+      auto cmd = rss[node]->get_next_kernel_command();
       if (cmd == nullptr) {
         break;
       }
@@ -248,13 +248,13 @@ std::tuple<std::thread, std::thread, std::thread> create_command_processing_thre
     while (true) {
 
       // get the command
-      auto cmd = rss[node]->get_next_reduce_command();
+      auto cmd = rss[node]->get_distributed_reduce_command();
       if (cmd == nullptr) {
         break;
       }
 
       // check if the reduce is remote or local
-      if (cmd->is_partial_reduce(node)) {
+      if (cmd->is_partial_reduce()) {
 
         // std::cout << "LOCAL_REDUCE " << cmd->id << " on node " << node <<
         // '\n' << std::flush;
@@ -395,14 +395,14 @@ TEST(TestReservationStation, FewLocalCommands1) {
   rs->execute_scheduled_async();
 
   // get the first command to execute
-  auto c1 = rs->get_next_apply_command();
+  auto c1 = rs->get_next_kernel_command();
 
   // retire the command as we pretend we have executed it
   storage.insert(2);
   EXPECT_TRUE(rs->retire_command(std::move(c1)));
 
   // get the next command
-  auto c2 = rs->get_next_reduce_command();
+  auto c2 = rs->get_distributed_reduce_command();
   storage.insert(3);
   EXPECT_TRUE(rs->retire_command(std::move(c2)));
 
@@ -459,14 +459,14 @@ TEST(TestReservationStation, FewLocalCommands2) {
   rs->execute_scheduled_async();
 
   // get the first command to execute
-  auto c1 = rs->get_next_apply_command();
+  auto c1 = rs->get_next_kernel_command();
 
   // retire the command as we pretend we have executed it
   storage.insert(2);
   EXPECT_TRUE(rs->retire_command(std::move(c1)));
 
   // get the next command
-  auto c2 = rs->get_next_reduce_command();
+  auto c2 = rs->get_distributed_reduce_command();
   storage.insert(3);
   EXPECT_TRUE(rs->retire_command(std::move(c2)));
 

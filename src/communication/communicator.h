@@ -29,7 +29,7 @@ const com_tags SEND_CMD_TAG = 1;
 const com_tags SHUTDOWN_TAG = 2;
 const com_tags COORDINATOR_TAG = 3;
 const com_tags COORDINATOR_BCAST_CMD_TAG = 4;
-const com_tags NOTIFY_TENSOR_TAG = 5;
+const com_tags NOTIFY_REDUCE_TAG = 5;
 const com_tags RESPONSE_STRING_TAG = 6;
 const com_tags COORDINATOR_BCAST_BYTES = 7;
 const com_tags TENSOR_META_TAG_SIZE = 8;
@@ -94,7 +94,7 @@ public:
   bool tensors_created_notification(node_id_t out_node, const std::vector<bbts::tid_t> &tensor);
 
   // wait to receive a notification
-  std::tuple<node_id_t, std::vector<bbts::tid_t>> receive_tensor_created_notification();
+  std::tuple<node_id_t, std::vector<bbts::tid_t>> receive_reduce_finished_notification();
 
   // shutdown the notification handler
   bool shutdown_notification_handler();

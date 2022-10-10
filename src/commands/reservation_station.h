@@ -1,17 +1,92 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
+#include <queue>
 #include <unordered_map>
 #include <mutex>
 #include <condition_variable>
 #include <tuple>
 #include <memory>
 #include <deque>
+#include <utility>
+#include <vector>
 #include "command.h"
 #include "../tensor/tensor.h"
 #include "../storage/storage.h"
+#include "../utils/concurent_queue.h"
 
 namespace bbts {
+
+// reduces (and partial reduces are given priority)
+// if no reduces exist that we can run I pick an apply that is part of an reduce
+// if not I pick an apply that will go into a reduce
+// if not I pick the first apply available
+class heuristic_t {
+public:
+
+  void clear() {
+    
+    // clear all
+    applies.clear();
+    reduces.clear();
+    moves.clear();
+  }
+
+  bool queue_apply(command_ptr_t _command) {
+    applies.enqueue_copy(std::move(_command));
+    return true;
+  }
+
+  bool queue_reduce(command_ptr_t _command) {
+    reduces.enqueue_copy(std::move(_command));
+    return true;
+  }
+
+  bool queue_move(command_ptr_t _command) {
+    moves.enqueue_copy(std::move(_command));
+    return true;
+  }
+
+  bool next_apply(command_ptr_t &out) {
+
+    {
+      std::unique_lock lk(m);
+      cv.wait(lk, [&]{return is_executing;});
+    }
+    return applies.wait_dequeue(out);
+  }
+
+  bool next_reduce(command_ptr_t &out) {
+
+    {
+      std::unique_lock lk(m);
+      cv.wait(lk, [&]{return is_executing;});
+    }
+    return reduces.wait_dequeue(out);
+  }
+
+  bool next_move(command_ptr_t &out) {
+
+    {
+      std::unique_lock lk(m);
+      cv.wait(lk, [&]{return is_executing;});
+    }
+    return moves.wait_dequeue(out);
+  }
+
+  concurent_queue<command_ptr_t> applies;
+
+  concurent_queue<command_ptr_t> reduces;
+
+  concurent_queue<command_ptr_t> moves;
+
+  bool is_executing = false;
+
+  std::mutex m;
+
+  std::condition_variable cv;
+};
 
 // here we queue all the commands this node needs to execute that we need 
 // to execute in conjunction with other nodes, are kept in the external_commands_queue_t
@@ -27,21 +102,10 @@ class reservation_station_t {
   // mark that a command is processed
   bool retire_command(command_ptr_t _command);
 
-  // a list of node tensors for a node that needs to be notified that the tensors are available.
-  // We get that information by looking at the input tensors of remote commands scheduled here
-  [[nodiscard]] std::vector<tid_t> tensors_to_notify_node(node_id_t node, bool &is_done);
-
-  // notify the reservation station that the tensor on an another node became available
-  void notify_available_tensors(node_id_t node, const std::vector<tid_t> &tensors);
-
-  // notifies the reservation station that reduce commands of another node have completed the local reduce operations
-  // therefore this node should be able to kick off the remote reduce in case all nodes are ready
-  void notify_ready_reduce(node_id_t node, const std::vector<command_id_t> &tensors);
-
   // get the next command, you must use the result of this command as it is a unique ptr
   [[nodiscard]] command_ptr_t get_next_move_command();
-  [[nodiscard]] command_ptr_t get_next_apply_command();
-  [[nodiscard]] command_ptr_t get_next_reduce_command();
+  [[nodiscard]] command_ptr_t get_next_kernel_command();
+  [[nodiscard]] command_ptr_t get_distributed_reduce_command();
 
   // register the tensor that was added externally,
   // that is it was not created through the execution of a command
@@ -68,25 +132,30 @@ class reservation_station_t {
   // stop executing all the commands
   void stop_executing();
 
+  // notifies the reservation station that reduce commands of another node have completed
+  // this node should then be able to kick off the remote reduce in case all nodes are ready
+  void notify_ready_reduce(node_id_t node, const std::vector<command_id_t> &tensors);
+
+  // get the reduces that finished
+  [[nodiscard]] std::vector<tid_t> reduce_to_notify_node(node_id_t node, bool &is_done);
+
  private:
 
-  // queue a remote command
-  bool _queue_remote(command_ptr_t _command);
+  bool _retire_remove(command_ptr_t _command);
 
-  // queue a local command
-  bool _queue_local(command_ptr_t _command);
+  bool _retire_apply(command_ptr_t _command);
 
-  // retire the local command
-  bool _retire_command(command_ptr_t _command);
+  bool _retire_reduce(command_ptr_t _command);
 
-  // retire remote the command
-  bool _retire_remote_command(command_ptr_t _command);
+  bool _queue_delete_command(command_ptr_t _command);
 
-  // schedule the command for execution
-  void _schedule_for_execution(command_ptr_t _cmd);
+  bool _queue_reduce_command(command_ptr_t _command);
 
-  // remove the tensor
-  void _remove_tensor(tid_t _tid);
+  bool _queue_apply_command(command_ptr_t _command);
+
+  bool _queue_move_command(command_ptr_t _command);
+
+  void _remove_tensor(tid_t in);
 
   // the state of the tensor
   struct internal_tensor_state_t {
@@ -104,69 +173,76 @@ class reservation_station_t {
     bool scheduled_for_delition = false;
   };
 
+  struct internal_reduce_state_t {
+
+    // the inputs that need to be created here that the reduce is waiting for...
+    std::vector<tid_t> missing_inputs;
+
+    // the currently available inputs
+    std::vector<tid_t> available_inputs;
+
+    // we keep track of what nodes have finished all the local reduces they could they notify 
+    // this node once they are done, this is kept for just the node that initiates the reduce
+    std::vector<node_id_t> waiting_for_nodes;
+    std::vector<node_id_t> done_nodes;
+
+    tid_t out;
+  };
+
   // the mutex
   std::mutex _m;
 
   // we use this to wait for commands
   std::condition_variable _cv;
 
-  // is executing
-  bool _is_executing = false;
-
   // the number of local commands to retire
-  size_t _num_local_to_retire = 0;
-  size_t _num_remote_to_retire = 0;
-  size_t _num_to_delete = 0;
+  size_t _left_local_to_retire = 0;
+  size_t _left_reduce_to_retire = 0;
+  size_t _left_to_delete = 0;
 
   // a conditional variable that keeps track of how many local commands are left
-  std::condition_variable _retire_cv;
+  // it is signalled if we are done with all things this node needs to do
+  std::condition_variable _done_cv;
 
   // is the node still running
   bool _shutdown = false;
 
-  // the node for which this reservation station is for
-  node_id_t _my_rank;
+  // is executing
+  bool _is_executing = false;
 
-  // the number of nodes in the cluster
-  int32_t _num_nodes;
+  // the rank 
+  node_id_t _rank;
+
+  // the number of nodes
+  size_t _num_nodes;
 
   // the id of the last command we have executed
   command_id_t _last_cmd = -1;
 
-  // commands ready to execute
-  std::deque<command_ptr_t> _execute_ud;
-  std::deque<command_ptr_t> _execute_move;
-  std::deque<command_ptr_t> _execute_reduce;
-
-  // the local commands and the number of tensors they are waiting for
+  // the local apply and move commands and the number of tensors they are waiting for
   std::unordered_map<command_id_t, std::pair<command_ptr_t, int32_t>> _local_commands;
 
-  // the local tensors commands are waiting for
-  std::vector<std::unordered_multimap<tid_t, command_id_t>> _commands_waiting_for;
+  // reduce commands we are keeping track of
+  std::unordered_map<command_id_t, internal_reduce_state_t> reduce_commands;
 
   // keeps all the local tensors and information about them
   std::unordered_map<tid_t, internal_tensor_state_t> _tensors;
 
-  // keeps the status of all the remote tensors. If the tensor is present we store the command, that requested
-  // the status for it. All the commands with a lower or equal command id can be executed safely as the tensor can not
-  // be removed unless they are executed.
-  std::vector<std::unordered_set<tid_t>> _remote_tensors;
+  // the local tensors commands are waiting for
+  std::vector<std::unordered_multimap<tid_t, command_id_t>> _commands_waiting_for;
 
-  // tensors for which we need to send the status for, once they are created...
-  std::unordered_multimap<tid_t, node_id_t> _notify_on_creation;
+  // all the reduces we want to run
+  heuristic_t _heuristic;
 
-  // the status commands we need to send
-  std::vector<std::vector<tid_t>> _send_status_queue;
-
-  // we use this to wait for commands
-  std::vector<std::condition_variable> _send_status_cv;
+  // keeps track of all the reduces that have reduced to just one local value
+  // these reduces must be communicated to the node that will initiate the distributed reduce
+  std::vector<concurent_queue<command_id_t>> _notify_done_reduces;
 
   // deletion cv
   std::condition_variable _deletion_cv;
 
   // the tensors we want to delete from storage
-  std::vector<tid_t> _to_delete;
-
+  concurent_queue<tid_t> _to_delete;
 };
 
 using reservation_station_ptr_t = std::shared_ptr<reservation_station_t>;

@@ -326,7 +326,7 @@ struct command_t {
     // fill-up the nodes, broadcast goes from the input node to all the other nodes, not duplicates are allowed
     tmp->_nodes()[0] = in.node;
     for(size_t idx = 0; idx < out.size(); ++idx) {
-      tmp->_nodes()[1 + idx] = out[idx].node;
+      tmp->_nodes()[1 + idx] = out[idx].  node;
     }
 
     // fill-up the inputs

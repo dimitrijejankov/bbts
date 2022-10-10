@@ -4,7 +4,7 @@
 #include "../src/operations/move_op.h"
 #include "../src/operations/reduce_op.h"
 #include "../src/commands/reservation_station.h"
-#include "../src/commands/tensor_notifier.h"
+#include "../src/commands/reduce_notifier.h"
 #include "../src/commands/command_runner.h"
 #include "../src/server/node.h"
 #include "../src/server/static_config.h"

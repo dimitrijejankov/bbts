@@ -78,16 +78,16 @@ bool mpi_communicator_t::wait_async(mpi_communicator_t::async_request_t &_reques
 }
 
 bool mpi_communicator_t::tensors_created_notification(node_id_t out_node, const std::vector<bbts::tid_t> &tensor) {
-  return MPI_Ssend(tensor.data(), (int32_t) (tensor.size() * sizeof(bbts::tid_t)), MPI_CHAR, out_node, NOTIFY_TENSOR_TAG, MPI_COMM_WORLD) == MPI_SUCCESS;
+  return MPI_Ssend(tensor.data(), (int32_t) (tensor.size() * sizeof(bbts::tid_t)), MPI_CHAR, out_node, NOTIFY_REDUCE_TAG, MPI_COMM_WORLD) == MPI_SUCCESS;
 }
 
-std::tuple<node_id_t, std::vector<bbts::tid_t>> mpi_communicator_t::receive_tensor_created_notification() {
+std::tuple<node_id_t, std::vector<bbts::tid_t>> mpi_communicator_t::receive_reduce_finished_notification() {
 
   // wait for a request
   sync_request_t _req; int32_t flag = false;
   int32_t mpi_errno;
   while (!flag) {
-    mpi_errno = MPI_Improbe(ANY_NODE, NOTIFY_TENSOR_TAG, MPI_COMM_WORLD, &flag, &_req.message, &_req.status);
+    mpi_errno = MPI_Improbe(ANY_NODE, NOTIFY_REDUCE_TAG, MPI_COMM_WORLD, &flag, &_req.message, &_req.status);
     usleep(100);
   }
 
@@ -113,7 +113,7 @@ bool mpi_communicator_t::shutdown_notification_handler() {
   // just a tensor with a tid -1
   std::vector<bbts::tid_t> tensor = { -1 };
   return MPI_Ssend(tensor.data(), (int32_t) (tensor.size() * sizeof(bbts::tid_t)), MPI_CHAR,
-                   get_rank(), NOTIFY_TENSOR_TAG, MPI_COMM_WORLD) == MPI_SUCCESS;
+                   get_rank(), NOTIFY_REDUCE_TAG, MPI_COMM_WORLD) == MPI_SUCCESS;
 }
 
 mpi_communicator_t::async_request_t mpi_communicator_t::send_async(const void *_bytes, size_t num_bytes, node_id_t _node, com_tags _tag) {

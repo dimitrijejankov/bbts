@@ -17,7 +17,7 @@ bbts::coordinator_t::coordinator_t(bbts::communicator_ptr_t _comm,
                                    bbts::logger_ptr_t _logger,
                                    storage_ptr_t _storage,
                                    bbts::command_runner_ptr_t _command_runner,
-                                   bbts::tensor_notifier_ptr_t _tensor_notifier,
+                                   bbts::reduce_notifier_ptr_t _reduce_notifier,
                                    bbts::udf_manager_ptr _udf_manager,
                                    bbts::tensor_factory_ptr_t _tf)
 
@@ -27,7 +27,7 @@ bbts::coordinator_t::coordinator_t(bbts::communicator_ptr_t _comm,
       _logger(std::move(_logger)),
       _storage(std::move(_storage)),
       _command_runner(std::move(_command_runner)),
-      _tensor_notifier(std::move(_tensor_notifier)),
+      _reduce_notifier(std::move(_reduce_notifier)),
       _udf_manager(std::move(_udf_manager)),
       _tf(std::move(_tf)) { _is_down = false; }
 

@@ -47,11 +47,11 @@ void bbts::node_t::init() {
                                                              _res_station, _comm, _logger);
 
   // the tensor notifier
-  _tensor_notifier = std::make_shared<bbts::tensor_notifier_t>(_comm, _res_station);
+  _reduce_notifier = std::make_shared<bbts::reduce_notifier_t>(_comm, _res_station);
 
   // the scheduler
   _coordinator = std::make_shared<coordinator_t>(_comm, _gpu_scheduler, _res_station, _logger,
-                                                 _storage, _command_runner, _tensor_notifier, _udf_manager, _factory);
+                                                 _storage, _command_runner, _reduce_notifier, _udf_manager, _factory);
 }
 
 
@@ -75,7 +75,7 @@ void bbts::node_t::run() {
   auto storage_req_threads = create_storage_threads(_config->num_threads, *_storage);
 
   // this will get all the notifications about tensors
-  auto tsn_thread = tensor_notifier();
+  auto tsn_thread = reduce_notifier();
 
   // this kicks off and handles remove commands (MOVE and REDUCE)
   auto command_expect = expect_remote_command();
@@ -323,7 +323,7 @@ std::thread bbts::node_t::remote_tensor_notification_sender(bbts::node_id_t out_
   std::thread t = std::thread([out_node, this]() {
 
     // this will send notifications to out node
-    _tensor_notifier->run_notification_sender_for_node(out_node);
+    _reduce_notifier->run_notification_sender_for_node(out_node);
   });
 
   return std::move(t);
@@ -341,13 +341,13 @@ std::thread bbts::node_t::create_coordinator_thread() {
   return std::move(t);
 }
 
-std::thread bbts::node_t::tensor_notifier() {
+std::thread bbts::node_t::reduce_notifier() {
 
   // create the thread
   std::thread t = std::thread([this]() {
 
     // run the handler for the notifications
-    _tensor_notifier->run_notification_handler();
+    _reduce_notifier->run_notification_handler();
   });
 
   return std::move(t);
