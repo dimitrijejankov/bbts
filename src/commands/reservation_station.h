@@ -25,16 +25,27 @@ namespace bbts {
 class heuristic_t {
 public:
 
+  void execute() {
+    std::unique_lock lk(m);
+    is_executing = true;
+    cv.notify_all();
+  }
+
   void clear() {
     
     // clear all
-    applies.clear();
+    kernels.clear();
     reduces.clear();
     moves.clear();
   }
 
   bool queue_apply(command_ptr_t _command) {
-    applies.enqueue_copy(std::move(_command));
+    kernels.enqueue_copy(std::move(_command));
+    return true;
+  }
+
+  bool  queue_partial_reduce(command_ptr_t _command) {
+    kernels.enqueue_copy(std::move(_command));
     return true;
   }
 
@@ -54,7 +65,7 @@ public:
       std::unique_lock lk(m);
       cv.wait(lk, [&]{return is_executing;});
     }
-    return applies.wait_dequeue(out);
+    return kernels.wait_dequeue(out);
   }
 
   bool next_reduce(command_ptr_t &out) {
@@ -75,7 +86,7 @@ public:
     return moves.wait_dequeue(out);
   }
 
-  concurent_queue<command_ptr_t> applies;
+  concurent_queue<command_ptr_t> kernels;
 
   concurent_queue<command_ptr_t> reduces;
 
@@ -157,6 +168,8 @@ class reservation_station_t {
 
   void _remove_tensor(tid_t in);
 
+  void _tensor_became_available(bbts::tid_t tid);
+
   // the state of the tensor
   struct internal_tensor_state_t {
 
@@ -183,11 +196,15 @@ class reservation_station_t {
 
     // we keep track of what nodes have finished all the local reduces they could they notify 
     // this node once they are done, this is kept for just the node that initiates the reduce
-    std::vector<node_id_t> waiting_for_nodes;
-    std::vector<node_id_t> done_nodes;
+    std::vector<command_t::tid_node_id_t> waiting_for_nodes;
+    std::vector<command_t::tid_node_id_t> done_nodes;
 
-    tid_t out;
+    command_ptr_t command;
+
+    bool is_local = false;
   };
+
+  void _update_reduce(internal_reduce_state_t &reduce);
 
   // the mutex
   std::mutex _m;

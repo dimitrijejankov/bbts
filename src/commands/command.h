@@ -396,6 +396,92 @@ struct command_t {
     return std::move(tmp);
   }
 
+  static command_ptr_t create_distributed_reduce(const command_ptr_t &reduce,
+                                                 const command_t::tid_node_id_t &root_input,
+                                                 const std::vector<command_t::tid_node_id_t> &other_inputs) {
+    // create the output
+    auto tmp = allocate_command(_num_bytes(reduce->_num_parameters, reduce->_num_nodes, other_inputs.size() + 1, 1));
+
+    // set the id type and function
+    tmp->id = reduce->id;
+    tmp->type = REDUCE;
+    tmp->fun_id = reduce->fun_id;
+    tmp->nfo.is_gpu = reduce->nfo.is_gpu ;
+    tmp->_num_parameters = reduce->_num_parameters;
+    tmp->_num_inputs = other_inputs.size() + 1;
+    tmp->_num_outputs = 1;
+    tmp->_num_nodes = reduce->_num_nodes;
+
+    // setup the offsets
+    tmp->_setup_offsets();
+
+    // fill-up the parameters
+    for(size_t idx = 0; idx < reduce->_num_parameters; ++idx) {
+      tmp->_parameters()[idx] = reduce->_parameters()[idx];
+    }
+
+    // fill-up the nodes
+    for(size_t idx = 0; idx < reduce->_num_nodes; ++idx) {
+      tmp->_nodes()[idx] = reduce->_nodes()[idx];
+    }
+
+    // fill-up the inputs
+    tmp->_input_tensors()[0] = root_input;
+    for(size_t idx = 0; idx < other_inputs.size() ; ++idx) {
+      tmp->_input_tensors()[idx + 1] = other_inputs[idx];
+    }
+
+    // fill-up the outputs
+    tmp->_output_tensors()[0] = reduce->get_output(0);
+
+    // return the created pointer
+    return std::move(tmp);
+  }
+
+  static command_ptr_t create_parital_reduce(const command_ptr_t &reduce,
+                                             const std::vector<tid_t> &inputs,
+                                             const tid_t out_tid,
+                                             const node_id_t node) {
+
+
+    // create the output
+    auto tmp = allocate_command(_num_bytes(reduce->_num_parameters, reduce->_num_nodes, inputs.size(), 1));
+
+    // set the id type and function
+    tmp->id = reduce->id;
+    tmp->type = REDUCE;
+    tmp->fun_id = reduce->fun_id;
+    tmp->nfo.is_gpu = reduce->nfo.is_gpu ;
+    tmp->_num_parameters = reduce->_num_parameters;
+    tmp->_num_inputs = inputs.size();
+    tmp->_num_outputs = 1;
+    tmp->_num_nodes = reduce->_num_nodes;
+
+    // setup the offsets
+    tmp->_setup_offsets();
+
+    // fill-up the parameters
+    for(size_t idx = 0; idx < reduce->_num_parameters; ++idx) {
+      tmp->_parameters()[idx] = reduce->_parameters()[idx];
+    }
+
+    // fill-up the nodes
+    for(size_t idx = 0; idx < reduce->_num_nodes; ++idx) {
+      tmp->_nodes()[idx] = reduce->_nodes()[idx];
+    }
+
+    // fill-up the inputs
+    for(size_t idx = 0; idx < inputs.size() ; ++idx) {
+      tmp->_input_tensors()[idx] = tid_node_id_t{.tid = inputs[idx], .node = node};
+    }
+
+    // fill-up the outputs
+    tmp->_output_tensors()[0] = tid_node_id_t{.tid = out_tid, .node = node};
+
+    // return the created pointer
+    return std::move(tmp);
+  }
+
   static command_ptr_t create_delete(command_id_t id, const std::vector<tid_node_id_t> &in) {
 
     // make sure all of the inputs are on the same node
