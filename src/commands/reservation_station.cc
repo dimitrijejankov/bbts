@@ -362,7 +362,6 @@ bool bbts::reservation_station_t::_retire_reduce(command_ptr_t _command) {
     auto out = _command->get_output(0);
     if(out.node == _rank) {
 
-
       // get the tid
       auto tid = out.tid;
       auto &s = _tensors[tid];
@@ -537,6 +536,9 @@ void bbts::reservation_station_t::_update_reduce(internal_reduce_state_t &reduce
       
       // find the out tid
       auto out_tid = reduce.missing_inputs.empty() && reduce.is_local ? reduce.command->get_outputs()[0].tid : -1;
+      if(out_tid == -1) {
+        _left_to_delete++;
+      }
 
       // create the reduce
       auto Idx = reduce.available_inputs.size() - 1;
