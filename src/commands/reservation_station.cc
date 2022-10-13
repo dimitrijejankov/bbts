@@ -97,9 +97,6 @@ void bbts::reservation_station_t::register_tensor(tid_t _tid) {
 
 bbts::tid_t bbts::reservation_station_t::get_to_remove() {
 
-  // lock here
-  std::unique_lock<std::mutex> lk(_m);
-
   // wait until we have something to do
   // if the queue is shutdown just return -1
   tid_t t;
@@ -175,6 +172,7 @@ void bbts::reservation_station_t::stop_executing() {
 
   // update the flag
   std::unique_lock<std::mutex> lk(_m);
+  _heuristic.stop_executing();
   _is_executing = false;
   _last_cmd = -1;
 }

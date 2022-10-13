@@ -87,9 +87,6 @@ public:
   // apply this operation
   void apply();
 
-  // apply the pre-aggregation
-  bbts::tid_t apply_preagg();
-
   // make empty input arguments
   bbts::tensor_meta_t _out_meta{};
   bbts::ud_impl_t::tensor_args_t _input_tensors;

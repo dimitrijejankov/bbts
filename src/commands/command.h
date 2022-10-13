@@ -126,30 +126,6 @@ struct command_t {
     return {-1, -1};
   }
 
-  // is this a local reduce operator
-  [[nodiscard]] bool is_partial_reduce() const {
-
-    // make sure it is actually a reduce
-    if(type != op_type_t::REDUCE) {
-      return false;
-    }
-
-    // check if the output is anonymoyus
-    return get_output(0).tid < 0;
-  }
-
-  // is remote reduce
-  [[nodiscard]] bool is_remote_reduce(node_id_t _node_id) const {
-
-    // make sure it is actually a reduce
-    if(type != op_type_t::REDUCE) {
-      return false;
-    }
-
-    // if it is not local it is remote
-    return !is_partial_reduce();
-  }
-
   // check if command uses a particular node
   [[nodiscard]] bool uses_node(node_id_t target_node) const {
 

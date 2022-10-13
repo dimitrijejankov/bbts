@@ -301,7 +301,7 @@ std::thread bbts::node_t::create_reduce_processing_thread() {
   // create the thread to pull
   std::thread t = std::thread([this]() {
 
-    _command_runner->local_reduce_command_runner();
+    _command_runner->distributed_reduce_command_runner();
   });
 
   return std::move(t);

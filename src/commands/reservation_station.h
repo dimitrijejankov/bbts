@@ -31,6 +31,11 @@ public:
     cv.notify_all();
   }
 
+  void stop_executing() {
+    std::unique_lock lk(m);
+    is_executing = false;
+  }
+
   void clear() {
     
     // clear all
