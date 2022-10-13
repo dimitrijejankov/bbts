@@ -65,30 +65,30 @@ public:
   }
 
   bool next_apply(command_ptr_t &out) {
-
+    bool ret = kernels.wait_dequeue(out);
     {
       std::unique_lock lk(m);
       cv.wait(lk, [&]{return is_executing;});
     }
-    return kernels.wait_dequeue(out);
+    return ret;
   }
 
   bool next_reduce(command_ptr_t &out) {
-
+    bool ret = reduces.wait_dequeue(out);
     {
       std::unique_lock lk(m);
       cv.wait(lk, [&]{return is_executing;});
     }
-    return reduces.wait_dequeue(out);
+    return ret;
   }
 
   bool next_move(command_ptr_t &out) {
-
+    bool ret = moves.wait_dequeue(out);
     {
       std::unique_lock lk(m);
       cv.wait(lk, [&]{return is_executing;});
     }
-    return moves.wait_dequeue(out);
+    return ret;
   }
 
   concurent_queue<command_ptr_t> kernels;

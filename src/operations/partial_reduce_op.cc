@@ -47,8 +47,11 @@ void bbts::partial_reduce_op_t::apply() {
     output_size = _factory.get_tensor_size(_output_meta.get<0>());
   });
 
+  // figure out if this is the an intermediate reduce
+  auto to_create = _out_tid < 0 ? TID_NONE : _out_tid;
+
   // perform the actual kernel
-  _storage.local_transaction({_lhs, _rhs}, {{TID_NONE, output_size}}, [&](const storage_t::reservation_result_t &res) {
+  _storage.local_transaction({_lhs, _rhs}, {{to_create, output_size}}, [&](const storage_t::reservation_result_t &res) {
   
     // init the output tensor
     auto &out = res.create[0].get().tensor;
