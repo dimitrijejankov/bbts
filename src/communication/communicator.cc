@@ -93,7 +93,7 @@ std::tuple<node_id_t, std::vector<bbts::command_t::command_tid_id_t>> mpi_commun
 
   // check for errors
   if(mpi_errno != MPI_SUCCESS) {
-    return {-1, {} };
+    return {-1, {{-1, -1}} };
   }
 
   // get the size  and set the tag for the request
@@ -102,7 +102,7 @@ std::tuple<node_id_t, std::vector<bbts::command_t::command_tid_id_t>> mpi_commun
   // allocate the memory and receive the command
   std::vector<bbts::command_t::command_tid_id_t> p(_req.num_bytes / sizeof(bbts::command_t::command_tid_id_t));
   if(MPI_Mrecv (p.data(), _req.num_bytes, MPI_CHAR, &_req.message, &_req.status) != MPI_SUCCESS) {
-    return {-1, {}};;
+    return {-1, {{-1, -1}}};
   }
 
   return { _req.status.MPI_SOURCE, std::move(p) };

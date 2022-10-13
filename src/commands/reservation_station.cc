@@ -205,7 +205,7 @@ void bbts::reservation_station_t::notify_ready_reduce(node_id_t node, const std:
 
 [[nodiscard]] std::vector<bbts::command_t::command_tid_id_t> bbts::reservation_station_t::reduce_to_notify_node(node_id_t node, bool &is_done) {
   std::vector<bbts::command_t::command_tid_id_t> reduces;
-  is_done = _notify_done_reduces[node].wait_dequeue_all(reduces);
+  is_done = !_notify_done_reduces[node].wait_dequeue_all(reduces);
   return std::move(reduces);
 }
 
