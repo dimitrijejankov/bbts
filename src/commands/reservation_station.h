@@ -145,10 +145,10 @@ class reservation_station_t {
 
   // notifies the reservation station that reduce commands of another node have completed
   // this node should then be able to kick off the remote reduce in case all nodes are ready
-  void notify_ready_reduce(node_id_t node, const std::vector<command_id_t> &tensors);
+  void notify_ready_reduce(node_id_t node, const std::vector<command_t::command_tid_id_t> &tensors);
 
   // get the reduces that finished
-  [[nodiscard]] std::vector<tid_t> reduce_to_notify_node(node_id_t node, bool &is_done);
+  [[nodiscard]] std::vector<command_t::command_tid_id_t> reduce_to_notify_node(node_id_t node, bool &is_done);
 
  private:
 
@@ -196,7 +196,7 @@ class reservation_station_t {
 
     // we keep track of what nodes have finished all the local reduces they could they notify 
     // this node once they are done, this is kept for just the node that initiates the reduce
-    std::vector<command_t::tid_node_id_t> waiting_for_nodes;
+    std::vector<node_id_t> waiting_for_nodes;
     std::vector<command_t::tid_node_id_t> done_nodes;
 
     command_ptr_t command;
@@ -253,7 +253,7 @@ class reservation_station_t {
 
   // keeps track of all the reduces that have reduced to just one local value
   // these reduces must be communicated to the node that will initiate the distributed reduce
-  std::vector<concurent_queue<command_id_t>> _notify_done_reduces;
+  std::vector<concurent_queue<bbts::command_t::command_tid_id_t>> _notify_done_reduces;
 
   // deletion cv
   std::condition_variable _deletion_cv;

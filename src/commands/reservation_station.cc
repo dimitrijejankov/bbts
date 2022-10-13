@@ -3,6 +3,7 @@
 #include "command.h"
 #include <algorithm>
 #include <cassert>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 
@@ -178,16 +179,33 @@ void bbts::reservation_station_t::stop_executing() {
   _last_cmd = -1;
 }
 
-void bbts::reservation_station_t::notify_ready_reduce(node_id_t node, const std::vector<command_id_t> &reduces) {
+void bbts::reservation_station_t::notify_ready_reduce(node_id_t node, const std::vector<command_t::command_tid_id_t> &reduces) {
 
   // lock the tensor
   std::unique_lock<std::mutex> lk(_m);
 
-  // go through tensors
+  for(auto &ct : reduces) {
+
+    // go through tensors
+    auto it = reduce_commands.find(ct.id);
+    assert(it != reduce_commands.end());
+
+    // remove the node as we are not waiting for it
+    const auto jt = std::find(it->second.waiting_for_nodes.begin(), it->second.waiting_for_nodes.end(), node);
+    assert(jt != it->second.waiting_for_nodes.end());
+    *jt = *it->second.waiting_for_nodes.rbegin();
+    it->second.waiting_for_nodes.pop_back();
+
+    // add it to the done nodes
+    it->second.done_nodes.push_back(command_t::tid_node_id_t{.tid = ct.tid, .node = node });
+
+    // update the reduce
+    _update_reduce(it->second);
+  }
 }
 
-[[nodiscard]] std::vector<bbts::tid_t> bbts::reservation_station_t::reduce_to_notify_node(node_id_t node, bool &is_done) {
-  std::vector<bbts::tid_t> reduces;
+[[nodiscard]] std::vector<bbts::command_t::command_tid_id_t> bbts::reservation_station_t::reduce_to_notify_node(node_id_t node, bool &is_done) {
+  std::vector<bbts::command_t::command_tid_id_t> reduces;
   is_done = _notify_done_reduces[node].wait_dequeue_all(reduces);
   return std::move(reduces);
 }
@@ -341,10 +359,10 @@ bool bbts::reservation_station_t::_retire_reduce(command_ptr_t _command) {
   }
   else {
 
-    // make sure to we update the stuff for the created tensor
-    {
-      // get the tensor required in the output
-      auto out = _command->get_output(0);
+    // get the tensor required in the output and update stuff if necessary
+    auto out = _command->get_output(0);
+    if(out.node == _rank) {
+
 
       // get the tid
       auto tid = out.tid;
@@ -488,12 +506,10 @@ bool bbts::reservation_station_t::_queue_reduce_command(command_ptr_t _command) 
       [&](const command_t::tid_node_id_t &val) {
         return val.tid == _in.tid && val.node == _in.node; });
 
-      const auto jt = std::find_if(reduce.waiting_for_nodes.begin(), reduce.waiting_for_nodes.end(), 
-      [&](const command_t::tid_node_id_t &val) {
-        return val.tid == _in.tid && val.node == _in.node; });
+      const auto jt = std::find(reduce.waiting_for_nodes.begin(), reduce.waiting_for_nodes.end(), _in.node);
 
       if(it == reduce.done_nodes.end() && jt == reduce.waiting_for_nodes.end()) {
-        reduce.waiting_for_nodes.push_back(_in);
+        reduce.waiting_for_nodes.push_back(_in.node);
       }
     }
   }
@@ -545,10 +561,12 @@ void bbts::reservation_station_t::_update_reduce(internal_reduce_state_t &reduce
       auto partial_reduce = command_t::create_distributed_reduce(reduce.command, 
                                                                  {reduce.available_inputs[0], root_node}, 
                                                                  reduce.done_nodes);
-      _heuristic.queue_reduce(std::move(reduce.command));
+      _heuristic.queue_reduce(std::move(partial_reduce));
     }
     else {
-      _notify_done_reduces[root_node].enqueue(reduce.command->id);
+
+      // 
+      _notify_done_reduces[root_node].enqueue_copy({reduce.command->id, reduce.available_inputs[0]});
     }
   }
 }

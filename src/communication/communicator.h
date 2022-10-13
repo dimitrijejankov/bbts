@@ -91,10 +91,10 @@ public:
   bool wait_async(async_request_t &_request);
 
   // notify a node that tensors were created
-  bool tensors_created_notification(node_id_t out_node, const std::vector<bbts::tid_t> &tensor);
+  bool reduce_finished_notification(node_id_t out_node, const std::vector<bbts::command_t::command_tid_id_t> &notifications);
 
   // wait to receive a notification
-  std::tuple<node_id_t, std::vector<bbts::tid_t>> receive_reduce_finished_notification();
+  std::tuple<node_id_t, std::vector<bbts::command_t::command_tid_id_t>> receive_reduce_finished_notification();
 
   // shutdown the notification handler
   bool shutdown_notification_handler();

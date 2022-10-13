@@ -39,6 +39,11 @@ struct command_t {
     node_id_t node;
   };
 
+  struct command_tid_id_t {
+    command_id_t id;
+    tid_t tid;
+  };
+
   // the list of tensors
   using tensor_id_list_t = raw_vector_t<tid_node_id_t>;
 

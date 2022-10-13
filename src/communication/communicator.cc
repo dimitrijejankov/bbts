@@ -77,11 +77,11 @@ bool mpi_communicator_t::wait_async(mpi_communicator_t::async_request_t &_reques
   return MPI_Wait(&_request.request, MPI_STATUSES_IGNORE) == MPI_SUCCESS;
 }
 
-bool mpi_communicator_t::tensors_created_notification(node_id_t out_node, const std::vector<bbts::tid_t> &tensor) {
-  return MPI_Ssend(tensor.data(), (int32_t) (tensor.size() * sizeof(bbts::tid_t)), MPI_CHAR, out_node, NOTIFY_REDUCE_TAG, MPI_COMM_WORLD) == MPI_SUCCESS;
+bool mpi_communicator_t::reduce_finished_notification(node_id_t out_node, const std::vector<bbts::command_t::command_tid_id_t> &notifications) {
+  return MPI_Ssend(notifications.data(), (int32_t) (notifications.size() * sizeof(bbts::command_t::command_tid_id_t)), MPI_CHAR, out_node, NOTIFY_REDUCE_TAG, MPI_COMM_WORLD) == MPI_SUCCESS;
 }
 
-std::tuple<node_id_t, std::vector<bbts::tid_t>> mpi_communicator_t::receive_reduce_finished_notification() {
+std::tuple<node_id_t, std::vector<bbts::command_t::command_tid_id_t>> mpi_communicator_t::receive_reduce_finished_notification() {
 
   // wait for a request
   sync_request_t _req; int32_t flag = false;
@@ -100,7 +100,7 @@ std::tuple<node_id_t, std::vector<bbts::tid_t>> mpi_communicator_t::receive_redu
   MPI_Get_count(&_req.status, MPI_CHAR, &_req.num_bytes);
 
   // allocate the memory and receive the command
-  std::vector<bbts::tid_t> p(_req.num_bytes / sizeof(bbts::tid_t));
+  std::vector<bbts::command_t::command_tid_id_t> p(_req.num_bytes / sizeof(bbts::command_t::command_tid_id_t));
   if(MPI_Mrecv (p.data(), _req.num_bytes, MPI_CHAR, &_req.message, &_req.status) != MPI_SUCCESS) {
     return {-1, {}};;
   }

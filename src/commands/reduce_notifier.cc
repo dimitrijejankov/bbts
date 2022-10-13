@@ -18,7 +18,7 @@ void bbts::reduce_notifier_t::run_notification_sender_for_node(bbts::node_id_t o
     }
 
     // add the remote commands
-    if(!_comm->tensors_created_notification(out_node, reduces)) {
+    if(!_comm->reduce_finished_notification(out_node, reduces)) {
       throw std::runtime_error("Could not set the tensor notification");
     }
   }
@@ -32,7 +32,7 @@ void bbts::reduce_notifier_t::run_notification_handler() {
     auto [node, reduces] = _comm->receive_reduce_finished_notification();
 
     // check if we are done...
-    if (reduces[0] == -1) {
+    if (reduces[0].tid == -1) {
       break;
     }
 
