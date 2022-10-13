@@ -111,8 +111,8 @@ std::tuple<node_id_t, std::vector<bbts::command_t::command_tid_id_t>> mpi_commun
 bool mpi_communicator_t::shutdown_notification_handler() {
 
   // just a tensor with a tid -1
-  std::vector<bbts::tid_t> tensor = { -1 };
-  return MPI_Ssend(tensor.data(), (int32_t) (tensor.size() * sizeof(bbts::tid_t)), MPI_CHAR,
+  std::vector<bbts::command_t::command_tid_id_t> tensor = { {-1, -1} };
+  return MPI_Ssend(tensor.data(), (int32_t) (tensor.size() * sizeof(bbts::command_t::command_tid_id_t)), MPI_CHAR,
                    get_rank(), NOTIFY_REDUCE_TAG, MPI_COMM_WORLD) == MPI_SUCCESS;
 }
 

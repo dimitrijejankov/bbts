@@ -36,6 +36,12 @@ public:
     is_executing = false;
   }
 
+  void shutdown() {
+    kernels.shutdown();
+    reduces.shutdown();
+    moves.shutdown();
+  }
+
   void clear() {
     
     // clear all
@@ -65,30 +71,30 @@ public:
   }
 
   bool next_apply(command_ptr_t &out) {
-    bool ret = kernels.wait_dequeue(out);
-    {
-      std::unique_lock lk(m);
-      cv.wait(lk, [&]{return is_executing;});
+    if(!kernels.wait_dequeue(out)) {
+      return false;
     }
-    return ret;
+    std::unique_lock lk(m);
+    cv.wait(lk, [&]{return is_executing;});
+    return true;
   }
 
   bool next_reduce(command_ptr_t &out) {
-    bool ret = reduces.wait_dequeue(out);
-    {
-      std::unique_lock lk(m);
-      cv.wait(lk, [&]{return is_executing;});
+    if(!reduces.wait_dequeue(out)) {
+      return false;
     }
-    return ret;
+    std::unique_lock lk(m);
+    cv.wait(lk, [&]{return is_executing;});
+    return true;
   }
 
   bool next_move(command_ptr_t &out) {
-    bool ret = moves.wait_dequeue(out);
-    {
-      std::unique_lock lk(m);
-      cv.wait(lk, [&]{return is_executing;});
+    if(!moves.wait_dequeue(out)) {
+      return false;
     }
-    return ret;
+    std::unique_lock lk(m);
+    cv.wait(lk, [&]{return is_executing;});
+    return true;
   }
 
   concurent_queue<command_ptr_t> kernels;

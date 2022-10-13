@@ -126,6 +126,7 @@ void bbts::reservation_station_t::shutdown() {
   // notify that we are done
   _cv.notify_all();
   _to_delete.shutdown();
+  _heuristic.shutdown();
   for(auto &ndr : _notify_done_reduces) { ndr.shutdown(); }
 }
 
