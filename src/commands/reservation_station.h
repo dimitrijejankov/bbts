@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <queue>
@@ -51,6 +52,7 @@ public:
   }
 
   bool queue_apply(command_ptr_t _command) {
+    assert(command_t::MOVE != _command->type);
     kernels.enqueue_copy(std::move(_command));
     return true;
   }

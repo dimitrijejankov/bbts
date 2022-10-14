@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <memory>
+#include <new>
 #include <stdexcept>
 
 #ifdef ENABLE_GPU
@@ -128,6 +129,7 @@ tensor_t *memory_storage_t::_allocate_tensor(size_t num_bytes) {
   #else
     // we can not do this
     ts = (tensor_t*) malloc(num_bytes);
+    new (ts) tensor_t();
   #endif
 
   return ts;

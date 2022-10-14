@@ -730,7 +730,15 @@ void bbts::reservation_station_t::_tensor_became_available(bbts::tid_t tid) {
       if(0 == (--jt->second.second)) {
 
         // schedule the command for execution
-        _heuristic.queue_apply(std::move(jt->second.first));
+        if(jt->second.first->type == command_t::APPLY) {
+          _heuristic.queue_apply(std::move(jt->second.first));
+        }
+        else if (jt->second.first->type == command_t::MOVE) {
+          _heuristic.queue_move(std::move(jt->second.first));
+        }
+        else {
+          assert(false);
+        }
 
         // remove the command
         _local_commands.erase(jt);
