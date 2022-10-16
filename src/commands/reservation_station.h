@@ -19,7 +19,7 @@
 #include "command_handlers/command_handler_delete.h"
 #include "command_handlers/command_handler_reduce.h"
 #include "command_handlers/command_handler_move.h"
-#include "heuristic.h"
+#include "reorder_buffer.h"
 #include "../tensor/tensor.h"
 #include "../storage/storage.h"
 #include "../utils/concurent_queue.h"
