@@ -1,6 +1,6 @@
 #include "command_handler_move.h"
-#include "command.h"
-#include "reservation_station.h"
+#include "../command.h"
+#include "../reservation_station.h"
 
 namespace bbts {
 

@@ -118,7 +118,7 @@ include_directories(${MKL_INCLUDE})
 include_directories(third-party)
 
 # the commands
-file(GLOB COMMANDS_SOURCE "src/commands/*.cc")
+file(GLOB COMMANDS_SOURCE "src/commands/*.cc" "src/commands/command_handlers/*.cc")
 add_library(commands OBJECT ${COMMANDS_SOURCE})
 
 # the operations

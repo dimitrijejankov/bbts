@@ -2,10 +2,10 @@
 #include "../server/static_config.h"
 #include "command.h"
 #include "command_handler.h"
-#include "command_handler_apply.h"
-#include "command_handler_delete.h"
-#include "command_handler_move.h"
-#include "command_handler_reduce.h"
+#include "command_handlers/command_handler_apply.h"
+#include "command_handlers/command_handler_delete.h"
+#include "command_handlers/command_handler_move.h"
+#include "command_handlers/command_handler_reduce.h"
 #include <algorithm>
 #include <cassert>
 #include <memory>

@@ -1,5 +1,5 @@
 #include "command_handler_delete.h"
-#include "reservation_station.h"
+#include "../reservation_station.h"
 #include <cassert>
 
 namespace bbts {
