@@ -9,8 +9,7 @@
 
 bbts::reservation_station_t::reservation_station_t(bbts::node_id_t _node_id, int32_t num_nodes) : _rank(_node_id),
                                                                                                   _num_nodes(num_nodes),
-                                                                                                  _notify_done_reduces(num_nodes),
-                                                                                                  _commands_waiting_for(num_nodes) {}
+                                                                                                  _notify_done_reduces(num_nodes) {}
 
 bool bbts::reservation_station_t::queue_command(command_ptr_t _command) {
 
@@ -44,6 +43,9 @@ bool bbts::reservation_station_t::retire_command(command_ptr_t _command) {
   // handle the apply
   else if (_command->type == command_t::op_type_t::APPLY) {
     return _retire_apply(std::move(_command));
+  }
+  else if(_command->type == command_t::op_type_t::MOVE) {
+    return _retire_move(std::move(_command));
   }
   // handle the reduce
   else {
@@ -138,9 +140,7 @@ void bbts::reservation_station_t::clear() {
   _heuristic.clear();
   _local_commands.clear();
 
-  for(auto &ls : _commands_waiting_for) {
-    ls.clear();
-  }
+  _commands_waiting_for.clear();
   _tensors.clear();
 
   _heuristic.clear();
@@ -296,6 +296,79 @@ bool bbts::reservation_station_t::_retire_apply(command_ptr_t _command) {
   _left_local_to_retire--;
   if(_left_to_delete == 0 && _left_local_to_retire == 0 && _left_reduce_to_retire == 0) {
     _done_cv.notify_all();
+  }
+
+  return true;
+}
+
+bool bbts::reservation_station_t::_retire_move(command_ptr_t _command) {
+
+  // initiator node
+  if(_command->get_root_node() == _rank) {
+
+    // get the tensor required in the input
+    auto in = _command->get_input(0);
+
+    // get the tid
+    auto tid = in.tid;
+    auto &s = _tensors[tid];
+
+    // decrement the number of readers
+    s.num_to_read--;
+    assert(s.num_to_read >= 0);
+
+    // if there are no command that is writing to this tensor
+    // reading this tensor and the tensor is scheduled for deletion, delete it here
+    if (s.num_to_read == 0 && !s.writing_tensor && s.scheduled_for_delition) {
+
+      // remove the tensor immediately
+      _remove_tensor(in.tid);
+    }
+
+    // remove the command
+    _local_commands.erase(_command->id);
+
+    // we have one less to retire
+    _left_local_to_retire--;
+    if(_left_to_delete == 0 && _left_local_to_retire == 0 && _left_reduce_to_retire == 0) {
+      _done_cv.notify_all();
+    }
+  }
+  // target node
+  else {
+
+    // make sure to go through the created tensors
+    for(int32_t i = 0; i < _command->get_num_outputs(); i++) {
+
+      // get the tensor required in the output
+      auto out = _command->get_output(i);
+
+      // if this tensor is not on our node we don't do anything
+      if(out.node != _rank) {
+        continue;
+      }
+
+      // get the tid
+      auto tid = out.tid;
+      auto &s = _tensors[tid];
+
+      // make sure that it was not created before
+      assert(!s.is_created);
+
+      // we are done writing to the tensor and
+      s.is_created = true;
+      s.writing_tensor = false;
+
+      // remove the tensor if it is not needed
+      if (s.num_to_read == 0 && s.scheduled_for_delition) {
+
+        // remove the tensor immediately
+        _remove_tensor(out.tid);
+      }
+
+      // go through the commands that are waiting
+      _tensor_became_available(out.tid);
+    }
   }
 
   return true;
@@ -485,7 +558,7 @@ bool bbts::reservation_station_t::_queue_reduce_command(command_ptr_t _command) 
       if(!s.is_created) {
 
         // mark that this command is waiting
-        _commands_waiting_for[_rank].insert({_in.tid, _command->id});
+        _commands_waiting_for.insert({_in.tid, _command->id});
         reduce.missing_inputs.push_back(_in.tid);
       }
       else {
@@ -513,7 +586,7 @@ bool bbts::reservation_station_t::_queue_reduce_command(command_ptr_t _command) 
   }
 
   // is this an purely local
-  reduce.is_local = reduce.waiting_for_nodes.empty() && reduce.done_nodes.empty();
+  reduce.is_local = reduce.waiting_for_nodes.empty() && reduce.done_nodes.empty() && root_node == _rank;
 
   // copy the command
   reduce.command = std::move(_command);
@@ -601,7 +674,7 @@ bool bbts::reservation_station_t::_queue_apply_command(command_ptr_t _command) {
       num_not_present++;
 
       // mark that this command is waiting
-      _commands_waiting_for[_rank].insert({_in.tid, _command->id});
+      _commands_waiting_for.insert({_in.tid, _command->id});
     }
   }
 
@@ -664,7 +737,7 @@ bool bbts::reservation_station_t::_queue_move_command(command_ptr_t _command) {
     if(!s.is_created) {
 
       // mark that this command is waiting
-      _commands_waiting_for[_rank].insert({_in.tid, _command->id});
+      _commands_waiting_for.insert({_in.tid, _command->id});
 
       // mark that 
       auto cmd_id = _command->id;
@@ -719,7 +792,7 @@ void bbts::reservation_station_t::_remove_tensor(tid_t tid) {
 void bbts::reservation_station_t::_tensor_became_available(bbts::tid_t tid) {
 
   // go through the commands that are waiting
-  auto cw = _commands_waiting_for[_rank].equal_range(tid);
+  auto cw = _commands_waiting_for.equal_range(tid);
   for (auto it = cw.first; it != cw.second;) {
 
     // try find a move or apply with that command id
@@ -762,6 +835,6 @@ void bbts::reservation_station_t::_tensor_became_available(bbts::tid_t tid) {
     }
 
     // remove the command from the waiting list
-    it = _commands_waiting_for[_rank].erase(it);
+    it = _commands_waiting_for.erase(it);
   }
 }

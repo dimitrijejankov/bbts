@@ -169,6 +169,8 @@ class reservation_station_t {
 
   bool _retire_apply(command_ptr_t _command);
 
+  bool _retire_move(command_ptr_t _command);
+
   bool _retire_reduce(command_ptr_t _command);
 
   bool _queue_delete_command(command_ptr_t _command);
@@ -259,7 +261,7 @@ class reservation_station_t {
   std::unordered_map<tid_t, internal_tensor_state_t> _tensors;
 
   // the local tensors commands are waiting for
-  std::vector<std::unordered_multimap<tid_t, command_id_t>> _commands_waiting_for;
+  std::unordered_multimap<tid_t, command_id_t> _commands_waiting_for;
 
   // all the reduces we want to run
   heuristic_t _heuristic;
