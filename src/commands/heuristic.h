@@ -8,10 +8,10 @@ namespace bbts {
 // if no reduces exist that we can run I pick an apply that is part of an reduce
 // if not I pick an apply that will go into a reduce
 // if not I pick the first apply available
-class heuristic_t {
+class reorder_buffer_t {
 public:
 
-  heuristic_t();
+  reorder_buffer_t();
 
   void execute();
 

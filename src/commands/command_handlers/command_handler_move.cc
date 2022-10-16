@@ -108,7 +108,7 @@ bool command_handler_move_t::schedule_command(command_ptr_t _command) {
     else {
 
       // schedule the move
-      _rs->_heuristic->queue(std::move(_command));
+      _rs->_reorder_buffer->queue(std::move(_command));
     }
 
     // we have more local command that we need to retire
@@ -152,7 +152,7 @@ void bbts::command_handler_move_t::tensor_available(command_id_t command_id, tid
     if(0 == (--jt->second.second)) {
 
       // schedule the command for execution
-      _rs->_heuristic->queue(std::move(jt->second.first));
+      _rs->_reorder_buffer->queue(std::move(jt->second.first));
 
       // remove the command
       _local_commands.erase(jt);

@@ -135,8 +135,8 @@ class reservation_station_t {
   // the local tensors commands are waiting fors
   std::unordered_multimap<tid_t, std::tuple<command_id_t, command_t::op_type_t>> _commands_waiting_for;
 
-  // all the reduces we want to run
-  std::shared_ptr<bbts::heuristic_t> _heuristic;
+  // reorder buffer
+  std::shared_ptr<bbts::reorder_buffer_t> _reorder_buffer;
 
   // keeps track of all the reduces that have reduced to just one local value
   // these reduces must be communicated to the node that will initiate the distributed reduce

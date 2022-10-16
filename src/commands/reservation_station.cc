@@ -15,7 +15,7 @@
 
 bbts::reservation_station_t::reservation_station_t(bbts::node_id_t _node_id, int32_t num_nodes) : _rank(_node_id),
                                                                                                   _notify_done_reduces(num_nodes),
-                                                                                                  _heuristic(std::make_shared<bbts::heuristic_t>()) {
+                                                                                                  _reorder_buffer(std::make_shared<bbts::reorder_buffer_t>()) {
 
   _handlers[command_t::op_type_t::APPLY] = std::static_pointer_cast<command_handler_t>(std::make_shared<command_handler_apply_t>(this));
   _handlers[command_t::op_type_t::MOVE] = std::static_pointer_cast<command_handler_t>(std::make_shared<command_handler_move_t>(this));
@@ -53,7 +53,7 @@ bool bbts::reservation_station_t::retire_delete(bbts::tid_t id) {
 bbts::command_ptr_t bbts::reservation_station_t::get_next_command(command_t::op_type_t op_type) {
   
   command_ptr_t out;
-  if(!_heuristic->get_next(op_type, out)) {
+  if(!_reorder_buffer->get_next(op_type, out)) {
     return nullptr;
   }
   return std::move(out);
@@ -97,7 +97,7 @@ void bbts::reservation_station_t::shutdown() {
   // notify that we are done
   _cv.notify_all();
   _to_delete.shutdown();
-  _heuristic->shutdown();
+  _reorder_buffer->shutdown();
   for(auto &ndr : _notify_done_reduces) { ndr.shutdown(); }
 }
 
@@ -105,7 +105,7 @@ void bbts::reservation_station_t::clear() {
 
   std::unique_lock<std::mutex> lk(_m);
 
-  _heuristic->clear();
+  _reorder_buffer->clear();
   _commands_waiting_for.clear();
   _tensors.clear();
 
@@ -139,7 +139,7 @@ void bbts::reservation_station_t::execute_scheduled_async() {
 
   // kick off everything
   std::unique_lock<std::mutex> lk(_m);
-  _heuristic->execute();
+  _reorder_buffer->execute();
   _is_executing = true;
   _cv.notify_all();
 }
@@ -148,7 +148,7 @@ void bbts::reservation_station_t::stop_executing() {
 
   // update the flag
   std::unique_lock<std::mutex> lk(_m);
-  _heuristic->stop_executing();
+  _reorder_buffer->stop_executing();
   _is_executing = false;
 }
 

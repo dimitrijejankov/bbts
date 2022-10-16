@@ -2,20 +2,20 @@
 #include "command.h"
 #include <cassert>
 
-bbts::heuristic_t::heuristic_t() {}
+bbts::reorder_buffer_t::reorder_buffer_t() {}
 
-void bbts::heuristic_t::execute() {
+void bbts::reorder_buffer_t::execute() {
   std::unique_lock lk(m);
   is_executing = true;
   cv.notify_all();
 }
 
-void bbts::heuristic_t::stop_executing() {
+void bbts::reorder_buffer_t::stop_executing() {
   std::unique_lock lk(m);
   is_executing = false;
 }
 
-void bbts::heuristic_t::shutdown() {
+void bbts::reorder_buffer_t::shutdown() {
 
   // shutdown all the queues
   apply_queue.shutdown();
@@ -23,7 +23,7 @@ void bbts::heuristic_t::shutdown() {
   move_queue.shutdown();
 }
 
-void bbts::heuristic_t::clear() {
+void bbts::reorder_buffer_t::clear() {
 
   // clear all the queues
   apply_queue.clear();
@@ -31,7 +31,7 @@ void bbts::heuristic_t::clear() {
   move_queue.clear();
 }
 
-bool bbts::heuristic_t::queue(command_ptr_t _command) {
+bool bbts::reorder_buffer_t::queue(command_ptr_t _command) {
 
   // check the type and send it to the right queue
   switch (_command->type) {
@@ -45,7 +45,7 @@ bool bbts::heuristic_t::queue(command_ptr_t _command) {
   return true;
 }
 
-bool bbts::heuristic_t::get_next(command_t::op_type_t type,
+bool bbts::reorder_buffer_t::get_next(command_t::op_type_t type,
                                  command_ptr_t &out) {
   // check the type and send it to the right queue
   bool success = false;
