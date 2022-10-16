@@ -28,7 +28,7 @@ TEST(TestReservationStation, TestSingleNode) {
   rs->execute_scheduled_async();
 
   // get the next kernel
-  auto k1 = rs->get_next_kernel_command();
+  auto k1 = rs->get_next_command(command_t::op_type_t::APPLY);
 
   // fake run the kernel
   k1->get_output(0).tid = -5;
@@ -41,7 +41,7 @@ TEST(TestReservationStation, TestSingleNode) {
   rs->register_tensor(3);
 
   // get the next kernel
-  auto k2 = rs->get_next_kernel_command();
+  auto k2 = rs->get_next_command(command_t::op_type_t::APPLY);
   values[k2->get_output(0).tid] = values[k2->get_input(0).tid] + values[k2->get_input(1).tid];
 
   // retire the command
@@ -84,7 +84,7 @@ TEST(TestReservationStation, TestTwoNodes) {
   rs1->execute_scheduled_async();
 
   // get the next kernel
-  auto k1 = rs0->get_next_kernel_command();
+  auto k1 = rs0->get_next_command(command_t::op_type_t::APPLY);
 
   // fake run the kernel
   k1->get_output(0).tid = -5;
@@ -92,7 +92,7 @@ TEST(TestReservationStation, TestTwoNodes) {
   rs0->retire_command(std::move(k1));
 
   // get the next kernel
-  auto k2 = rs1->get_next_kernel_command();
+  auto k2 = rs1->get_next_command(command_t::op_type_t::APPLY);
 
   // fake run it
   k2->get_output(0).tid = -5;
@@ -103,7 +103,7 @@ TEST(TestReservationStation, TestTwoNodes) {
   rs0->register_tensor(3);
 
   // get the next kernel
-  auto k3 = rs0->get_next_kernel_command();
+  auto k3 = rs0->get_next_command(command_t::op_type_t::APPLY);
 
   // fake run it
   k3->get_output(0).tid = -6;
@@ -112,11 +112,11 @@ TEST(TestReservationStation, TestTwoNodes) {
 
   // get the notifications
   bool is_done;
-  auto notifications = rs1->reduce_to_notify_node(0, is_done);
+  auto notifications = rs1->commands_ready_for_node(0, is_done);
 
   // notify that reduce is done
-  rs0->notify_ready_reduce(1, notifications);
-  auto k4_0 = rs0->get_distributed_reduce_command();
+  rs0->notify_ready_command(1, notifications);
+  auto k4_0 = rs0->get_next_command(command_t::op_type_t::REDUCE);
 
   // clone this one so we can retire it...
   auto k4_1 = k4_0->clone();

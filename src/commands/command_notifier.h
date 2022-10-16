@@ -6,13 +6,13 @@
 
 namespace bbts {
 
-class reduce_notifier_t {
+class command_notifier_t {
 
 public:
 
   // creates the notifier
-  reduce_notifier_t(bbts::communicator_ptr_t comm,
-                    bbts::reservation_station_ptr_t rs);
+  command_notifier_t(bbts::communicator_ptr_t comm,
+                     bbts::reservation_station_ptr_t rs);
 
   // sends all the notifications from the reservation station to the out_node
   void run_notification_sender_for_node(bbts::node_id_t out_node);
@@ -33,6 +33,6 @@ private:
 };
 
 // nice way to say shared pointer
-using reduce_notifier_ptr_t = std::shared_ptr<reduce_notifier_t>;
+using reduce_notifier_ptr_t = std::shared_ptr<command_notifier_t>;
 
 }

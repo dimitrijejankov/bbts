@@ -47,7 +47,7 @@ void bbts::node_t::init() {
                                                              _res_station, _comm, _logger);
 
   // the tensor notifier
-  _reduce_notifier = std::make_shared<bbts::reduce_notifier_t>(_comm, _res_station);
+  _reduce_notifier = std::make_shared<bbts::command_notifier_t>(_comm, _res_station);
 
   // the scheduler
   _coordinator = std::make_shared<coordinator_t>(_comm, _gpu_scheduler, _res_station, _logger,

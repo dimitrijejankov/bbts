@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -13,104 +14,17 @@
 #include <utility>
 #include <vector>
 #include "command.h"
+#include "command_handler.h"
+#include "command_handler_apply.h"
+#include "command_handler_delete.h"
+#include "command_handler_reduce.h"
+#include "command_handler_move.h"
+#include "heuristic.h"
 #include "../tensor/tensor.h"
 #include "../storage/storage.h"
 #include "../utils/concurent_queue.h"
 
 namespace bbts {
-
-// reduces (and partial reduces are given priority)
-// if no reduces exist that we can run I pick an apply that is part of an reduce
-// if not I pick an apply that will go into a reduce
-// if not I pick the first apply available
-class heuristic_t {
-public:
-
-  void execute() {
-    std::unique_lock lk(m);
-    is_executing = true;
-    cv.notify_all();
-  }
-
-  void stop_executing() {
-    std::unique_lock lk(m);
-    is_executing = false;
-  }
-
-  void shutdown() {
-    kernels.shutdown();
-    reduces.shutdown();
-    moves.shutdown();
-  }
-
-  void clear() {
-    
-    // clear all
-    kernels.clear();
-    reduces.clear();
-    moves.clear();
-  }
-
-  bool queue_apply(command_ptr_t _command) {
-    assert(command_t::MOVE != _command->type);
-    kernels.enqueue_copy(std::move(_command));
-    return true;
-  }
-
-  bool  queue_partial_reduce(command_ptr_t _command) {
-    kernels.enqueue_copy(std::move(_command));
-    return true;
-  }
-
-  bool queue_reduce(command_ptr_t _command) {
-    reduces.enqueue_copy(std::move(_command));
-    return true;
-  }
-
-  bool queue_move(command_ptr_t _command) {
-    moves.enqueue_copy(std::move(_command));
-    return true;
-  }
-
-  bool next_apply(command_ptr_t &out) {
-    if(!kernels.wait_dequeue(out)) {
-      return false;
-    }
-    std::unique_lock lk(m);
-    cv.wait(lk, [&]{return is_executing;});
-    return true;
-  }
-
-  bool next_reduce(command_ptr_t &out) {
-    if(!reduces.wait_dequeue(out)) {
-      return false;
-    }
-    std::unique_lock lk(m);
-    cv.wait(lk, [&]{return is_executing;});
-    return true;
-  }
-
-  bool next_move(command_ptr_t &out) {
-    if(!moves.wait_dequeue(out)) {
-      return false;
-    }
-    std::unique_lock lk(m);
-    cv.wait(lk, [&]{return is_executing;});
-    return true;
-  }
-
-  concurent_queue<command_ptr_t> kernels;
-
-  concurent_queue<command_ptr_t> reduces;
-
-  concurent_queue<command_ptr_t> moves;
-
-  bool is_executing = false;
-
-  std::mutex m;
-
-  std::condition_variable cv;
-};
 
 // here we queue all the commands this node needs to execute that we need 
 // to execute in conjunction with other nodes, are kept in the external_commands_queue_t
@@ -126,20 +40,18 @@ class reservation_station_t {
   // mark that a command is processed
   bool retire_command(command_ptr_t _command);
 
+  // mark that a tensor was deleted
+  bool retire_delete(tid_t id);
+
+  // returns tensors that are scheduled to be remove from the storage
+  tid_t get_to_delete();
+
   // get the next command, you must use the result of this command as it is a unique ptr
-  [[nodiscard]] command_ptr_t get_next_move_command();
-  [[nodiscard]] command_ptr_t get_next_kernel_command();
-  [[nodiscard]] command_ptr_t get_distributed_reduce_command();
+  [[nodiscard]] command_ptr_t get_next_command(command_t::op_type_t op_type);
 
   // register the tensor that was added externally,
   // that is it was not created through the execution of a command
   void register_tensor(tid_t _tid);
-
-  // returns tensors that are scheduled to be remove from the storage
-  tid_t get_to_remove();
-
-  // retire the remove command
-  void retire_remove(tid_t _tid);
 
   // shutdown the reservation station
   void shutdown();
@@ -158,32 +70,23 @@ class reservation_station_t {
 
   // notifies the reservation station that reduce commands of another node have completed
   // this node should then be able to kick off the remote reduce in case all nodes are ready
-  void notify_ready_reduce(node_id_t node, const std::vector<command_t::command_tid_id_t> &tensors);
+  void notify_ready_command(node_id_t node, const std::vector<command_t::command_tid_id_t> &tensors);
 
   // get the reduces that finished
-  [[nodiscard]] std::vector<command_t::command_tid_id_t> reduce_to_notify_node(node_id_t node, bool &is_done);
+  [[nodiscard]] std::vector<command_t::command_tid_id_t> commands_ready_for_node(node_id_t node, bool &is_done);
+
+  // returns the rank
+  [[nodiscard]] node_id_t get_rank() const;
 
  private:
-
-  bool _retire_remove(command_ptr_t _command);
-
-  bool _retire_apply(command_ptr_t _command);
-
-  bool _retire_move(command_ptr_t _command);
-
-  bool _retire_reduce(command_ptr_t _command);
-
-  bool _queue_delete_command(command_ptr_t _command);
-
-  bool _queue_reduce_command(command_ptr_t _command);
-
-  bool _queue_apply_command(command_ptr_t _command);
-
-  bool _queue_move_command(command_ptr_t _command);
 
   void _remove_tensor(tid_t in);
 
   void _tensor_became_available(bbts::tid_t tid);
+
+  bool _is_done();
+
+  void _check_if_finished();
 
   // the state of the tensor
   struct internal_tensor_state_t {
@@ -201,36 +104,11 @@ class reservation_station_t {
     bool scheduled_for_delition = false;
   };
 
-  struct internal_reduce_state_t {
-
-    // the inputs that need to be created here that the reduce is waiting for...
-    std::vector<tid_t> missing_inputs;
-
-    // the currently available inputs
-    std::vector<tid_t> available_inputs;
-
-    // we keep track of what nodes have finished all the local reduces they could they notify 
-    // this node once they are done, this is kept for just the node that initiates the reduce
-    std::vector<node_id_t> waiting_for_nodes;
-    std::vector<command_t::tid_node_id_t> done_nodes;
-
-    command_ptr_t command;
-
-    bool is_local = false;
-  };
-
-  void _update_reduce(internal_reduce_state_t &reduce);
-
   // the mutex
   std::mutex _m;
 
   // we use this to wait for commands
   std::condition_variable _cv;
-
-  // the number of local commands to retire
-  size_t _left_local_to_retire = 0;
-  size_t _left_reduce_to_retire = 0;
-  size_t _left_to_delete = 0;
 
   // a conditional variable that keeps track of how many local commands are left
   // it is signalled if we are done with all things this node needs to do
@@ -242,39 +120,36 @@ class reservation_station_t {
   // is executing
   bool _is_executing = false;
 
+  // tensors left to delete  
+  size_t _tensors_left_to_delete = 0;
+
   // the rank 
   node_id_t _rank;
 
-  // the number of nodes
-  size_t _num_nodes;
-
-  // the id of the last command we have executed
-  command_id_t _last_cmd = -1;
-
-  // the local apply and move commands and the number of tensors they are waiting for
-  std::unordered_map<command_id_t, std::pair<command_ptr_t, int32_t>> _local_commands;
-
-  // reduce commands we are keeping track of
-  std::unordered_map<command_id_t, internal_reduce_state_t> reduce_commands;
+  // command handlers
+  std::array<class std::shared_ptr<command_handler_t>, command_t::op_type_t::NUM_COMMANDS> _handlers;
 
   // keeps all the local tensors and information about them
   std::unordered_map<tid_t, internal_tensor_state_t> _tensors;
 
-  // the local tensors commands are waiting for
-  std::unordered_multimap<tid_t, command_id_t> _commands_waiting_for;
+  // the local tensors commands are waiting fors
+  std::unordered_multimap<tid_t, std::tuple<command_id_t, command_t::op_type_t>> _commands_waiting_for;
 
   // all the reduces we want to run
-  heuristic_t _heuristic;
+  std::shared_ptr<bbts::heuristic_t> _heuristic;
 
   // keeps track of all the reduces that have reduced to just one local value
   // these reduces must be communicated to the node that will initiate the distributed reduce
   std::vector<concurent_queue<bbts::command_t::command_tid_id_t>> _notify_done_reduces;
 
-  // deletion cv
-  std::condition_variable _deletion_cv;
-
   // the tensors we want to delete from storage
   concurent_queue<tid_t> _to_delete;
+
+  // mark them all as friends
+  friend class ::bbts::command_handler_apply_t;
+  friend class ::bbts::command_handler_reduce_t;
+  friend class ::bbts::command_handler_delete_t;
+  friend class ::bbts::command_handler_move_t;
 };
 
 using reservation_station_ptr_t = std::shared_ptr<reservation_station_t>;

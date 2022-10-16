@@ -15,7 +15,7 @@
 #include "../commands/command.h"
 #include "../commands/reservation_station.h"
 #include "../commands/command_runner.h"
-#include "../commands/reduce_notifier.h"
+#include "../commands/command_notifier.h"
 #include "../ud_functions/gpu_scheduler.h"
 #include "../tensor/tensor_factory.h"
 #include "../ud_functions/udf_manager.h"

@@ -28,9 +28,11 @@ struct command_t {
 
     APPLY = 0,
     REDUCE = 1,
+    PARTIAL_REDUCE = 2,
     MOVE = 3,
     DELETE = 4,
-    SHUTDOWN = 5 // special command to shutdown the server
+    NUM_COMMANDS = 5,
+    SHUTDOWN = 6 // special command to shutdown the server
   };
 
   // specifies exactly what tensor on which node we refer to
@@ -150,6 +152,8 @@ struct command_t {
       case APPLY : ss << "APPLY "; break;
       case DELETE : ss << "DELETE "; break;
       case REDUCE : ss << "REDUCE "; break;
+      case PARTIAL_REDUCE : ss << "PARTIAL_REDUCE "; break;
+      case NUM_COMMANDS : ss << "NUM_COMMANDS "; break;
       case SHUTDOWN :ss << "SHUTDOWN ";  break;
     }
 
@@ -430,7 +434,7 @@ struct command_t {
 
     // set the id type and function
     tmp->id = reduce->id;
-    tmp->type = REDUCE;
+    tmp->type = PARTIAL_REDUCE;
     tmp->fun_id = reduce->fun_id;
     tmp->nfo.is_gpu = reduce->nfo.is_gpu ;
     tmp->_num_parameters = reduce->_num_parameters;

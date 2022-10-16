@@ -12,7 +12,7 @@
 #include "coordinator.h"
 #include "../ud_functions/udf_manager.h"
 #include "../commands/command_runner.h"
-#include "../commands/reduce_notifier.h"
+#include "../commands/command_notifier.h"
 #include "../commands/parsed_command.h"
 #include "../ud_functions/gpu_scheduler.h"
 

@@ -3,6 +3,7 @@
 #include "../operations/reduce_op.h"
 #include "../operations/broadcast_op.h"
 #include "../operations/partial_reduce_op.h"
+#include "command.h"
 #include <cassert>
 #include <thread>
 
@@ -21,7 +22,7 @@ void bbts::command_runner_t::local_move_command_runner() {
   while (true) {
 
     // get the command
-    auto cmd = _rs->get_next_move_command();
+    auto cmd = _rs->get_next_command(command_t::MOVE);
     if (cmd == nullptr) {
       break;
     }
@@ -88,13 +89,13 @@ void bbts::command_runner_t::local_apply_command_runner() {
   while (true) {
 
     // get the command
-    auto cmd = _rs->get_next_kernel_command();
+    auto cmd = _rs->get_next_command(command_t::APPLY);
     if (cmd == nullptr) {
       break;
     }
 
     // check if the reduce is remote or local
-    if (cmd->is_reduce()) {
+    if (cmd->type == command_t::PARTIAL_REDUCE) {
 
       // return me that matcher for matrix addition
       auto ud = _udm->get_fn_impl(cmd->fun_id);
@@ -220,7 +221,7 @@ void bbts::command_runner_t::distributed_reduce_command_runner() {
   while (true) {
 
     // get the command
-    auto cmd = _rs->get_distributed_reduce_command();
+    auto cmd = _rs->get_next_command(command_t::REDUCE);
     if (cmd == nullptr) {
       break;
     }
@@ -391,7 +392,7 @@ void bbts::command_runner_t::run_deleter() {
   while (true) {
 
     // get the next tensor to remove
-    id = _rs->get_to_remove();
+    id = _rs->get_to_delete();
     if (id == -1) {
       break;
     }
@@ -401,7 +402,7 @@ void bbts::command_runner_t::run_deleter() {
     _logger->message("Remove tensor : " + std::to_string(id) + '\n');
 
     // remove it from the reservation station
-    _rs->retire_remove(id);
+    _rs->retire_delete(id);
   }
 }
 
