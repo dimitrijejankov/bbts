@@ -33,9 +33,8 @@ class reservation_station_t {
 
   reservation_station_t(node_id_t _node_id, int32_t num_nodes);
 
-  // queue a command, this command has to be executed in the same thread and the commands
-  // have to be queued in the exact order they are coming in
-  bool queue_command(command_ptr_t _command);
+  // queue a commands, the commands have to be arranged in the right order
+  void queue_commands(const std::vector<command_ptr_t> &cmds);
 
   // mark that a command is processed
   bool retire_command(command_ptr_t _command);
@@ -136,7 +135,7 @@ class reservation_station_t {
   std::unordered_multimap<tid_t, std::tuple<command_id_t, command_t::op_type_t>> _commands_waiting_for;
 
   // reorder buffer
-  std::shared_ptr<bbts::reorder_buffer_t> _reorder_buffer;
+  bbts::reorder_buffer_t _reorder_buffer;
 
   // keeps track of all the reduces that have reduced to just one local value
   // these reduces must be communicated to the node that will initiate the distributed reduce

@@ -131,7 +131,7 @@ bool command_handler_apply_t::schedule_command(command_ptr_t _command) {
 
   // if we have all the required tensors we can kick off the command
   if(num_not_present == 0) {
-    _rs->_reorder_buffer->queue(std::move(_command)); 
+    _rs->_reorder_buffer.queue(std::move(_command)); 
   }
   else {
 
@@ -156,7 +156,7 @@ void bbts::command_handler_apply_t::tensor_available(command_id_t command_id, ti
     if(0 == (--jt->second.second)) {
 
       // schedule the command for execution
-      _rs->_reorder_buffer->queue(std::move(jt->second.first));
+      _rs->_reorder_buffer.queue(std::move(jt->second.first));
 
       // remove the command
       _local_commands.erase(jt);

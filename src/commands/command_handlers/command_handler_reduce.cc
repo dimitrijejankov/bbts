@@ -211,7 +211,7 @@ void bbts::command_handler_reduce_t::_update_reduce(internal_reduce_state_t &red
       // create the reduce
       auto Idx = reduce.available_inputs.size() - 1;
       auto partial_reduce = command_t::create_parital_reduce(reduce.command, {reduce.available_inputs[Idx - 1], reduce.available_inputs[Idx]}, out_tid, _rs->_rank);
-      _rs->_reorder_buffer->queue(std::move(partial_reduce));
+      _rs->_reorder_buffer.queue(std::move(partial_reduce));
 
       // remove the inputs
       reduce.available_inputs.pop_back();
@@ -230,7 +230,7 @@ void bbts::command_handler_reduce_t::_update_reduce(internal_reduce_state_t &red
       auto partial_reduce = command_t::create_distributed_reduce(reduce.command, 
                                                                  {reduce.available_inputs[0], root_node}, 
                                                                  reduce.done_nodes);
-      _rs->_reorder_buffer->queue(std::move(partial_reduce));
+      _rs->_reorder_buffer.queue(std::move(partial_reduce));
     }
     else {
 

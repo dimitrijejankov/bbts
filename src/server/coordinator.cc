@@ -402,14 +402,7 @@ void bbts::coordinator_t::_collect(std::tuple<bool, std::string> &out) {
 void bbts::coordinator_t::_load_cmds(const std::vector<command_ptr_t> &cmds,
                                      std::stringstream &ss) {
 
-  // schedule them all at once
-  for (auto &_cmd : cmds) {
-
-    // if it uses the node
-    if (_cmd->uses_node(_comm->get_rank())) {
-      _rs->queue_command(_cmd->clone());
-    }
-  }
+  _rs->queue_commands(cmds);
 }
 
 void bbts::coordinator_t::_run() {

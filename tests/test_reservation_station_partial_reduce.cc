@@ -24,7 +24,8 @@ TEST(TestReservationStation, TestSingleNode) {
   rs->register_tensor(2);
 
   // add the reduce command
-  rs->queue_command(std::move(reduce));
+  std::vector<command_ptr_t> tmp; tmp.push_back(std::move(reduce));
+  rs->queue_commands(tmp);
   rs->execute_scheduled_async();
 
   // get the next kernel
@@ -55,7 +56,7 @@ TEST(TestReservationStation, TestTwoNodes) {
   
   std::unordered_map<tid_t, size_t> values0 = {{1, 4}, {2, 5}, {3, 7}};
   std::unordered_map<tid_t, size_t> values1 = {{4, 12}, {5, 16}};
-  auto reduce0 =
+  auto reduce =
       command_t::create_reduce(0, {0, 0}, false, {},
                                {command_t::tid_node_id_t{.tid = 1, .node = 0},
                                 command_t::tid_node_id_t{.tid = 2, .node = 0},
@@ -63,7 +64,6 @@ TEST(TestReservationStation, TestTwoNodes) {
                                 command_t::tid_node_id_t{.tid = 4, .node = 1},
                                 command_t::tid_node_id_t{.tid = 5, .node = 1}},
                                {command_t::tid_node_id_t{.tid = 6, .node = 0}});
-  auto reduce1 = reduce0->clone();
 
   // make a reservation station
   auto rs0 = std::make_shared<reservation_station_t>(0, 2);
@@ -76,11 +76,12 @@ TEST(TestReservationStation, TestTwoNodes) {
   rs1->register_tensor(5);
 
   // add the reduce command
-  rs0->queue_command(std::move(reduce0));
+  std::vector<command_ptr_t> tmp; tmp.push_back(std::move(reduce));
+  rs0->queue_commands(tmp);
   rs0->execute_scheduled_async();
 
   // add the reduce command
-  rs1->queue_command(std::move(reduce1));
+  rs1->queue_commands(tmp);
   rs1->execute_scheduled_async();
 
   // get the next kernel
