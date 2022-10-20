@@ -49,7 +49,7 @@ public:
 
 private:
 
-  void _partial_reduce_started(bbts::command_id_t cmd_id);
+  void _reduce_started(bbts::command_id_t cmd_id);
   void _partial_reduce_ended(bbts::command_id_t cmd_id);
 
   void _queue_apply(command_ptr_t _command);

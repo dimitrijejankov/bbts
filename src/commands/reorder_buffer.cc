@@ -173,6 +173,12 @@ bool bbts::reorder_buffer_t::get_next(command_t::op_type_t type, command_ptr_t &
       // remove the partial reduce
       _apply_queue.erase(_apply_queue.begin());
       _apply_reduces.erase(cmd_id);
+
+      // mark that the reduce has started as we have calculated one of the inputs...
+      auto it = _applies_into_reduce.find(cmd_id);
+      if(it != _applies_into_reduce.end()) {
+        _reduce_started(it->second);
+      }
     }
   }
   else if(type == command_t::op_type_t::REDUCE) {
@@ -215,21 +221,19 @@ bool bbts::reorder_buffer_t::get_next(command_t::op_type_t type, command_ptr_t &
   return true;
 }
 
-void bbts::reorder_buffer_t::_partial_reduce_started(bbts::command_id_t cmd_id) {
-
-  std::unique_lock<std::mutex> lk(apply_reduce_m);
+void bbts::reorder_buffer_t::_reduce_started(bbts::command_id_t cmd_id) {
 
   auto it = _reduces_in_progress.find(cmd_id); 
-  if(it != _reduces_in_progress.end()) {
+  if(it == _reduces_in_progress.end()) {
 
     // remove all the affected applies
     std::vector<command_id_t> to_reinsert;
     auto range = _reduce_to_applies.equal_range(cmd_id);
     for (auto i = range.first; i != range.second; ++i) {
-      auto jt = _apply_queue.find(*it);
+      auto jt = _apply_queue.find(cmd_id);
       if(jt != _apply_queue.end()) {
         _apply_queue.erase(jt);
-        to_reinsert.push_back(*it);
+        to_reinsert.push_back(cmd_id);
       }
     }
 
@@ -290,7 +294,8 @@ void bbts::reorder_buffer_t::_queue_partial_reduce(command_ptr_t _command) {
   }
   else {
      // signal that the reduce is started
-    _partial_reduce_started(_command->id);
+     std::unique_lock<std::mutex> lk(apply_reduce_m);
+    _reduce_started(_command->id);
   }
 
   std::unique_lock<std::mutex> lk(apply_reduce_m);
