@@ -18,6 +18,9 @@
 
 namespace bbts {
 
+
+#define VARIABLE_OUTPUT_NUM 1844674407
+
 // the identifier of the ud function
 // this should be used whenever we have something that maps or identifies the ud
 // function

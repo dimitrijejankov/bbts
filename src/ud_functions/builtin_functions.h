@@ -22,4 +22,7 @@ ud_func_ptr_t get_matrix_uniform_udf();
 /// 4. Const initialization
 ud_func_ptr_t get_matrix_const_udf();
 
+/// 5. Used for the touch
+ud_func_ptr_t get_merge_split();
+
 }

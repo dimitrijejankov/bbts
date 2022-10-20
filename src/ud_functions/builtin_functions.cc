@@ -55,3 +55,18 @@ bbts::ud_func_ptr_t bbts::get_matrix_const_udf() {
       }
   );
 }
+
+
+/// 5. Matrix Multiply
+bbts::ud_func_ptr_t bbts::get_merge_split() {
+  return std::make_unique<ud_func_t>(
+      ud_func_t {
+          .ud_name = "merge_split",
+          .is_ass = false,
+          .is_com = false,
+          .num_in = 1,
+          .num_out = VARIABLE_OUTPUT_NUM,
+          .impls = {},
+      }
+  );
+}

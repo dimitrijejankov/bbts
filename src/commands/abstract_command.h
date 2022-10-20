@@ -15,7 +15,7 @@
 
 namespace bbts {
 
-enum class abstract_command_type_t : int { APPLY, REDUCE, DELETE };
+enum class abstract_command_type_t : int { APPLY, REDUCE, DELETE, TOUCH };
 
 using abstract_ud_spec_id_t = int32_t;
 
@@ -105,6 +105,9 @@ struct abstract_command_t {
     case abstract_command_type_t::DELETE:
       type_string = "DELETE";
       break;
+    case abstract_command_type_t::TOUCH:
+      type_string = "TOUCH";
+      break;
     }
 
     // write the stuff
@@ -141,6 +144,8 @@ struct abstract_command_t {
       type = abstract_command_type_t::REDUCE;
     } else if (type_string == "DELETE") {
       type = abstract_command_type_t::DELETE;
+    }else if (type_string == "TOUCH") {
+      type = abstract_command_type_t::TOUCH;
     } else {
       throw std::runtime_error("Unknown type!");
     }
