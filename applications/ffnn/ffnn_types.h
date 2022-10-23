@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../src/tensor/tensor.h"
+#include "../../main/tensor/tensor.h"
 #include <cstdint>
 
 namespace bbts {

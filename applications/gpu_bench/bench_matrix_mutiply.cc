@@ -1,5 +1,5 @@
-#include "../../src/gpu/scheduler.h"
-#include "../../src/tensor/builtin_formats.h"
+#include "../../main/gpu/scheduler.h"
+#include "../../main/tensor/builtin_formats.h"
 #include <cstddef>
 #include <cstdint>
 #include <unistd.h>

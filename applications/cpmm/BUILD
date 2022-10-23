@@ -1,5 +1,5 @@
 cc_binary(
-    name = "node",
-    srcs = ["node_cli.cc"],
+    name = "generate_cpmm",
+    srcs = ["generate_cpmm.cc"],
     deps = ["//main:bbts_lib", "//third_party:cli_headers",],
 )

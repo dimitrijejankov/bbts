@@ -1,6 +1,6 @@
 
-#include "../../src/tensor/tensor_factory.h"
-#include "../../src/ud_functions/udf_manager.h"
+#include "../../main/tensor/tensor_factory.h"
+#include "../../main/ud_functions/udf_manager.h"
 
 #include "ffnn_types.h"  
 

@@ -1,10 +1,10 @@
 #include <map>
 #include <thread>
 #include <chrono>
-#include "../../src/operations/move_op.h"
-#include "../../src/operations/reduce_op.h"
-#include "../../src/commands/parsed_command.h"
-#include "../../src/commands/command_runner.h"
+#include "../../main/operations/move_op.h"
+#include "../../main/operations/reduce_op.h"
+#include "../../main/commands/parsed_command.h"
+#include "../../main/commands/command_runner.h"
 
 using namespace bbts;
 

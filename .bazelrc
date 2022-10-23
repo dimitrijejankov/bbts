@@ -2,3 +2,4 @@ build --action_env=CC=mpicc
 build --action_env=CXX=mpicpc
 build --cxxopt='-std=c++2a'
 build --cxxopt='-m64'
+build --linkopt='-ldl -lpthread -lstdc++fs'

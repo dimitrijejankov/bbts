@@ -1,4 +1,4 @@
-#include "../../src/web/web_interface.h"
+#include "../../main/web/web_interface.h"
 
 int main() {
 

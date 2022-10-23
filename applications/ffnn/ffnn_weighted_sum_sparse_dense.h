@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cassert>
-#include "../../src/ud_functions/ud_function.h"
+#include "../../main/ud_functions/ud_function.h"
 
 namespace bbts {
 

@@ -5,10 +5,10 @@
 #include <string>
 #include <dlfcn.h>
 #include <vector>
-#include "../../src/tensor/tensor.h"
-#include "../../src/gpu/scheduler.h"
-#include "../../src/tensor/builtin_formats.h"
-#include "../../src/utils/terminal_color.h"
+#include "../../main/tensor/tensor.h"
+#include "../../main/gpu/scheduler.h"
+#include "../../main/tensor/builtin_formats.h"
+#include "../../main/utils/terminal_color.h"
 #include "../ffnn-gpu/ffnn_add.h"
 
 float learning_rate = 1.0f;
