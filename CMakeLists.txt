@@ -79,8 +79,8 @@ if(${ENABLE_GPU})
     add_compile_definitions(ENABLE_GPU)
     
     # auto cuda paths
-    file(GLOB UD_SOURCE_CUDA "src/ud_functions/impls/*.cu")
-    set (UD_SOURCE_CUDA ${UD_SOURCE_CUDA} "src/ud_functions/gpu_scheduler_impl.cc")
+    file(GLOB UD_SOURCE_CUDA "main/ud_functions/impls/*.cu")
+    set (UD_SOURCE_CUDA ${UD_SOURCE_CUDA} "main/ud_functions/gpu_scheduler_impl.cc")
 endif()
 
 # find the protocol buffer
@@ -118,42 +118,42 @@ include_directories(${MKL_INCLUDE})
 include_directories(third-party)
 
 # the commands
-file(GLOB COMMANDS_SOURCE "src/commands/*.cc" "src/commands/command_handlers/*.cc")
+file(GLOB COMMANDS_SOURCE "main/commands/*.cc" "main/commands/command_handlers/*.cc")
 add_library(commands OBJECT ${COMMANDS_SOURCE})
 
 # the operations
-file(GLOB OPERATIONS_SOURCE "src/operations/*.cc")
+file(GLOB OPERATIONS_SOURCE "main/operations/*.cc")
 add_library(operations OBJECT ${OPERATIONS_SOURCE})
 
 # the tensors
-file(GLOB TENSOR_SOURCE "src/tensor/*.cc")
+file(GLOB TENSOR_SOURCE "main/tensor/*.cc")
 add_library(tensor OBJECT ${TENSOR_SOURCE})
 
 # the storage
-file(GLOB STORAGE_SOURCE "src/storage/*.cc")
+file(GLOB STORAGE_SOURCE "main/storage/*.cc")
 add_library(storage OBJECT ${STORAGE_SOURCE})
 
 # the server
-file(GLOB SERVER_SOURCE "src/server/*.cc")
+file(GLOB SERVER_SOURCE "main/server/*.cc")
 add_library(server OBJECT ${SERVER_SOURCE})
 
 # the server
 if(${ENABLE_GPU})
-file(GLOB GPU_SOURCE "src/gpu/*.cc")
+file(GLOB GPU_SOURCE "main/gpu/*.cc")
 add_library(gpu OBJECT ${GPU_SOURCE})
 endif()
 
 # the communication
-file(GLOB COMMUNICATION_SOURCE "src/communication/*.cc")
+file(GLOB COMMUNICATION_SOURCE "main/communication/*.cc")
 add_library(communication OBJECT ${COMMUNICATION_SOURCE})
 
 # the ud functions
-file(GLOB UD_SOURCE "src/ud_functions/*.cc" "src/ud_functions/impls/*.cc")
-list(REMOVE_ITEM UD_SOURCE "src/ud_functions/gpu_scheduler_impl.cc")
+file(GLOB UD_SOURCE "main/ud_functions/*.cc" "main/ud_functions/impls/*.cc")
+list(REMOVE_ITEM UD_SOURCE "main/ud_functions/gpu_scheduler_impl.cc")
 add_library(ud_functions OBJECT ${UD_SOURCE} ${UD_SOURCE_CUDA})
 
 # the protobuf 
-protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS src/gpu/gpu_profiler.proto)
+protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS main/gpu/gpu_profiler.proto)
 add_library(proto_buf OBJECT ${PROTO_SRCS} ${PROTO_HDRS})
 
 # link all modules up
