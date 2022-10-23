@@ -230,10 +230,10 @@ void bbts::reorder_buffer_t::_reduce_started(bbts::command_id_t cmd_id) {
     std::vector<command_id_t> to_reinsert;
     auto range = _reduce_to_applies.equal_range(cmd_id);
     for (auto i = range.first; i != range.second; ++i) {
-      auto jt = _apply_queue.find(cmd_id);
+      auto jt = _apply_queue.find(i->second);
       if(jt != _apply_queue.end()) {
         _apply_queue.erase(jt);
-        to_reinsert.push_back(cmd_id);
+        to_reinsert.push_back(i->second);
       }
     }
 
