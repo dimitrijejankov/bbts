@@ -8,10 +8,10 @@
 #include <string>
 #include <unistd.h>
 #include <filesystem>
-#include "../../src/tensor/tensor.h"
-#include "../../src/tensor/tensor_factory.h"
-#include "../../src/server/node.h"
-#include "../../src/utils/terminal_color.h"
+#include "../../main/tensor/tensor.h"
+#include "../../main/tensor/tensor_factory.h"
+#include "../../main/server/node.h"
+#include "../../main/utils/terminal_color.h"
 
 #include "../../third_party/cli/include/cli/cli.h"
 #include "../../third_party/cli/include/cli/clifilesession.h"

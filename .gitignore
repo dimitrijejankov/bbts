@@ -5,6 +5,7 @@ cmake-build-release
 .vscode
 *.sbbts
 build
+bazel-*
 bin/*
 bin/out.bbts
 bin/node_main
