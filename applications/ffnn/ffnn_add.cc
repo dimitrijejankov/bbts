@@ -23,7 +23,7 @@ bbts::ffnn_add::ffnn_add() {
 }
 
 size_t bbts::ffnn_add::get_required_memory(const bbts::ud_impl_t::tensor_params_t &params,
-                                           const bbts::ud_impl_t::meta_args_t &_in) {
+                                           const bbts::ud_impl_t::meta_args_t &_in) const {
   return 0;
 }
 

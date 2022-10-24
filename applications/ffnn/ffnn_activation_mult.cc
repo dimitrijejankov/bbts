@@ -25,7 +25,7 @@ bbts::ffnn_activation_mult::ffnn_activation_mult() {
 }
 
 size_t bbts::ffnn_activation_mult::get_required_memory(const bbts::ud_impl_t::tensor_params_t &params,
-                                                       const bbts::ud_impl_t::meta_args_t &_in) {
+                                                       const bbts::ud_impl_t::meta_args_t &_in) const {
   return 0;
 }
 

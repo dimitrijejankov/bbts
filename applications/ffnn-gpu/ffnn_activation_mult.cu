@@ -23,6 +23,12 @@ bbts::ffnn_activation_mult::ffnn_activation_mult() {
   fn = &ffnn_activation_mult::mult;
 }
 
+
+size_t bbts::ffnn_activation_mult::get_required_memory(const bbts::ud_impl_t::tensor_params_t &params,
+                                                       const bbts::ud_impl_t::meta_args_t &_in) const {
+  return 0;
+}
+
 size_t bbts::ffnn_activation_mult::get_complexity_hint(
     const bbts::ud_impl_t::tensor_params_t &params,
     const bbts::ud_impl_t::meta_args_t &_in) {

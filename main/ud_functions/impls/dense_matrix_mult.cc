@@ -24,7 +24,7 @@ bbts::dense_matrix_mult_t::dense_matrix_mult_t() {
 }
 
 size_t bbts::dense_matrix_mult_t::get_required_memory(const bbts::ud_impl_t::tensor_params_t &params,
-                                                      const bbts::ud_impl_t::meta_args_t &_in) {
+                                                      const bbts::ud_impl_t::meta_args_t &_in) const {
   return 0;
 }
 
