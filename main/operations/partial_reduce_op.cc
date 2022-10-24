@@ -53,10 +53,14 @@ void bbts::partial_reduce_op_t::apply() {
 
   // figure out if this is the an intermediate reduce
   auto to_create = _out_tid < 0 ? TID_NONE : _out_tid;
+  
+  // figure out the outputs
+  const std::vector<std::tuple<tid_t, size_t>> outs = tmp_size == 0 ? std::vector<std::tuple<tid_t, size_t>>{{to_create, output_size}} : 
+                                                                      std::vector<std::tuple<tid_t, size_t>>{{to_create, output_size}, {TID_NONE, tmp_size}};
 
   // perform the actual kernel
   tid_t additional_tid = TID_NONE;
-  _storage.local_transaction({_lhs, _rhs}, {{to_create, output_size}, {TID_NONE, tmp_size}}, [&](const storage_t::reservation_result_t &res) {
+  _storage.local_transaction({_lhs, _rhs}, outs, [&](const storage_t::reservation_result_t &res) {
   
     // init the output tensor
     auto &out = res.create[0].get().tensor;

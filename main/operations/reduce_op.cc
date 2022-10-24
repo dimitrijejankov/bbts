@@ -119,6 +119,10 @@ void reduce_op_t::apply() {
           rhs = res.create[0].get().id;
         });
 
+        // figure out the outputs
+        const std::vector<std::tuple<tid_t, size_t>> outs = tmp_size == 0 ? std::vector<std::tuple<tid_t, size_t>>{{TID_NONE, output_size}} : 
+                                                                            std::vector<std::tuple<tid_t, size_t>>{{TID_NONE, output_size}, {TID_NONE, tmp_size}};
+
         tid_t out_tid;
         tid_t additional_tid = TID_NONE;
         _storage.local_transaction({lhs, rhs}, {{TID_NONE, output_size}, {TID_NONE, tmp_size}}, [&](const storage_t::reservation_result_t &res) {
