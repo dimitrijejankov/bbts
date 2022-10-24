@@ -17,7 +17,7 @@ public:
                       const tid_t lhs,
                       const tid_t rhs,
                       tid_t &out_tid,
-                      const ud_impl_t::tensor_params_t &params,
+                      ud_impl_t::tensor_params_t &params,
                       const bbts::ud_impl_t &reduce_op);
 
   // apply this operation
@@ -33,7 +33,7 @@ public:
 
   tid_t &_out_tid;
 
-  const ud_impl_t::tensor_params_t &_params;
+  ud_impl_t::tensor_params_t &_params;
 
   const bbts::ud_impl_t &_reduce_op;
 

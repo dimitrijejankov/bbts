@@ -84,7 +84,7 @@ int main() {
     auto add_start = high_resolution_clock::now();
     for (int32_t num_iters = 0; num_iters < num_iter; ++num_iters) {
       add->call_ud({._params = bbts::command_param_list_t{._data = nullptr,
-                                                          ._num_elements = 0}},
+                                                          ._num_elements = 0}, ._additional_memory = nullptr},
                    input_args, output_args);
     }
     auto add_stop = high_resolution_clock::now();
@@ -95,7 +95,7 @@ int main() {
     auto mult_start = high_resolution_clock::now();
     for (int32_t num_iters = 0; num_iters < num_iter; ++num_iters) {
       mult->call_ud({._params = bbts::command_param_list_t{._data = nullptr,
-                                                          ._num_elements = 0}},
+                                                          ._num_elements = 0}, ._additional_memory = nullptr},
                    input_args, output_args);
     }
     auto mult_stop = high_resolution_clock::now();

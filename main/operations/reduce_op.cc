@@ -53,6 +53,10 @@ void reduce_op_t::apply() {
   bbts::tid_t lhs = _inputs.front();
   bbts::tid_t rhs;
 
+  // the output sizes and temporary size
+  size_t output_size;
+  size_t tmp_size;
+
   // do stuff
   int32_t source;
   while (mask < get_num_nodes()) {
@@ -78,9 +82,9 @@ void reduce_op_t::apply() {
         if (!success) {
           std::cout << "Failed to recieve the tensors size for a REDUCE operation\n";
         }
-        
+
         // do the recieving and calculate the output tensor size
-        size_t output_size;
+        
         _storage.remote_transaction_p2p(_tag, rnk, {lhs}, {{TID_NONE, rhs_size}}, 
         [&](const storage_t::reservation_result_t &res) {
           
@@ -108,12 +112,16 @@ void reduce_op_t::apply() {
           // return the size of the tensor
           output_size = _factory.get_tensor_size(_output_meta.get<0>());
 
+          // get the size required to 
+          tmp_size = _reduce_op.get_required_memory(_params, _input_meta);
+
           // store the tid for later
           rhs = res.create[0].get().id;
         });
 
         tid_t out_tid;
-        _storage.local_transaction({lhs, rhs}, {{TID_NONE, output_size}}, [&](const storage_t::reservation_result_t &res) {
+        tid_t additional_tid = TID_NONE;
+        _storage.local_transaction({lhs, rhs}, {{TID_NONE, output_size}, {TID_NONE, tmp_size}}, [&](const storage_t::reservation_result_t &res) {
         
           // get the left and right tensor so we can apply the kernel
           auto l = res.get[0].get().tensor;
@@ -122,6 +130,13 @@ void reduce_op_t::apply() {
           // allocate and init the output
           auto out = res.create[0].get().tensor;
           _factory.init_tensor(out, _out_meta);
+
+          // get the temporary memory required
+          _params.set_additional_memory(nullptr);
+          if(tmp_size != 0) {
+            _params.set_additional_memory(res.create[1].get().tensor->get_data_ptr<void*>());
+            additional_tid = res.create[1].get().id;
+          }
 
           // store the tid for later
           out_tid = res.create[0].get().id;
@@ -136,6 +151,11 @@ void reduce_op_t::apply() {
           // run the function
           _reduce_op.call_ud(_params, _input_tensors, _output_tensor);
         });
+
+        // remove the additional memory
+        if(additional_tid != TID_NONE) {
+          _storage.remove_by_tid(additional_tid);
+        }
 
         // manage the memory
         if(lhs != _in) {

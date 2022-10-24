@@ -136,9 +136,10 @@ void bbts::command_runner_t::local_apply_command_runner() {
       }
 
       // reserve the outputs
-      std::vector<std::tuple<tid_t, size_t>> outputs; outputs.reserve(cmd->get_num_outputs());
+      std::vector<std::tuple<tid_t, size_t>> outputs; outputs.reserve(cmd->get_num_outputs() + 1);
 
       // calculate the output size
+      size_t additional_memory = 0;
       _ts->local_transaction(inputs, {}, [&](const storage_t::reservation_result_t &res) {
 
         // make the input meta arguments
@@ -173,13 +174,19 @@ void bbts::command_runner_t::local_apply_command_runner() {
           // store the outputs
           outputs.push_back({tid, ts_size});
         }
-
+        
+        // figure out the additinal memory
+        additional_memory = ud->get_required_memory({ ._params = cmd->get_parameters() }, input_meta_args);
+        if(additional_memory != 0) {
+          outputs.push_back({-1, additional_memory});
+        }
       });
 
       // log what is happening
       _logger->message("APPLY " + std::to_string(cmd->id) + " on my_node : " + std::to_string(_comm->get_rank()) + " Executed...\n");
 
       // create the outputs and run the ud 
+      tid_t additional_tid = TID_NONE;
       _ts->local_transaction(inputs, outputs, [&](const storage_t::reservation_result_t &res) {
 
         // make the input arguments
@@ -204,11 +211,24 @@ void bbts::command_runner_t::local_apply_command_runner() {
           // set the output arg
           output_args.set(idx, *t);
         }
-        
+
+        // get the temporary memory required
+        void *extra_mem = nullptr;
+        if(additional_memory != 0) {
+          extra_mem = res.create[1].get().tensor->get_data_ptr<void*>();
+          additional_tid = res.create[1].get().id;
+        }
+
         // apply the ud function
-        ud->call_ud(bbts::ud_impl_t::tensor_params_t{._params = cmd->get_parameters() }, input_args, output_args);
+        ud->call_ud(bbts::ud_impl_t::tensor_params_t{._params = cmd->get_parameters(),
+                                                     ._additional_memory = extra_mem}, input_args, output_args);
       });
 
+      // remove the additional memory
+      if(additional_tid != TID_NONE) {
+        _ts->remove_by_tid(additional_tid);
+      }
+      
       // retire the command so it knows that we have processed the tensors
       _rs->retire_command(std::move(cmd));
     }

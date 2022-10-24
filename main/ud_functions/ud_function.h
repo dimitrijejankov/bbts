@@ -167,11 +167,20 @@ struct ud_impl_t {
 
     command_param_t get_raw(size_t n) const { return _params[n]; }
 
+    // returns the additional memory that the kernel needs
+    void *get_additional_memory() { return _additional_memory; }
+
+    // set the additional memory address
+    void set_additional_memory(void *ptr) { _additional_memory = ptr; }
+
     // returns the number of parameters
     size_t num_parameters() const { return _params.size(); }
 
     // the parameters
     bbts::command_param_list_t _params;
+
+    // the additional 
+    void *_additional_memory = nullptr;
 
 #ifdef ENABLE_GPU
     // the stream to use by the ud function
@@ -237,7 +246,7 @@ struct ud_impl_t {
 
   // returins the reqired additional memory for the kernel to run
   virtual size_t get_required_memory(const bbts::ud_impl_t::tensor_params_t &params,
-                                   const meta_args_t &_in) = 0;
+                                     const meta_args_t &_in) const = 0;
 
   // returns the complexity hint of the ud function
   virtual size_t get_complexity_hint(

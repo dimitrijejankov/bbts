@@ -5,7 +5,7 @@ bbts::partial_reduce_op_t::partial_reduce_op_t(bbts::tensor_factory_t &factory,
                                                const tid_t lhs,
                                                const tid_t rhs,
                                                tid_t &out_tid,
-                                               const ud_impl_t::tensor_params_t &params,
+                                               ud_impl_t::tensor_params_t &params,
                                                const bbts::ud_impl_t &reduce_op) : 
                                                                   _factory(factory),
                                                                   _storage(storage),
@@ -27,6 +27,7 @@ void bbts::partial_reduce_op_t::apply() {
 
   // calculate the size of the output tensor
   size_t output_size;
+  size_t tmp_size = 0;
   _storage.local_transaction({_lhs, _rhs}, {}, [&](const storage_t::reservation_result_t &res) {
 
     auto l = res.get[0].get();
@@ -45,13 +46,17 @@ void bbts::partial_reduce_op_t::apply() {
 
     // return the size of the tensor
     output_size = _factory.get_tensor_size(_output_meta.get<0>());
+
+    // get the size required to 
+    tmp_size = _reduce_op.get_required_memory(_params, _input_meta);
   });
 
   // figure out if this is the an intermediate reduce
   auto to_create = _out_tid < 0 ? TID_NONE : _out_tid;
 
   // perform the actual kernel
-  _storage.local_transaction({_lhs, _rhs}, {{to_create, output_size}}, [&](const storage_t::reservation_result_t &res) {
+  tid_t additional_tid = TID_NONE;
+  _storage.local_transaction({_lhs, _rhs}, {{to_create, output_size}, {TID_NONE, tmp_size}}, [&](const storage_t::reservation_result_t &res) {
   
     // init the output tensor
     auto &out = res.create[0].get().tensor;
@@ -68,10 +73,22 @@ void bbts::partial_reduce_op_t::apply() {
     // set the output tensor to the function
     _output_tensor.set<0>(*out);
 
+    // get the temporary memory required
+    _params.set_additional_memory(nullptr);
+    if(tmp_size != 0) {
+      _params.set_additional_memory(res.create[1].get().tensor->get_data_ptr<void*>());
+      additional_tid = res.create[1].get().id;
+    }
+
     // run the function
     _reduce_op.call_ud(_params, _input_tensors, _output_tensor);
 
     // set the output tid
     _out_tid = res.create[0].get().id;
   });
+
+  // remove the additional memory
+  if(additional_tid != TID_NONE) {
+    _storage.remove_by_tid(additional_tid);
+  }
 }
