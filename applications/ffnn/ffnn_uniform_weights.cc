@@ -23,6 +23,11 @@ bbts::ffnn_uniform_weights::ffnn_uniform_weights() {
   fn = &ffnn_uniform_weights::uniform_rand;
 }
 
+size_t bbts::ffnn_uniform_weights::get_required_memory(const bbts::ud_impl_t::tensor_params_t &params,
+                                                       const bbts::ud_impl_t::meta_args_t &_in) {
+  return 0;
+}
+
 size_t bbts::ffnn_uniform_weights::get_complexity_hint(const bbts::ud_impl_t::tensor_params_t &params,
                                                   const bbts::ud_impl_t::meta_args_t &_in) {
 

@@ -22,6 +22,11 @@ bbts::ffnn_add::ffnn_add() {
   fn = &ffnn_add::add;
 }
 
+size_t bbts::ffnn_add::get_required_memory(const bbts::ud_impl_t::tensor_params_t &params,
+                                           const bbts::ud_impl_t::meta_args_t &_in) {
+  return 0;
+}
+
 size_t bbts::ffnn_add::get_complexity_hint(
     const bbts::ud_impl_t::tensor_params_t &params,
     const bbts::ud_impl_t::meta_args_t &_in) {

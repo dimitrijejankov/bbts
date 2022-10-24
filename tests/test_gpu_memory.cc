@@ -1,4 +1,4 @@
-#include "../src/gpu/gpu_memory.h"
+#include "../main/gpu/gpu_memory.h"
 #include <gtest/gtest.h>
 #include <cstddef>
 #include <cstdint>

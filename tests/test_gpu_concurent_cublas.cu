@@ -12,8 +12,8 @@
 #include <algorithm>
 #include <mutex>
 
-#include "../src/ud_functions/udf_manager.h"
-#include "../src/ud_functions/gpu_scheduler.h"
+#include "../main/ud_functions/udf_manager.h"
+#include "../main/ud_functions/gpu_scheduler.h"
 
 int main() {
 

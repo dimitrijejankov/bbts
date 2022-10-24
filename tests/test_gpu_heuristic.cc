@@ -1,7 +1,7 @@
 #include <array>
 #include <gtest/gtest.h>
-#include "../src/gpu/gpu_heuristic.h"
-#include "../src/commands/reservation_station.h"
+#include "../main/gpu/gpu_heuristic.h"
+#include "../main/commands/reservation_station.h"
 
 using namespace bbts;
 

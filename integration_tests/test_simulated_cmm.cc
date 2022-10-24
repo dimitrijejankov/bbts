@@ -1,13 +1,13 @@
 #include <map>
 #include <thread>
 #include <chrono>
-#include "../src/operations/move_op.h"
-#include "../src/operations/reduce_op.h"
-#include "../src/commands/reservation_station.h"
-#include "../src/commands/command_notifier.h"
-#include "../src/commands/command_runner.h"
-#include "../src/server/node.h"
-#include "../src/server/static_config.h"
+#include "../main/operations/move_op.h"
+#include "../main/operations/reduce_op.h"
+#include "../main/commands/reservation_station.h"
+#include "../main/commands/command_notifier.h"
+#include "../main/commands/command_runner.h"
+#include "../main/server/node.h"
+#include "../main/server/static_config.h"
 
 using namespace bbts;
 using namespace std::chrono;

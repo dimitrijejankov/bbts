@@ -21,6 +21,11 @@ bbts::dense_matrix_relu_t::dense_matrix_relu_t() {
   fn = &dense_matrix_relu_t::relu;
 }
 
+size_t bbts::dense_matrix_relu_t::get_required_memory(const bbts::ud_impl_t::tensor_params_t &params,
+                                                      const bbts::ud_impl_t::meta_args_t &_in) {
+  return 0;
+}
+
 size_t bbts::dense_matrix_relu_t::get_complexity_hint(const bbts::ud_impl_t::tensor_params_t &params,
                                                      const bbts::ud_impl_t::meta_args_t &_in) {
 

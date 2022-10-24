@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "../src/commands/parsed_command.h"
+#include "../main/commands/parsed_command.h"
 
 namespace bbts {
 

@@ -22,6 +22,11 @@ bbts::ffnn_weighted_sum::ffnn_weighted_sum() {
   fn = &ffnn_weighted_sum::add;
 }
 
+size_t bbts::ffnn_weighted_sum::get_required_memory(const bbts::ud_impl_t::tensor_params_t &params,
+                                                    const bbts::ud_impl_t::meta_args_t &_in) {
+  return 0;
+}
+
 size_t bbts::ffnn_weighted_sum::get_complexity_hint(const bbts::ud_impl_t::tensor_params_t &params,
                                                      const bbts::ud_impl_t::meta_args_t &_in) {
 

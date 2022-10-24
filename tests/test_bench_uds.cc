@@ -1,6 +1,6 @@
-#include "../src/tensor/builtin_formats.h"
-#include "../src/ud_functions/builtin_functions.h"
-#include "../src/ud_functions/udf_manager.h"
+#include "../main/tensor/builtin_formats.h"
+#include "../main/ud_functions/builtin_functions.h"
+#include "../main/ud_functions/udf_manager.h"
 #include <cstddef>
 #include <cstdint>
 #include <iostream>

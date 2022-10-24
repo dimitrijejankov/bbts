@@ -1,4 +1,4 @@
-#include "../src/operations/reduce_op.h"
+#include "../main/operations/reduce_op.h"
 
 int main(int argc, char **argv) {
 

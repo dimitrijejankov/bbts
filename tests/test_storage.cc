@@ -1,9 +1,9 @@
 #include <cstdlib>
 #include <gtest/gtest.h>
 #include <thread>
-#include "../src/storage/storage.h"
-#include "../src/tensor/tensor_factory.h"
-#include "../src/tensor/builtin_formats.h"
+#include "../main/storage/storage.h"
+#include "../main/tensor/tensor_factory.h"
+#include "../main/tensor/builtin_formats.h"
 
 namespace bbts {
 

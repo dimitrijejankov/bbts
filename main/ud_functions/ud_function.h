@@ -33,9 +33,11 @@ struct ud_impl_id_t {
 };
 
 struct ud_impl_t {
+
   // the ud function arguments for either the input or the output
   template <class T>
   struct ud_impl_args_t {
+
     // just an empty argument list
     ud_impl_args_t() = default;
 
@@ -232,6 +234,10 @@ struct ud_impl_t {
 
   // the gpu function to call
   ud_impl_callable gpu_fn;
+
+  // returins the reqired additional memory for the kernel to run
+  virtual size_t get_required_memory(const bbts::ud_impl_t::tensor_params_t &params,
+                                   const meta_args_t &_in) = 0;
 
   // returns the complexity hint of the ud function
   virtual size_t get_complexity_hint(

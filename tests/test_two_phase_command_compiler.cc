@@ -11,13 +11,13 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-#include "../src/commands/command.h"
-#include "../src/tensor/tensor.h"
-#include "../src/tensor/tensor_factory.h"
-#include "../src/ud_functions/ud_function.h"
-#include "../src/ud_functions/udf_manager.h"
-#include "../src/commands/two_layer_compiler.h"
-#include "../src/commands/compile_source_file.h"
+#include "../main/commands/command.h"
+#include "../main/tensor/tensor.h"
+#include "../main/tensor/tensor_factory.h"
+#include "../main/ud_functions/ud_function.h"
+#include "../main/ud_functions/udf_manager.h"
+#include "../main/commands/two_layer_compiler.h"
+#include "../main/commands/compile_source_file.h"
 
 
 namespace bbts {

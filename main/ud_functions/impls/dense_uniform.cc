@@ -24,6 +24,11 @@ bbts::dense_uniform_t::dense_uniform_t() {
   fn = &dense_uniform_t::uniform_rand;
 }
 
+size_t bbts::dense_uniform_t::get_required_memory(const bbts::ud_impl_t::tensor_params_t &params,
+                                                  const bbts::ud_impl_t::meta_args_t &_in) {
+  return 0;
+}
+
 size_t bbts::dense_uniform_t::get_complexity_hint(const bbts::ud_impl_t::tensor_params_t &params,
                                                   const bbts::ud_impl_t::meta_args_t &_in) {
 

@@ -1,4 +1,4 @@
-#include "../src/commands/reservation_station.h"
+#include "../main/commands/reservation_station.h"
 #include <cstddef>
 #include <gtest/gtest.h>
 #include <unordered_map>
