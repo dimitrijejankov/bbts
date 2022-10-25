@@ -125,7 +125,7 @@ void reduce_op_t::apply() {
 
         tid_t out_tid;
         tid_t additional_tid = TID_NONE;
-        _storage.local_transaction({lhs, rhs}, {{TID_NONE, output_size}, {TID_NONE, tmp_size}}, [&](const storage_t::reservation_result_t &res) {
+        _storage.local_transaction({lhs, rhs}, outs, [&](const storage_t::reservation_result_t &res) {
         
           // get the left and right tensor so we can apply the kernel
           auto l = res.get[0].get().tensor;

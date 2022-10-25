@@ -4,49 +4,24 @@
 #include <unordered_map>
 #include <utility>
 
-bbts::reorder_buffer_t::reorder_buffer_t() : 
-  _apply_queue(std::set<command_id_t, reorder_buffer_cmp_t>(reorder_buffer_cmp_t(this))) {}
+void bbts::apply_reorder_queue_t::queue(command_id_t apply_id) {
 
-bool bbts::reorder_buffer_cmp_t::operator()(const command_id_t &lhs, const command_id_t &rhs) const {
-
-  auto lhs_reduce = buffer->_applies_into_reduce.find(lhs);
-  auto rhs_reduce = buffer->_applies_into_reduce.find(rhs);
-
-  // if none of them go into an reduce sort them by the id
-  if(lhs_reduce == buffer->_applies_into_reduce.end() && rhs_reduce == buffer->_applies_into_reduce.end()) {
-    return lhs < rhs;
-  }
-  // if one of them does prefer that one
-  else if(lhs_reduce != buffer->_applies_into_reduce.end() && rhs_reduce == buffer->_applies_into_reduce.end()) {
-    return true;
-  }
-  else if(lhs_reduce == buffer->_applies_into_reduce.end() && rhs_reduce != buffer->_applies_into_reduce.end()) {
-    return false;
+  auto it = _applies_into_reduce.find(apply_id);
+  if(it == _applies_into_reduce.end()) {
+    applies_not_into_reduces.insert(apply_id);
+    return;
   }
 
-  // if both of them feed into a reduce pick the one that is feeding into a reduce that is in progress
-  auto lhs_feeding = buffer->_reduces_in_progress.find(lhs_reduce->second);
-  auto rhs_feeding = buffer->_reduces_in_progress.find(rhs_reduce->second);
-
-  // if both of them feed into a reduce pick the one with the smallest command id
-  if((lhs_feeding != buffer->_reduces_in_progress.end() && rhs_feeding != buffer->_reduces_in_progress.end())) {
-    return *lhs_feeding < *rhs_feeding;
-  }
-  // if one of them does prefer that one
-  else if(lhs_feeding != buffer->_reduces_in_progress.end() && rhs_feeding == buffer->_reduces_in_progress.end()) {
-    return true;
-  }
-  else if(lhs_feeding == buffer->_reduces_in_progress.end() && rhs_feeding != buffer->_reduces_in_progress.end()) {
-    return false;
+  auto jt = _reduces_in_progress.find(it->second);
+  if(jt == _reduces_in_progress.end()) {
+    applies_into_reduces.insert(apply_id);
+    return;
   }
 
-  // if none of them are in progress sort them by 
-  return lhs < rhs;
+  applies_into_ongoing_reduces.insert(apply_id);
 }
 
-void bbts::reorder_buffer_t::analyze(const std::vector<command_ptr_t> &cmds) {
-
-  std::unique_lock<std::mutex> lk(apply_reduce_m);
+void bbts::apply_reorder_queue_t::analyze(const std::vector<command_ptr_t> &cmds) {
 
   // this is an operational set to keep track of what tensors come from what apply
   std::unordered_map<tid_t, command_id_t> _apply_outputs;
@@ -77,6 +52,81 @@ void bbts::reorder_buffer_t::analyze(const std::vector<command_ptr_t> &cmds) {
   }
 }
 
+void bbts::apply_reorder_queue_t::reduce_started(command_id_t reduce_id) {
+
+  // mark that it is in progress
+  if(_reduces_in_progress.find(reduce_id) != _reduces_in_progress.end()) {
+    _reduces_in_progress.insert(reduce_id);
+  }
+
+  // go through all the affected applies
+  auto range = _reduce_to_applies.equal_range(reduce_id);
+  for (auto it = range.first; it != range.second; ++it) {
+
+    // move the ongoing the apply from applies_into_reduces to applies_into_ongoing_reduces
+    auto jt = applies_into_reduces.find(it->second);
+    if(jt != applies_into_reduces.end()) {
+      applies_into_ongoing_reduces.insert(it->second);
+      applies_into_reduces.erase(jt);
+    }
+  }
+}
+
+void bbts::apply_reorder_queue_t::clear() {
+  
+  applies_not_into_reduces.clear();
+  applies_into_reduces.clear();
+  applies_into_ongoing_reduces.clear();
+  _reduces_in_progress.clear();
+  _applies_into_reduce.clear();
+  _reduce_to_applies.clear();
+}
+
+bool bbts::apply_reorder_queue_t::has_any() {
+  return !applies_not_into_reduces.empty() || 
+         !applies_into_reduces.empty() || 
+         !applies_into_ongoing_reduces.empty();
+}
+
+bbts::command_id_t bbts::apply_reorder_queue_t::get_next() {
+
+  if(!applies_into_ongoing_reduces.empty()) {
+    auto out = *applies_into_ongoing_reduces.begin();
+    applies_into_ongoing_reduces.erase(applies_into_ongoing_reduces.begin());
+    return out;
+  }
+
+  if(!applies_into_reduces.empty()) {
+    auto out = *applies_into_reduces.begin();
+    applies_into_reduces.erase(applies_into_reduces.begin());
+
+    // we are now kicking off an apply that feeds directly into a reduce.. so we need to update stuff..
+    auto it = _applies_into_reduce.find(out);
+    assert(it != _applies_into_reduce.end());
+
+    // mark that the reduce has started
+    reduce_started(it->second);
+
+    return out;
+  }
+
+  if(!applies_not_into_reduces.empty()) {
+    auto out = *applies_not_into_reduces.begin();
+    applies_not_into_reduces.erase(applies_not_into_reduces.begin());
+    return out;
+  }
+
+  return -1;
+}
+
+
+bbts::reorder_buffer_t::reorder_buffer_t() {}
+
+void bbts::reorder_buffer_t::analyze(const std::vector<command_ptr_t> &cmds) {
+  std::unique_lock<std::mutex> lk(apply_reduce_m);
+  apply_reorder_queue.analyze(cmds);
+}
+
 void bbts::reorder_buffer_t::execute() {
   std::unique_lock<std::mutex> lk(m);
   is_executing = true;
@@ -102,11 +152,7 @@ void bbts::reorder_buffer_t::clear() {
     std::unique_lock<std::mutex> lk(apply_reduce_m);
     
     partial_reduce_queue = {};
-    _apply_queue.clear();
-    _apply_reduces.clear();
-    _reduces_in_progress.clear();
-    _applies_into_reduce.clear();
-    _reduce_to_applies.clear();
+    apply_reorder_queue.clear();
     reduce_queue = {};
     move_queue = {};
   }
@@ -167,18 +213,9 @@ bool bbts::reorder_buffer_t::get_next(command_t::op_type_t type, command_ptr_t &
     else {
 
       // return the apply
-      auto cmd_id = *_apply_queue.begin();
-      out = std::move(_apply_reduces[cmd_id]);
-
-      // remove the partial reduce
-      _apply_queue.erase(_apply_queue.begin());
-      _apply_reduces.erase(cmd_id);
-
-      // mark that the reduce has started as we have calculated one of the inputs...
-      auto it = _applies_into_reduce.find(cmd_id);
-      if(it != _applies_into_reduce.end()) {
-        _reduce_started(it->second);
-      }
+      auto cmd_id = apply_reorder_queue.get_next();
+      out = std::move(_applies[cmd_id]);
+      _applies.erase(cmd_id);
     }
   }
   else if(type == command_t::op_type_t::REDUCE) {
@@ -195,9 +232,6 @@ bool bbts::reorder_buffer_t::get_next(command_t::op_type_t type, command_ptr_t &
     // return the reduce
     out = std::move(reduce_queue.front());
     reduce_queue.pop();
-
-    // remove it since we are done with it
-    _reduces_in_progress.erase(out->id);
   }
   else if (type == command_t::op_type_t::MOVE) {
 
@@ -221,65 +255,18 @@ bool bbts::reorder_buffer_t::get_next(command_t::op_type_t type, command_ptr_t &
   return true;
 }
 
-void bbts::reorder_buffer_t::_reduce_started(bbts::command_id_t cmd_id) {
-
-  auto it = _reduces_in_progress.find(cmd_id); 
-  if(it == _reduces_in_progress.end()) {
-
-    // remove all the affected applies
-    std::vector<command_id_t> to_reinsert;
-    auto range = _reduce_to_applies.equal_range(cmd_id);
-    for (auto i = range.first; i != range.second; ++i) {
-      auto jt = _apply_queue.find(i->second);
-      if(jt != _apply_queue.end()) {
-        _apply_queue.erase(jt);
-        to_reinsert.push_back(i->second);
-      }
-    }
-
-    // update the reduce in progress
-    _reduces_in_progress.insert(cmd_id);
-
-    // reinsert them back
-    for (auto apply : to_reinsert) {
-      _apply_queue.insert(apply);
-    }
-  }
-}
-
-void bbts::reorder_buffer_t::_partial_reduce_ended(bbts::command_id_t cmd_id) {
-
-  std::unique_lock<std::mutex> lk(apply_reduce_m);
-  
-  // remove these as they are no longer necessary
-  auto range = _reduce_to_applies.equal_range(cmd_id);
-  for (auto i = range.first; i != range.second; ++i) {
-    _applies_into_reduce.erase(i->second);
-  }
-
-  // remove the reduce in progress as with the final reduce scheduled 
-  // we no longer need to keep track of this
-  auto it = _reduces_in_progress.find(cmd_id); 
-  if(it != _reduces_in_progress.end()) {
-    _reduces_in_progress.erase(it);
-  }
-}
-
 void bbts::reorder_buffer_t::_queue_apply(command_ptr_t _command) {
 
   std::unique_lock<std::mutex> lk(apply_reduce_m);
   
   // insert the new apply
-  _apply_queue.insert(_command->id);
-  _apply_reduces[_command->id] = std::move(_command);
+  apply_reorder_queue.queue(_command->id);
+  _applies[_command->id] = std::move(_command);
 
   apply_reduce_cv.notify_all();
 }
 
 void bbts::reorder_buffer_t::_queue_reduce(command_ptr_t _command) {
-
-  // signal that the final distributed reduce started
-  _partial_reduce_ended(_command->id);
 
   std::unique_lock<std::mutex> lk(dist_reduce_m);
 
@@ -289,14 +276,6 @@ void bbts::reorder_buffer_t::_queue_reduce(command_ptr_t _command) {
 }
 
 void bbts::reorder_buffer_t::_queue_partial_reduce(command_ptr_t _command) {
-  if(_command->get_output(0).tid > 0) {
-    _partial_reduce_ended(_command->id);
-  }
-  else {
-     // signal that the reduce is started
-     std::unique_lock<std::mutex> lk(apply_reduce_m);
-    _reduce_started(_command->id);
-  }
 
   std::unique_lock<std::mutex> lk(apply_reduce_m);
 
@@ -314,5 +293,5 @@ void bbts::reorder_buffer_t::_queue_move(command_ptr_t _command) {
 }
 
 bool bbts::reorder_buffer_t::any_applies_or_partial_reduces() {
-  return !partial_reduce_queue.empty() || !_apply_queue.empty();
+  return !partial_reduce_queue.empty() || apply_reorder_queue.has_any();
 }

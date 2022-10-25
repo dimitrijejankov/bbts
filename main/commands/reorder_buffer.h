@@ -10,19 +10,34 @@
 
 namespace bbts {
 
-class reorder_buffer_cmp_t
-{
+class apply_reorder_queue_t {
 public:
 
-  reorder_buffer_cmp_t(class reorder_buffer_t *buffer) { this->buffer = buffer; }
+  void queue(command_id_t apply_id);
 
-  bool operator()(const command_id_t &lhs, const command_id_t &rhs) const;
+  void analyze(const std::vector<command_ptr_t> &cmds);
 
-private:
+  void reduce_started(command_id_t reduce_id);
 
-  class reorder_buffer_t *buffer;
+  void clear();
+
+  bool has_any();
+
+  command_id_t get_next();
+
+  std::set<command_id_t> applies_not_into_reduces;
+
+  std::set<command_id_t> applies_into_reduces;
+
+  std::set<command_id_t> applies_into_ongoing_reduces;
+
+  // these are used in the reorder_buffer_cmp_t to compare
+  std::unordered_set<command_id_t> _reduces_in_progress;
+
+  // these are initialized once during the analize and cleared when clear is called
+  std::unordered_map<command_id_t, command_id_t> _applies_into_reduce;
+  std::unordered_multimap<command_id_t, command_id_t> _reduce_to_applies;
 };
-
 
 // reduces (and partial reduces are given priority)
 // if no reduces exist that we can run I pick an apply that is part of an reduce
@@ -49,9 +64,6 @@ public:
 
 private:
 
-  void _reduce_started(bbts::command_id_t cmd_id);
-  void _partial_reduce_ended(bbts::command_id_t cmd_id);
-
   void _queue_apply(command_ptr_t _command);
   void _queue_reduce(command_ptr_t _command);
   void _queue_partial_reduce(command_ptr_t _command);
@@ -70,16 +82,9 @@ private:
   // stuff to handle applies and partial reduces
   std::queue<command_ptr_t> partial_reduce_queue;
 
-  // we use this to rank the applies
-  std::set<command_id_t, reorder_buffer_cmp_t> _apply_queue;
-  std::unordered_map<command_id_t, command_ptr_t> _apply_reduces;
-
-  // these are used in the reorder_buffer_cmp_t to compare
-  std::unordered_set<command_id_t> _reduces_in_progress;
-
-  // these are initialized once during the analize and cleared when clear is called
-  std::unordered_map<command_id_t, command_id_t> _applies_into_reduce;
-  std::unordered_multimap<command_id_t, command_id_t> _reduce_to_applies;
+  // the 
+  apply_reorder_queue_t apply_reorder_queue;
+  std::unordered_map<command_id_t, command_ptr_t> _applies;
 
   // stuff to handle distributed reduces
   std::mutex dist_reduce_m;
@@ -92,8 +97,6 @@ private:
   std::queue<command_ptr_t> move_queue;
 
   bool any_applies_or_partial_reduces();
-
-  friend class bbts::reorder_buffer_cmp_t;
 };
 
 using reorder_buffer_ptr = std::shared_ptr<reorder_buffer_t>;
