@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <cstdint>
+#include <sstream>      
 #include <functional>
 
 namespace bbts {

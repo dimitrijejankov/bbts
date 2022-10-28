@@ -1,13 +1,37 @@
 new_local_repository(
-    name = "libmkl",
+    name = "libmkl_core",
     path = "/opt/intel/oneapi/mkl/latest/",
-    build_file = "//third_party/mkl:libmkl.BUILD"
+    build_file = "//third_party/mkl:libmkl_core.BUILD"
+)
+
+new_local_repository(
+    name = "libmkl_intel_ilp64",
+    path = "/opt/intel/oneapi/mkl/latest/",
+    build_file = "//third_party/mkl:libmkl_intel_ilp64.BUILD"
+)
+
+new_local_repository(
+    name = "libmkl_sequential",
+    path = "/opt/intel/oneapi/mkl/latest/",
+    build_file = "//third_party/mkl:libmkl_sequential.BUILD"
 )
 
 new_local_repository(
     name = "libmkl_headers",
     path = "/opt/intel/oneapi/mkl/latest/",
     build_file = "//third_party/mkl:libmkl_headers.BUILD"
+)
+
+new_local_repository(
+    name = "libmpi",
+    path = "/usr/lib/x86_64-linux-gnu/openmpi/",
+    build_file = "//third_party/openmpi:libmpi.BUILD"
+)
+
+new_local_repository(
+    name = "libmpi_headers",
+    path = "/usr/lib/x86_64-linux-gnu/openmpi/",
+    build_file = "//third_party/openmpi:libmpi_headers.BUILD"
 )
 
 local_repository(

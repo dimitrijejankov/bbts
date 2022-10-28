@@ -1,6 +1,7 @@
 cc_library(
     name = "communication_headers",
     hdrs = ["communicator.h"],
+    deps = ["@libmpi_headers"],
     visibility = ["//visibility:public"],
 )
 
@@ -12,7 +13,8 @@ cc_library(
             "//main/server:server_headers",
             "//main/commands:commands_headers",
             "//main/utils:utils_headers",
-            "//main/ud_functions:ud_functions_headers"],
+            "//main/ud_functions:ud_functions_headers",
+            "@libmpi"],
     alwayslink = 1,
     visibility = ["//visibility:public"]
 )

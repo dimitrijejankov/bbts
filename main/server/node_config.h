@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <memory>
 #include <thread>
+#include <stdexcept>
 #include <sys/sysinfo.h>
 
 namespace bbts {

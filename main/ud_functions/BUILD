@@ -36,7 +36,9 @@ cc_library(
             "//main/tensor:tensor_headers",
             "//main/commands:commands_headers",
             "//main/utils:utils_headers",
-            "@libmkl",
+            "@libmkl_core",
+            "@libmkl_intel_ilp64",
+            "@libmkl_sequential",
             "@libmkl_headers"],
     alwayslink = 1,
     visibility = ["//visibility:public"]
