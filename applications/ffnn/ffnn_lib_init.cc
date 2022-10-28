@@ -3,6 +3,7 @@
 #include "../../main/ud_functions/udf_manager.h"
 
 #include "ffnn_types.h"  
+#include <mkl.h>
 
 #include "ffnn_activation_mult.h"
 #include "ffnn_add.h"
@@ -23,6 +24,8 @@ extern "C" {
   }
  
   void register_udfs(bbts::udf_manager_ptr udf_manager) {
+
+    mkl_set_threading_layer(MKL_THREADING_SEQUENTIAL);
 
     udf_manager->register_udf(std::make_unique<bbts::ud_func_t>(
           bbts::ud_func_t {
