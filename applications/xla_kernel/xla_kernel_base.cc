@@ -63,7 +63,7 @@ bbts::xla_kernel_base::xla_kernel_base(const std::string &hlo) {
       // check if this is an input
       if(allocation.is_entry_computation_parameter()) {
 
-        auto sz = allocation.size() / sizeof(float);
+        auto sz = allocation.size();
         input_sizes.push_back(sz);
         inputTypes.push_back("xla_dense");
 
@@ -71,7 +71,7 @@ bbts::xla_kernel_base::xla_kernel_base(const std::string &hlo) {
 
         // ok it is an output
         // TODO this still might not be an output parameter... need to figure out why....
-        auto sz = allocation.size() / sizeof(float);
+        auto sz = allocation.size();
         output_sizes.push_back(sz);
         outputTypes.push_back("xla_dense");
       }

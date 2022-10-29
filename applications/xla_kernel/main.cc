@@ -1,6 +1,7 @@
 #include <iostream>
 #include <memory>
 #include <vector>
+#include <sstream>
 
 #include <algorithm> // fill
 #include <numeric>   // iota.
@@ -65,6 +66,7 @@ int main() {
   size_t extra_size = ud->get_required_memory({}, meta_input_args);
 
   // get the extra memory
+  std::cout << "Num Inputs : " << xla_ud->input_sizes.size() << ", Num Outputs : " << xla_ud->output_sizes.size() << "\n";
   std::cout << "Extra memory required : " << extra_size << "\n";
   std::cout << "a size : " << xla_ud->input_sizes[0] << "\n";
   std::cout << "b size : " << xla_ud->input_sizes[1] << "\n";
@@ -83,12 +85,21 @@ int main() {
   auto &bb = factory->init_tensor((bbts::tensor_t*) b_mem.get(), m_b).as<bbts::xla_tensor_t>();
   auto &cc = factory->init_tensor((bbts::tensor_t*) c_mem.get(), m_c).as<bbts::xla_tensor_t>();
 
+  // set some values
+  std::fill(aa.data(), aa.data() + (xla_ud->input_sizes[0] / sizeof(float)), 1.0f);
+  std::fill(bb.data(), bb.data() + (xla_ud->input_sizes[1] / sizeof(float)), 1.0f);
+  std::iota(cc.data(), cc.data() + (xla_ud->output_sizes[0] / sizeof(float)), 0.0f);
+
+  // form the inputs
   bbts::ud_impl_t::tensor_args_t input_args = {{&aa, &bb}};
   bbts::ud_impl_t::tensor_args_t output_args = {{&cc}};
 
   // call the addition
   ud->call_ud({ ._params = bbts::command_param_list_t {._data = nullptr, ._num_elements = 0}, ._additional_memory = tmp_mem.get() }, input_args, output_args);
 
-  std::cout << "Registered\n";
+  std::stringstream ss;
+  factory->print_tensor(&cc, ss);
+
+  std::cout << ss.str() << "\n";
 }
 

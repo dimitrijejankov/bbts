@@ -30,7 +30,7 @@ tensor_creation_fs_t bbts::xla_tensor_t::get_creation_fs() {
     // extract the info
     auto data = t.data();
 
-    for(int i = 0; i != t.meta().m().size; ++i) {
+    for(int i = 0; i != t.meta().m().size / sizeof(float); ++i) {
       std::cout << data[i] << " ";
     }
     std::cout << std::endl;
