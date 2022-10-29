@@ -168,7 +168,7 @@ struct ud_impl_t {
     command_param_t get_raw(size_t n) const { return _params[n]; }
 
     // returns the additional memory that the kernel needs
-    void *get_additional_memory() { return _additional_memory; }
+    void *get_additional_memory() const { return _additional_memory; }
 
     // set the additional memory address
     void set_additional_memory(void *ptr) { _additional_memory = ptr; }
