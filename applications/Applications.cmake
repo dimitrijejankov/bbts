@@ -20,6 +20,7 @@ add_aplication("node")
 add_aplication("multiplication_chain")
 add_aplication("mm_single_node")
 add_aplication("web_interface")
+add_aplication("diff_mm")
 
 if(${ENABLE_GPU})
     add_aplication("ffnn-gpu")
