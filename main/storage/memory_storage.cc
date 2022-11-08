@@ -128,7 +128,7 @@ tensor_t *memory_storage_t::_allocate_tensor(size_t num_bytes) {
     ts = (offset == _allocator->invalid_offset) ? nullptr : new (_mem + offset) tensor_t();
   #else
     // we can not do this
-    ts = (tensor_t*) malloc(num_bytes);
+    ts = (tensor_t*) aligned_alloc(256, num_bytes);
     new (ts) tensor_t();
   #endif
 

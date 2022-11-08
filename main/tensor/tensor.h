@@ -57,7 +57,7 @@ namespace bbts {
     // returns the point to the data
     template<class T> 
     T* get_data_ptr() const { 
-      return (T*) (data_ptr == nullptr ? _blob : data_ptr);  
+      return (T*) (data_ptr == nullptr ? (void*)((char*) this + sizeof(tensor_t)) : data_ptr);  
     }
 
     // returns the meta data
@@ -71,10 +71,7 @@ namespace bbts {
     
     // if the data pointer is set 
     void *data_ptr = nullptr;
-
-    // after this tensor header is all the
-    char _blob[0];
-  };
+  } __attribute__ ((aligned (256)));
 
   // to register a tensor format these need to be defined
   struct tensor_creation_fs_t {

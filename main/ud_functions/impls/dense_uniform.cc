@@ -20,6 +20,9 @@ bbts::dense_uniform_t::dense_uniform_t() {
   // this is a CPU dense add
   is_gpu = false;
 
+  // init threading
+  mkl_set_threading_layer(MKL_THREADING_SEQUENTIAL);
+
   // set the function that actually performs the add
   fn = &dense_uniform_t::uniform_rand;
 }
