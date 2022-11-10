@@ -527,8 +527,10 @@ tensor_t *nvme_storage_t::_allocate_tensor(size_t num_bytes) {
     checkCudaErrors(cudaMallocManaged(&ts, num_bytes));
     new (ts) tensor_t();
   #else
-    // this is a CPU
-    ts = new (malloc(num_bytes)) tensor_t();
+
+    // we can not do this
+    ts = (tensor_t*) aligned_alloc(256, num_bytes);
+    new (ts) tensor_t();
   #endif
 
   return ts;

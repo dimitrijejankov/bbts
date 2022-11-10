@@ -106,7 +106,7 @@ struct lru_t {
 // tensors to disk or moving them to GPU
 struct nvme_storage_t {
 
-  nvme_storage_t(communicator_ptr_t com) : _com(std::move(com)) {
+  nvme_storage_t(communicator_ptr_t com, const node_config_ptr_t &node_config) : _com(std::move(com)) {
 
     // just empty hooks
     _tensor_create_hook = [](tid_t _) {};
@@ -126,7 +126,7 @@ struct nvme_storage_t {
   nvme_storage_t(communicator_ptr_t com, 
                  size_t max_allocated, 
                  const std::string &file) : _max_allocated(max_allocated),
-                                             _com(std::move(com))  {
+                                            _com(std::move(com))  {
 
     // just empty hooks
     _tensor_create_hook = [](tid_t _) {};
