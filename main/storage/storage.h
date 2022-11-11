@@ -15,7 +15,7 @@ template <class T = storage_t>
 std::vector<std::thread> create_storage_threads(size_t num_threads, T &storage) {
 
   std::vector<std::thread> storage_req_threads;
-  if constexpr (static_config::enable_storage) {
+  #ifdef ENABLE_STORAGE
 
     // make the threads
     storage_req_threads.reserve(num_threads);
@@ -23,7 +23,7 @@ std::vector<std::thread> create_storage_threads(size_t num_threads, T &storage) 
       storage_req_threads.push_back(
           std::thread([&]() { storage.request_thread(); }));
     }
-  }
+  #endif
 
   return std::move(storage_req_threads);
 }

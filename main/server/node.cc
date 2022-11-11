@@ -16,18 +16,18 @@ void bbts::node_t::init() {
   _logger = std::make_shared<logger_t>(_config);
 
   // init the storage
-  if constexpr(static_config::enable_storage) {
+  #ifdef ENABLE_STORAGE
 
     // create the storage with 90% of the total ram
     _storage = std::make_shared<storage_t>(_comm, 
                                           (size_t) (0.9f * (float) _config->get_total_ram()),
                                           "./tmp.ts" + std::to_string(_comm->get_rank()));
-  }
-  else {
+  #else
 
     // memory storage is not limited
     _storage = std::make_shared<storage_t>(_comm, _config);
-  }
+    
+  #endif
 
   // init the factory
   _factory = std::make_shared<bbts::tensor_factory_t>();
