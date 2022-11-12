@@ -139,5 +139,16 @@ extern "C" {
       }));
     udf_manager->register_udf_impl(std::make_unique<bbts::ffnn_weighted_sum_sparse_dense>());
 
+    udf_manager->register_udf(std::make_unique<bbts::ud_func_t>(
+      bbts::ud_func_t {
+        .ud_name = "ffnn_diff_mm_kernel",
+        .is_ass = false,
+        .is_com = false,
+        .num_in = 2,
+        .num_out = 1,
+        .impls = {}
+      }));
+    udf_manager->register_udf_impl(std::make_unique<bbts::ffnn_diff_mm_kernel_t>());
+
   }
 }
