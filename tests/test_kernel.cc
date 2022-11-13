@@ -87,12 +87,12 @@ int main() {
     // int I = 3008;
     // int K = 3008;
     // int J = 3008;
-    int I = 8;
-    int J = 8;
-    int K = 8;
-    // int I = 1024;
-    // int J = 1024;
-    // int K = 1024;
+    // int I = 8;
+    // int J = 8;
+    // int K = 8;
+    int I = 512;
+    int J = 512;
+    int K = 1024;
 
     auto a = (float*) std::aligned_alloc(256, I * K * sizeof(float));
     auto b = (float*) std::aligned_alloc(256, K * J * sizeof(float));
@@ -112,32 +112,32 @@ int main() {
     wierd_mult_with_kernel<2, 2>(a, b, cc, I, J, K);
     auto stop_kernel_1 = std::chrono::high_resolution_clock::now();
 
-    // zero_matrix(cc, I, J);
-    // auto start_kernel_2 = std::chrono::high_resolution_clock::now();
-    // wierd_mult_with_kernel<2, 4>(a, b, cc, I, J, K);
-    // auto stop_kernel_2 = std::chrono::high_resolution_clock::now();
+    zero_matrix(cc, I, J);
+    auto start_kernel_2 = std::chrono::high_resolution_clock::now();
+    wierd_mult_with_kernel<2, 4>(a, b, cc, I, J, K);
+    auto stop_kernel_2 = std::chrono::high_resolution_clock::now();
 
-    // zero_matrix(cc, I, J);
-    // auto start_kernel_3 = std::chrono::high_resolution_clock::now();
-    // wierd_mult_with_kernel<4, 2>(a, b, cc, I, J, K);
-    // auto stop_kernel_3 = std::chrono::high_resolution_clock::now();
+    zero_matrix(cc, I, J);
+    auto start_kernel_3 = std::chrono::high_resolution_clock::now();
+    wierd_mult_with_kernel<4, 2>(a, b, cc, I, J, K);
+    auto stop_kernel_3 = std::chrono::high_resolution_clock::now();
 
-    // zero_matrix(cc, I, J);
-    // auto start_kernel_4 = std::chrono::high_resolution_clock::now();
-    // wierd_mult_with_kernel<8, 2>(a, b, cc, I, J, K);
-    // auto stop_kernel_4 = std::chrono::high_resolution_clock::now();
+    zero_matrix(cc, I, J);
+    auto start_kernel_4 = std::chrono::high_resolution_clock::now();
+    wierd_mult_with_kernel<8, 2>(a, b, cc, I, J, K);
+    auto stop_kernel_4 = std::chrono::high_resolution_clock::now();
 
-    // zero_matrix(cc, I, J);
-    // auto start_kernel_5 = std::chrono::high_resolution_clock::now();
-    // wierd_mult_with_kernel<16, 2>(a, b, cc, I, J, K);
-    // auto stop_kernel_5 = std::chrono::high_resolution_clock::now();
+    zero_matrix(cc, I, J);
+    auto start_kernel_5 = std::chrono::high_resolution_clock::now();
+    wierd_mult_with_kernel<16, 2>(a, b, cc, I, J, K);
+    auto stop_kernel_5 = std::chrono::high_resolution_clock::now();
 
     std::cout << "Time taken by function: " << std::chrono::duration_cast<std::chrono::nanoseconds>(stop_basic - start_basic).count() << " nanoseconds" << std::endl;
     std::cout << "Time taken by function: " << std::chrono::duration_cast<std::chrono::nanoseconds>(stop_kernel_1 - start_kernel_1).count() << " nanoseconds" << std::endl;
-    // std::cout << "Time taken by function: " << std::chrono::duration_cast<std::chrono::nanoseconds>(stop_kernel_2 - start_kernel_2).count() << " nanoseconds" << std::endl;
-    // std::cout << "Time taken by function: " << std::chrono::duration_cast<std::chrono::nanoseconds>(stop_kernel_3 - start_kernel_3).count() << " nanoseconds" << std::endl;
-    // std::cout << "Time taken by function: " << std::chrono::duration_cast<std::chrono::nanoseconds>(stop_kernel_4 - start_kernel_4).count() << " nanoseconds" << std::endl;
-    // std::cout << "Time taken by function: " << std::chrono::duration_cast<std::chrono::nanoseconds>(stop_kernel_5 - start_kernel_5).count() << " nanoseconds" << std::endl;
+    std::cout << "Time taken by function: " << std::chrono::duration_cast<std::chrono::nanoseconds>(stop_kernel_2 - start_kernel_2).count() << " nanoseconds" << std::endl;
+    std::cout << "Time taken by function: " << std::chrono::duration_cast<std::chrono::nanoseconds>(stop_kernel_3 - start_kernel_3).count() << " nanoseconds" << std::endl;
+    std::cout << "Time taken by function: " << std::chrono::duration_cast<std::chrono::nanoseconds>(stop_kernel_4 - start_kernel_4).count() << " nanoseconds" << std::endl;
+    std::cout << "Time taken by function: " << std::chrono::duration_cast<std::chrono::nanoseconds>(stop_kernel_5 - start_kernel_5).count() << " nanoseconds" << std::endl;
 
     float sum = 0.0f;
     for (int i = 0; i < I; i++) {
@@ -149,6 +149,11 @@ int main() {
 
     std::cout << "Sum : " << sum / (I * J) << '\n';
     std::cout << "All good!.." << '\n';
+
+    free(a);
+    free(b);
+    free(c);
+    free(cc);
 
     return 0;
 }

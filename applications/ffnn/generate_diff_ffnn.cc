@@ -323,8 +323,10 @@ int main(int argc, char **argv) {
 
   auto difference = generate_multiply(
       FFNN_DIFFERENCE, ffnn_commands, a_2, a_2, false, true,
-      num_batch / batch_block, num_labels / labels_block,
-      embedding_size / embedding_block, ffnn_add::elementwise_fn_type::NOOP);
+      num_batch / batch_block, 
+      num_batch / batch_block,
+      num_labels / labels_block, 
+      ffnn_add::elementwise_fn_type::NOOP);
 
   // do a ton of removes
   remove_matrix(x, ffnn_commands);
