@@ -327,6 +327,8 @@ int main(int argc, char **argv) {
       embedding_size / embedding_block, ffnn_add::elementwise_fn_type::NOOP);
 
   // do a ton of removes
+  remove_matrix(x, ffnn_commands);
+  remove_matrix(y, ffnn_commands);
   remove_matrix(w1, ffnn_commands);
   remove_matrix(w2, ffnn_commands);
   remove_matrix(a_1, ffnn_commands);

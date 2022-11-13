@@ -29,6 +29,7 @@ add_library(ffnn_lib SHARED ${app_dir}/ffnn_lib_init.cc
                             ${app_dir}/ffnn_matrix_hadamard.cc  
                             ${app_dir}/ffnn_back_mult.cc  
                             ${app_dir}/ffnn_uniform_sparse_data.cc  
+                            ${app_dir}/ffnn_diff_mm_kernel.cc  
                             ${app_dir}/ffnn_weighted_sum_sparse_dense.cc)
 
 

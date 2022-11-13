@@ -15,6 +15,7 @@
 #include "ffnn_back_mult.h"
 #include "ffnn_weighted_sum_sparse_dense.h"
 #include "ffnn_uniform_sparse_data.h"
+#include "ffnn_diff_mm_kernel.h"
 
 extern "C" {
 

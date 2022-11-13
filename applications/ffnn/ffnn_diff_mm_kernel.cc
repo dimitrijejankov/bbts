@@ -1,5 +1,6 @@
 #include "ffnn_diff_mm_kernel.h"
-#include "../../main/tensor/builtin_formats.h"
+#include "ffnn_mult.h"
+#include "ffnn_types.h"
 
 template<int kernel_rows, int kernel_cols>
 void wierd_kernel(float *a, float *b, float *c, int lda, int ldb, int ldc, int K) {
