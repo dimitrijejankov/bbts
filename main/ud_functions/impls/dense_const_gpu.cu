@@ -47,6 +47,11 @@ void bbts::dense_const_gpu::get_out_meta(
   m_out = {num_rows, num_cols};
 }
 
+size_t bbts::dense_const_gpu::get_required_memory(const bbts::ud_impl_t::tensor_params_t &params,
+                                                  const bbts::ud_impl_t::meta_args_t &_in) const {
+  return 0;
+}
+
 // kernel definition
 __global__ void dense_uniform_fun(float *out, int n, float v) {
 

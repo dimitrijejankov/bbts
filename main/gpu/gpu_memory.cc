@@ -697,7 +697,7 @@ free_all:
     free_if_fail.clear();
   }
 
-  return {.free_if_fail = {}, .plan_to_gc = {}, .dev = -1};
+  return gpu_memory_t::gc_approval_t{.free_if_fail = {}, .plan_to_gc = {}, .dev = -1};
 };
 
 gc_request_ptr_t gpu_memory_t::get_gc_request(kernel_prep_ptr_t kp, 

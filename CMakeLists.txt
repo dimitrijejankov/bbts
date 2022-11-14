@@ -108,7 +108,6 @@ find_package(MKL CONFIG REQUIRED)
 find_package(MPI REQUIRED)
 if (MPI_FOUND)
     include_directories(${MPI_INCLUDE_PATH})
-    message(${MPI_INCLUDE_PATH})
 endif(MPI_FOUND)
 
 # the blas implementation
@@ -164,12 +163,13 @@ add_library(bbts-common $<TARGET_OBJECTS:tensor>
                         $<TARGET_OBJECTS:communication>
                         $<TARGET_OBJECTS:server>
                         $<TARGET_OBJECTS:ud_functions>
-                        $<TARGET_OBJECTS:proto_buf>)
+                        $<TARGET_OBJECTS:proto_buf>
+                        $<TARGET_OBJECTS:gpu>)
 
 # link the GPU library
-if(${ENABLE_GPU})
-target_link_libraries(bbts-common $<TARGET_OBJECTS:gpu>)
-endif()
+# if(${ENABLE_GPU})
+# target_link_libraries(bbts-common $<TARGET_OBJECTS:gpu>)
+# endif()
 
 # to open .so files and stuff
 target_link_libraries(bbts-common ${CMAKE_DL_LIBS})

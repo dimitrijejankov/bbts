@@ -29,6 +29,11 @@ size_t bbts::dense_matrix_gpu_add_t::get_complexity_hint(const bbts::ud_impl_t::
     return m_a.num_rows * m_a.num_cols;
 }
 
+size_t bbts::dense_matrix_gpu_add_t::get_required_memory(const bbts::ud_impl_t::tensor_params_t &params,
+                                                         const bbts::ud_impl_t::meta_args_t &_in) const {
+  return 0;
+}
+
 void bbts::dense_matrix_gpu_add_t::get_out_meta(const bbts::ud_impl_t::tensor_params_t &params,
                                                 const bbts::ud_impl_t::meta_args_t &_in,
                                                 bbts::ud_impl_t::meta_args_t &_out) const {
