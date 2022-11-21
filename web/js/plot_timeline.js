@@ -118,13 +118,21 @@ $.getJSON("api/logs/" + param, function (profiling_data) {
     console.log(start_times);
     console.log(end_times);
 
+    sss = start_times[0];
+    eee = end_times[0];
+    
     var avg_percentage = 0;
     for(let i = 0; i < start_times.length; ++i) {
         avg_percentage += compute_time[i] / (end_times[i] - start_times[i]);
         console.log(compute_time[i] / (end_times[i] - start_times[i]));
+        
+        sss = Math.min(start_times[i]);
+        eee = Math.max(end_times[i]);
     }
     console.log(avg_percentage / start_times.length);
 
+    console.log((eee - sss) * 1e-9);
+    
     json_to_table = function (tableData) {
 
         var table = $('<table></table>');

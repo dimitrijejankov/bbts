@@ -34,5 +34,16 @@ target_link_libraries(gpu_ffnn_bench ${MPI_LIBRARIES})
 target_link_libraries(gpu_ffnn_bench bbts-common)
 
 # add the dependencies
-add_dependencies(applications gpu_ffnn_bench)
+add_dependencies(applications bench_ffnn_diff)
 
+# create the application for ffnn benchmark
+add_executable(bench_ffnn_diff ${app_dir}/bench_ffnn_diff.cc)
+set_target_properties(bench_ffnn_diff PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+
+# link the stuff we need
+target_link_libraries(bench_ffnn_diff ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(bench_ffnn_diff ${MPI_LIBRARIES})
+target_link_libraries(bench_ffnn_diff bbts-common)
+
+# add the dependencies
+add_dependencies(applications bench_ffnn_diff)

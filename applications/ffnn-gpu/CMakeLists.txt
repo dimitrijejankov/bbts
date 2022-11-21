@@ -15,7 +15,8 @@ add_library(ffnn_gpu_lib SHARED ${app_dir}/ffnn_lib_init.cc
                                 ${app_dir}/ffnn_mult.cc      
                                 ${app_dir}/ffnn_uniform_data.cc
                                 ${app_dir}/ffnn_uniform_weights.cc
-                                ${app_dir}/ffnn_types.cc            
+                                ${app_dir}/ffnn_types.cc    
+                                ${app_dir}/ffnn_diff_mm_kernel.cu        
                                 ${app_dir}/ffnn_weighted_sum.cu
                                 ${app_dir}/ffnn_matrix_hadamard.cu  
                                 ${app_dir}/ffnn_back_mult.cu  
