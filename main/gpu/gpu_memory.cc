@@ -532,6 +532,9 @@ void gpu_memory_t::finish_kernel_prep(kernel_prep_ptr_t kp,
 
 void gpu_memory_t::mark_transfer_done(cpu_to_gpu_transfer_ptr_t kp) {
 
+  // if it is already retired we are good
+  if(kp->is_retired) { return; }
+
   // make sure it is actually finished
   assert(kp->is_finished);
 
@@ -545,9 +548,15 @@ void gpu_memory_t::mark_transfer_done(cpu_to_gpu_transfer_ptr_t kp) {
   t.num_copies++;
   t.cpu_transfer = nullptr;
   _cpu_to_gpu_transfer.erase(kp->id);
+
+  // mark as retired
+  kp->is_retired = true;
 }
 
 void gpu_memory_t::mark_transfer_done(gpu_to_gpu_transfer_ptr_t kp) {
+
+  // if it is already retired we are good
+  if(kp->is_retired) { return; }
 
   // make sure it is actually finished
   assert(kp->is_finished);
@@ -565,6 +574,7 @@ void gpu_memory_t::mark_transfer_done(gpu_to_gpu_transfer_ptr_t kp) {
 
   // remove the gpu2gpu transfer
   _gpu_to_gpu_transfer.erase(kp->id);
+  kp->is_retired = true;
 }
 
 gpu_memory_t::gc_approval_t gpu_memory_t::can_gc(kernel_prep_ptr_t kp, int32_t target_dev) { 

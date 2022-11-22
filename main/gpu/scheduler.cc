@@ -161,7 +161,7 @@ void multi_gpu_scheduler_t::gpu_to_gpu_thread(int32_t dst_dev) {
       // are there any CPU transfers that we need to wait for
       auto &t = prep->gpu_transfers[idx];
 
-      if(t->is_finished) {
+      if(t->is_finished || t->is_in_progress) {
         prep->gpu_transfers.pop_back();
         continue;
       }
@@ -190,6 +190,9 @@ void multi_gpu_scheduler_t::gpu_to_gpu_thread(int32_t dst_dev) {
           t->src_dev,                      // source device
           t->num_bytes - sizeof(tensor_t), // the number of bytes to copy
           cpy_stream));
+
+      // mark that it is in progress
+      t->is_in_progress = true;
 
       // copy the meta data
       t->dst->get_meta<tensor_meta_t>() = 

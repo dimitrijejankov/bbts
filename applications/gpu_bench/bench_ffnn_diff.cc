@@ -13,17 +13,17 @@
 
 // 4000/4000	32000/4000	8000/4000	16000/4000
 
-int32_t num_batch = 4000;
-int32_t batch_block = 1000;
+int32_t num_batch = 32000;
+int32_t batch_block = 4000;
 
 int32_t num_features = 8000;
-int32_t features_block = 1000;
+int32_t features_block = 4000;
 
 int32_t embedding_size = 8000;
-int32_t embedding_block = 1000;
+int32_t embedding_block = 4000;
 
 int32_t num_labels = 8000;
-int32_t labels_block = 1000;
+int32_t labels_block = 2000;
 
 
 int32_t num_gpus = 4;

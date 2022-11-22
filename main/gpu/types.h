@@ -85,6 +85,9 @@ struct cpu_to_gpu_transfer_t {
   // is the transfer finished
   bool is_finished = false;
 
+  // a transfer is retired once the scheduler is made aware of it...
+  bool is_retired = false;
+
   // the tid of the tensor
   tid_t tid;
 
@@ -129,8 +132,14 @@ struct gpu_to_gpu_transfer_t {
   // this wil be set to a cpu to gpu transfer if 
   cpu_to_gpu_transfer_ptr_t depends;
 
-  // is this finished
+  // a transfer is in progres when the GPU to GPU thread kicks off the copy
+  bool is_in_progress = false;
+
+  // is this finished once the GPU to GPU finishes the copy
   bool is_finished = false;
+
+  // a transfer is retired once the scheduler is made aware that it is done
+  bool is_retired = false;
 };
 using gpu_to_gpu_transfer_ptr_t = std::shared_ptr<gpu_to_gpu_transfer_t>;
 
