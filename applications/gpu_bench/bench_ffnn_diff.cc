@@ -13,17 +13,17 @@
 
 // 4000/4000	32000/4000	8000/4000	16000/4000
 
-int32_t num_batch = 32000;
-int32_t batch_block = 4000;
+int32_t num_batch = 128000;
+int32_t batch_block = 16000;
 
-int32_t num_features = 8000;
-int32_t features_block = 4000;
+int32_t num_features = 32000;
+int32_t features_block = 8000;
 
-int32_t embedding_size = 8000;
-int32_t embedding_block = 4000;
+int32_t embedding_size = 2000;
+int32_t embedding_block = 2000;
 
-int32_t num_labels = 8000;
-int32_t labels_block = 2000;
+int32_t num_labels = 1000;
+int32_t labels_block = 1000;
 
 
 int32_t num_gpus = 4;
@@ -408,7 +408,7 @@ int main() {
   // make the storage
   auto config = std::make_shared<bbts::node_config_t>(0, nullptr);
   config->is_dev_cluster = true;
-  config->dev_cluster_ram = 40lu * 1024lu * 1024lu * 1024lu;
+  config->dev_cluster_ram = 110lu * 1024lu * 1024lu * 1024lu;
 
   auto storage = std::make_shared<bbts::storage_t>(nullptr, config);
 
