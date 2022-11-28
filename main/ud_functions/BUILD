@@ -6,6 +6,7 @@ cc_library(
             "null_gpu_scheduler.h",  
             "udf_manager.h",  
             "ud_function.h",
+            "xla_kernel_base.h",
             "impls/dense_matrix_hadamard.h",  
             "impls/dense_matrix_relu_dif.h",  
             "impls/dense_matrix_sigmoid.h",       
@@ -14,7 +15,7 @@ cc_library(
             "impls/dense_matrix_mult.h",      
             "impls/dense_matrix_relu.h",      
             "impls/dense_matrix_weighted_sum.h"],
-    deps = ["//main/tensor:tensor_headers"],
+    deps = ["//main/tensor:tensor_headers", "@org_tensorflow//tensorflow/compiler/xla:tos_cpu_kernel"],
     visibility = ["//visibility:public"]
 )
 
@@ -24,6 +25,7 @@ cc_library(
             "gpu_scheduler_impl.cc",  
             "udf_manager.cc", 
             "ud_function.cc", 
+            "xla_kernel_base.cc",
             "impls/dense_matrix_add.cc",       
             "impls/dense_matrix_mult.cc",   
             "impls/dense_matrix_relu_dif.cc",  

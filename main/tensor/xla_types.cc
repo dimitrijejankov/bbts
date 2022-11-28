@@ -1,3 +1,5 @@
+#ifdef BBTS_BAZEL_BUILD
+
 #include "xla_types.h"
 #include <iostream>
 #include <sstream>
@@ -41,3 +43,5 @@ tensor_creation_fs_t bbts::xla_tensor_t::get_creation_fs() {
 }
 
 }
+
+#endif

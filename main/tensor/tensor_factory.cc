@@ -2,6 +2,10 @@
 #include "builtin_formats.h"
 #include <sstream>
 
+#ifdef BBTS_BAZEL_BUILD
+#include "xla_types.h"
+#endif
+
 bbts::tfid_t bbts::tensor_factory_t::register_fmt(const std::string &_fmt_name,
                                                   const bbts::tensor_creation_fs_t &_fmt_funs) {
 
@@ -55,6 +59,10 @@ bbts::tensor_factory_t::tensor_factory_t() {
 
   // register the dense format
   register_fmt("dense", dense_tensor_t::get_creation_fs());
+
+#ifdef BBTS_BAZEL_BUILD
+  register_fmt("xla_dense", bbts::xla_tensor_t::get_creation_fs());
+#endif
 }
 
 bbts::tfid_t bbts::tensor_factory_t::get_tensor_ftm(const std::string &_fmt_name) {

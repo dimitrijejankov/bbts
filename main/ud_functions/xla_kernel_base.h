@@ -1,3 +1,5 @@
+#ifdef BBTS_BAZEL_BUILD
+
 #pragma once
 
 #include <cassert>
@@ -56,3 +58,5 @@ struct xla_kernel_base : public ud_impl_t {
 };
 
 }
+
+#endif
