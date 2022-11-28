@@ -126,8 +126,8 @@ $.getJSON("api/logs/" + param, function (profiling_data) {
         avg_percentage += compute_time[i] / (end_times[i] - start_times[i]);
         console.log(compute_time[i] / (end_times[i] - start_times[i]));
         
-        sss = Math.min(start_times[i]);
-        eee = Math.max(end_times[i]);
+        sss = Math.min(start_times[i], sss);
+        eee = Math.max(end_times[i], sss);
     }
     console.log(avg_percentage / start_times.length);
 
