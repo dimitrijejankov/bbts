@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cassert>
-#include "xla_kernel_base.h"
+#include "../../main/ud_functions/xla_kernel_base.h"
 
 namespace bbts {
 

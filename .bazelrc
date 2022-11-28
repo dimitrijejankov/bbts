@@ -1,7 +1,8 @@
-build --action_env=CC=mpicc 
-build --action_env=CXX=mpicpc
+build --action_env=CC=/usr/lib64/openmpi/bin/mpicc 
+build --action_env=CXX=/usr/lib64/openmpi/bin/mpicpc
 build --cxxopt='-std=c++2a'
 build --cxxopt='-m64'
+build --cxxopt='-DBBTS_BAZEL_BUILD'
 build --linkopt='-ldl -lpthread -lstdc++fs'
 
 build --experimental_repo_remote_exec
@@ -36,6 +37,7 @@ build --define=grpc_no_ares=true
 build --define=tsl_link_protobuf=true
 
 build -c opt
+
 
 build:linux --cxxopt=-std=c++17
 build:linux --host_cxxopt=-std=c++17

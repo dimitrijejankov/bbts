@@ -8,7 +8,7 @@
 
 #include "../../main/ud_functions/udf_manager.h"
 #include "xla_types.h"
-#include "xla_kernel_base.h"
+#include "../../main/ud_functions/xla_kernel_base.h"
 #include "xla_test_kernel.h"
 
 int main() {

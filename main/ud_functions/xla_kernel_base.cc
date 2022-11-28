@@ -1,5 +1,8 @@
+#ifdef BBTS_BAZEL_BUILD
+
 #include "xla_kernel_base.h"
-#include "xla_types.h"
+#include "../tensor/xla_types.h"
+
 #include <cstdint>
 #include "third_party/eigen3/unsupported/Eigen/CXX11/Tensor"
 #include "third_party/eigen3/unsupported/Eigen/CXX11/ThreadPool"
@@ -169,3 +172,5 @@ void bbts::xla_kernel_base::run_me(const bbts::ud_impl_t::tensor_params_t &param
   RunOptionsHolder run_options;
   auto status = cpu_executable.ExecuteComputeFunction(run_options.get_run_options(), buffers, nullptr);
 }
+
+#endif

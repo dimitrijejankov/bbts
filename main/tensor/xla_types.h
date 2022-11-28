@@ -1,3 +1,7 @@
+#pragma once
+
+#ifdef BBTS_BAZEL_BUILD
+
 #include "../../main/tensor/tensor.h"
 #include "tensorflow/compiler/xla/service/compiler.h"
 #include <cstdint>
@@ -45,3 +49,4 @@ struct xla_tensor_t : public tensor_t {
 };
 
 }
+#endif

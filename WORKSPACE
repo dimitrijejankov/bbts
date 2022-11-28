@@ -12,13 +12,13 @@ new_local_repository(
 
 new_local_repository(
     name = "libmpi",
-    path = "/usr/lib/x86_64-linux-gnu/openmpi/",
+    path = "/usr/lib64/openmpi/",
     build_file = "//third_party/openmpi:libmpi.BUILD"
 )
 
 new_local_repository(
     name = "libmpi_headers",
-    path = "/usr/lib/x86_64-linux-gnu/openmpi/",
+    path = "/usr/lib64/openmpi/",
     build_file = "//third_party/openmpi:libmpi_headers.BUILD"
 )
 
