@@ -279,6 +279,7 @@ int gpu_memory_t::can_preallocate(kernel_prep_ptr_t kp,
     for(auto out_idx = 0; out_idx < kp->output.size(); out_idx++) {
       auto out_size = kp->output_sizes[out_idx];
       tmp = _allocate_tensor(out_size, cur_dev);
+      // tmp = _allocate_tensor_with_expectation(out_size, cur_dev, kp->output[out_idx]);
       if(tmp == nullptr) {
           success = false;
           goto free_all;
@@ -294,6 +295,7 @@ int gpu_memory_t::can_preallocate(kernel_prep_ptr_t kp,
 
       if(!_is_on_device(in, cur_dev) && !_is_transfered_to_device(in, cur_dev)) {
         tmp = _allocate_tensor(in_size, cur_dev);
+        // tmp = _allocate_tensor_with_expectation(in_size, cur_dev, kp->input[in_idx]);
         if(tmp == nullptr) {
           success = false;
           goto free_all;
@@ -317,6 +319,8 @@ free_all:
     for(auto &tmp : tensors) {
       auto &[t, num_bytes] = tmp;
       _mem_pools[cur_dev]->free(t->get_data_ptr<void*>(), num_bytes);
+
+      // _mem_pools[cur_dev]->free_with_offset_map(t->get_data_ptr<void*>(), num_bytes, _offset_to_tid);
     }
     tensors.clear();
     continue;
@@ -332,6 +336,7 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
   kp->dev = dev;
 
   // sum all the output bytes
+  // ALLOCATE OUTPUTS
   size_t output_bytes_required = 0;
   for(auto out_idx = 0; out_idx < kp->output.size(); ++out_idx) {
 
@@ -339,10 +344,16 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
     bool created;
     auto tid = kp->output[out_idx];
     auto num_bytes = kp->output_sizes[out_idx];
+    assert(num_bytes > 0);
     auto &t = _init_tensor(tid, num_bytes, created);
 
     // allocate it 
     t.data[dev] = kp->output_tensor_ptrs[out_idx];
+    // Added link from offset to tid
+    // auto my_address = t.data[dev]->get_data_ptr<size_t>();
+    // auto my_real_offset = _mem_pools[dev]->get_real_offset(my_address);
+    // _offset_to_tid[my_real_offset] = tid;
+
     assert(t.data[dev] != nullptr);
     kp->run_me->outputs.set(out_idx, *t.data[dev]);
 
@@ -354,6 +365,7 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
   }
 
   // go through each device and check if we can put it there
+  // ALLOCATE INPUTS
   for(auto in_idx = 0; in_idx < kp->input.size(); ++in_idx) {
 
     // check if it already present on the device
@@ -392,6 +404,11 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
 
         // allocate the memory 
         t.data[dev] = kp->input_tensor_ptrs[in_idx];
+        // Added link from offset to tid
+        // auto my_address = t.data[dev]->get_data_ptr<size_t>();
+        // auto my_real_offset = _mem_pools[dev]->get_real_offset(my_address);
+        // _offset_to_tid[my_real_offset] = kp->input[in_idx];
+
         kp->run_me->inputs.set(in_idx, *t.data[dev]);
         assert(t.data[dev] != nullptr);
 
@@ -431,6 +448,11 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
         // we need to latch onto the CPU transfer
         src_dev = _tensors[kp->input[in_idx]].cpu_transfer->dst_dev;
         t.data[dev] = kp->input_tensor_ptrs[in_idx];
+        // Added link from offset to tid
+        // auto my_address = t.data[dev]->get_data_ptr<size_t>();
+        // auto my_real_offset = _mem_pools[dev]->get_real_offset(my_address);
+        // _offset_to_tid[my_real_offset] = kp->input[in_idx];
+        
         kp->run_me->inputs.set(in_idx, *t.data[dev]);
         assert(t.data[dev] != nullptr);
 
@@ -466,6 +488,11 @@ void gpu_memory_t::preallocate(kernel_prep_ptr_t kp, int32_t dev) {
 
         // allocate and pin the tensor
         t.data[dev] = kp->input_tensor_ptrs[in_idx];
+        // Added link from offset to tid
+        // auto my_address = t.data[dev]->get_data_ptr<size_t>();
+        // auto my_real_offset = _mem_pools[dev]->get_real_offset(my_address);
+        // _offset_to_tid[my_real_offset] = kp->input[in_idx];
+        
         kp->run_me->inputs.set(in_idx, *t.data[dev]);
         assert(t.data[dev] != nullptr);
 
@@ -597,7 +624,10 @@ gpu_memory_t::gc_approval_t gpu_memory_t::can_gc(kernel_prep_ptr_t kp, int32_t t
 
       // try to allocate the tensor
       auto out_size = kp->output_sizes[out_idx];
+
       tmp = _allocate_tensor(out_size, cur_dev);
+
+      // tmp = _allocate_tensor_with_expectation(out_size, cur_dev, kp->output[out_idx]);
 
       // well we could not allocate try to find an unpinned tensor with the right size
       if(tmp == nullptr) {
@@ -634,6 +664,8 @@ gpu_memory_t::gc_approval_t gpu_memory_t::can_gc(kernel_prep_ptr_t kp, int32_t t
       if(!_is_on_device(in, cur_dev) && !_is_transfered_to_device(in, cur_dev)) {
 
         tmp = _allocate_tensor(in_size, cur_dev);
+
+        // tmp = _allocate_tensor_with_expectation(in_size, cur_dev, kp->input[in_idx]);
         if(tmp == nullptr) {
 
           // try to GC this
@@ -693,6 +725,7 @@ free_all:
     for(auto &tmp : free_if_fail) {
       auto &[t, num_bytes] = tmp;
       _mem_pools[cur_dev]->free(t->get_data_ptr<void*>(), num_bytes);
+      // _mem_pools[cur_dev]->free_with_offset_map(t->get_data_ptr<void*>(), num_bytes, _offset_to_tid);
     }
     free_if_fail.clear();
   }
@@ -848,6 +881,7 @@ void gpu_memory_t::_free_all(int32_t dev) {
     // null the data just in case
     assert(t->second.data[dev] != nullptr);
     auto kmp = t->second.data[dev]->get_data_ptr<void*>();
+
     t->second.data[dev] = nullptr;
 
     // we are killing a copy of this
@@ -864,6 +898,12 @@ void gpu_memory_t::_free_all(int32_t dev) {
 
     // free it from the memory pool
     _mem_pools[dev]->free(kmp, t->second.num_bytes);
+
+    // TODO: more efficient way: free everything and clear the block allocator expectation map
+    // _mem_pools[dev]->free_with_offset_map(kmp, t->second.num_bytes, _offset_to_tid);
+
+    // Added: erasing entry in map from offset to tid
+    // _offset_to_tid.erase(_mem_pools[dev]->get_real_offset(t->second.data[dev]->get_data_ptr<size_t>()));
   }
 
   // clear all the free on this device
@@ -899,6 +939,7 @@ gpu_memory_t::gpu_mem_tensor_t &gpu_memory_t::_init_tensor(tid_t id,
     t.data[dev] = nullptr;
   }
   created = true;
+
   return t;
 }
 
@@ -922,6 +963,10 @@ std::shared_ptr<tensor_t> gpu_memory_t::_allocate_tensor(size_t num_bytes, int32
     assert(t->second.data[dev] != nullptr);
     tmp = t->second.data[dev]->get_data_ptr<void*>();
     assert(tmp != nullptr);
+
+    // Added: erasing entry in map from offset to tid
+    // _offset_to_tid.erase(_mem_pools[dev]->get_real_offset(t->second.data[dev]->get_data_ptr<size_t>()));
+
     t->second.data[dev] = nullptr;
 
     // we are killing a copy of this
@@ -943,6 +988,7 @@ std::shared_ptr<tensor_t> gpu_memory_t::_allocate_tensor(size_t num_bytes, int32
     
     // slow path
     tmp = _mem_pools[dev]->allocate(num_bytes);
+    // THIS is where block allocator is called
   }
 
   // ok we can allocate space in any way lets 
@@ -952,7 +998,98 @@ std::shared_ptr<tensor_t> gpu_memory_t::_allocate_tensor(size_t num_bytes, int32
     _free_all(dev);
 
     // try to allocate again
+    // THIS is where block allocator is called
     tmp = _mem_pools[dev]->allocate(num_bytes);
+  }
+
+  return tmp == nullptr ? nullptr : std::move(std::make_shared<tensor_t>(tmp));
+}
+
+std::shared_ptr<tensor_t> gpu_memory_t::_allocate_tensor_with_expectation(size_t num_bytes, int32_t dev, tid_t tid) {
+
+  // the allocated memory on the GPU
+  void *tmp;
+
+  // try to find it in the free cache (fast path)
+  auto it = _free_cache[dev].find(num_bytes);
+  if(it != _free_cache[dev].end()) {
+
+    // we got a chuck from the free cache we should be able to use it...
+    auto t = _tensors.find(it->second);
+
+    // claim this memory
+    _total_to_free[dev] -= t->second.num_bytes;
+    _total_free[dev] += t->second.num_bytes;
+
+    // null the data just in case
+    assert(t->second.data[dev] != nullptr);
+    tmp = t->second.data[dev]->get_data_ptr<void*>();
+    assert(tmp != nullptr);
+
+    // Added: erasing entry in map from offset to tid
+    // _offset_to_tid.erase(_mem_pools[dev]->get_real_offset(t->second.data[dev]->get_data_ptr<size_t>()));
+
+    t->second.data[dev] = nullptr;
+
+    // we are killing a copy of this
+    if(--t->second.num_left_to_remove == 0) {
+      _tensors.erase(t);
+    }
+
+    // remove it from the free tensors
+    auto jt = std::find(_to_free_tensors[dev].begin(), 
+                        _to_free_tensors[dev].end(), 
+                        it->second);
+    std::iter_swap(jt, (_to_free_tensors[dev].end() - 1));
+    _to_free_tensors[dev].pop_back();
+
+    // remove it form the cache
+    _free_cache[dev].erase(it);
+  }
+  else {
+    // slow path
+    // tmp = _mem_pools[dev]->allocate_with_expectation(num_bytes, life_prob);
+
+    // we got a negative tensor (tensor that act as a immediate product and will go away soon)
+    if (tid < 0){
+      tmp = _mem_pools[dev]->allocate_with_expectation(num_bytes, 0);
+    }
+    else{
+      if (_tensor_lifemap.count(tid) != 0){
+        tmp = _mem_pools[dev]->allocate_with_expectation(num_bytes, _tensor_lifemap[tid]);
+      }
+      else{
+        // we should see this tensor in our lifemap (or maybe not, this only acts as debug info now)
+        assert(_tensor_lifemap.count(tid) != 0);
+        tmp = _mem_pools[dev]->allocate_with_expectation(num_bytes, 0);
+      }
+    }
+  }
+
+  // ok we can allocate space in any way lets 
+  if(tmp == nullptr) {
+
+    // free all tensors
+    _free_all(dev);
+
+    // try to allocate again
+
+    // we got a negative tensor (tensor that act as a immediate product and will go away soon)
+    if (tid < 0){
+      tmp = _mem_pools[dev]->allocate_with_expectation(num_bytes, 0);
+    }
+    else{
+      if (_tensor_lifemap.count(tid) != 0){
+        tmp = _mem_pools[dev]->allocate_with_expectation(num_bytes, _tensor_lifemap[tid]);
+      }
+      else{
+        // we should see this tensor in our lifemap (or maybe not, this only acts as debug info now)
+        assert(_tensor_lifemap.count(tid) != 0);
+        tmp = _mem_pools[dev]->allocate_with_expectation(num_bytes, 0);
+      }
+    }
+
+    // tmp = _mem_pools[dev]->allocate_with_expectation(num_bytes, life_prob);
   }
 
   return tmp == nullptr ? nullptr : std::move(std::make_shared<tensor_t>(tmp));
@@ -1008,6 +1145,49 @@ void gpu_memory_t::_pin_tensor(tid_t id, int32_t dev, size_t num_bytes) {
 
   // increment the pin count
   num_pinned++;
+}
+
+int64_t gpu_memory_t::memory_usage(int32_t dev){
+  int64_t total_size = 0;
+
+  // sum the size of pinned tensors
+  for (auto pinned_tensor: _pinned_tensors[dev]){
+    auto pinned_tensor_tid = pinned_tensor.first;
+    assert (_tensors.find(pinned_tensor_tid) != _tensors.end());
+    auto pinned_tensor_size = _tensors[pinned_tensor_tid].num_bytes;
+    assert(pinned_tensor_size > 0);
+    total_size += pinned_tensor_size;
+  }
+
+  for (auto unpinned_tensor: _unpinned_tensors[dev]){
+    auto unpinned_tensor_tid = unpinned_tensor.second;
+    assert (_tensors.find(unpinned_tensor_tid) != _tensors.end());
+    auto unpinned_tensor_size = _tensors[unpinned_tensor_tid].num_bytes;
+    assert(unpinned_tensor_size > 0);
+    total_size += unpinned_tensor_size;
+  }
+
+  return total_size;
+}
+
+std::vector<tid_t> gpu_memory_t::all_tensors(int32_t dev){
+  std::vector<tid_t> tensors;
+
+  for (auto pinned_tensor: _pinned_tensors[dev]){
+    auto pinned_tensor_tid = pinned_tensor.first;
+    tensors.push_back(pinned_tensor_tid);
+  }
+
+  for (auto unpinned_tensor: _unpinned_tensors[dev]){
+    auto unpinned_tensor_tid = unpinned_tensor.second;
+    tensors.push_back(unpinned_tensor_tid);
+  }
+
+  return tensors;
+}
+
+void gpu_memory_t::update_lifemap(std::unordered_map<bbts::tid_t, float> tensor_life_prob){
+  _tensor_lifemap = tensor_life_prob;
 }
 
 } // namespace bbts

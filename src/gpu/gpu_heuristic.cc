@@ -689,7 +689,7 @@ kernel_prep_ptr_t gpu_heuristic_t::get_next_on_any(int32_t preffered_dev) {
 
 void gpu_heuristic_t::mark_as_scheduled(const kernel_prep_ptr_t &prep) {
 
-  prep->kernel_prep_id = cur_prep_id++;
+  // prep->kernel_prep_id = cur_prep_id++;
   auto cmd = prep->command_id;
 
   // make sure we are only dealing with APPLY and REDUCE commands

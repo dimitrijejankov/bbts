@@ -38,6 +38,10 @@ multi_gpu_scheduler_t::multi_gpu_scheduler_t(size_t num_gpus,
   gpus_per_num_node = num_gpus / num_numa;
 }
 
+void multi_gpu_scheduler_t::update_tensor_life(std::unordered_map<bbts::tid_t, float> tensor_life_prob){
+  mem.update_lifemap(tensor_life_prob);
+}
+
 void multi_gpu_scheduler_t::gpu_execution_thread(int32_t dev) {
 
   // set the device
@@ -517,7 +521,8 @@ void multi_gpu_scheduler_t::command_prep_thread() {
       mem.preallocate(gc_req->to_run, gc_req->dev);
 
       // log that the kernel scheduled
-      profiler.log_kernel_scheduled(gc_req->to_run);
+      profiler.log_kernel_scheduled(gc_req->to_run, mem.all_tensors(gc_req->to_run->dev));
+      profiler.log_mem_usage(gc_req->to_run->dev, mem_usage(gc_req->to_run->dev));
 
       // schedule the CPU transfers
       gc_req->to_run->cpu_done = gc_req->to_run->cpu_transfers.empty();
@@ -626,6 +631,7 @@ void multi_gpu_scheduler_t::gc_thread(int dev_id) {
 
         // run the local transaction move the tensor
         profiler.tensor_eviction_start(t->tid, dev_id, t->num_bytes - sizeof(tensor_t));
+        profiler.log_mem_usage(dev_id, mem.memory_usage(dev_id));
         storage->local_transaction({}, {{cpu_tid, t->num_bytes}},
           [&](const storage_t::reservation_result_t &res) {
 
@@ -746,10 +752,12 @@ gpu_command_schedule_ptr_t multi_gpu_scheduler_t::_prepare_apply(bbts::command_p
   std::vector<size_t> out_bytes(output_meta.num_args());
   for (size_t idx = 0; idx < output_meta.num_args(); ++idx) {
     out_bytes[idx] = tf->get_tensor_size(output_meta.get_by_idx(idx));
+    assert(out_bytes[idx] > 0);
   }
   std::vector<size_t> in_bytes(input_meta.num_args());
   for (size_t idx = 0; idx < input_meta.num_args(); ++idx) {
     in_bytes[idx] = tf->get_tensor_size(input_meta.get_by_idx(idx));
+    assert(in_bytes[idx] > 0);
   }
 
   // signal that we have processed this request
@@ -810,8 +818,10 @@ gpu_command_schedule_ptr_t multi_gpu_scheduler_t::_prepare_reduce(bbts::command_
   reduce_sch->cmd = std::move(cmd);
   reduce_sch->fn = fun;
   for (int i = 0; i < input_meta.num_args(); i++) {
+    assert(tf->get_tensor_size(input_meta.get_by_idx(i)) > 0);
     reduce_sch->input_sizes.push_back(tf->get_tensor_size(input_meta.get_by_idx(i)));
   }
+  assert (tf->get_tensor_size(output_meta.get_by_idx(0)) >  0);
   reduce_sch->output_sizes = { tf->get_tensor_size(output_meta.get_by_idx(0)) };
 
   // signal the reduce
@@ -942,8 +952,12 @@ bool multi_gpu_scheduler_t::_schedule_for_execution(kernel_prep_ptr_t kernel_pre
     // transfering just add an additional pin)
     mem.preallocate(kernel_prep, dev);
 
+    // assigning a unique kernel_prep_id to it
+    kernel_prep->kernel_prep_id = cur_prep_id++;
+
     // log that the kernel scheduled
-    profiler.log_kernel_scheduled(kernel_prep);
+    profiler.log_kernel_scheduled(kernel_prep, mem.all_tensors(kernel_prep->dev));
+    profiler.log_mem_usage(kernel_prep->dev, mem_usage(kernel_prep->dev));
 
     // we only need to setup GPU2GPU transfers as all the required tensors
     // are already there
@@ -990,6 +1004,9 @@ bool multi_gpu_scheduler_t::_schedule_for_execution(kernel_prep_ptr_t kernel_pre
   auto gc_approval = mem.can_gc(kernel_prep, target_dev);
   if (gc_allowed && gc_approval.dev != -1) {
 
+    // assigning a unique kernel_prep_id to it; we need to assign an id here as well since kernel_prep sending to gc request will be immediately pulled out and log after the gc is complete (without scheduling)
+    kernel_prep->kernel_prep_id = cur_prep_id++;
+
     // make a garbage collection request
     gc_request_ptr_t gc_request = mem.get_gc_request(kernel_prep, gc_approval);
     
@@ -1013,6 +1030,13 @@ bool multi_gpu_scheduler_t::_schedule_for_execution(kernel_prep_ptr_t kernel_pre
     return true;
   }
   return false;
+}
+
+int64_t multi_gpu_scheduler_t::mem_usage(int32_t dev){
+  int64_t mem_usage = mem.memory_usage(dev);
+  double mem_in_GB = mem_usage / 1024 / 1024 / 1024;
+  assert (mem_in_GB < 16);
+  return mem_usage;
 }
 
 } // namespace bbts

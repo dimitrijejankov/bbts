@@ -29,8 +29,10 @@ public:
   void tensor_eviction_start(tid_t id, int32_t dev, size_t num_bytes);
   void tensor_eviction_end(tid_t id, int32_t dev);
 
-  void log_kernel_scheduled(const kernel_prep_ptr_t &prp);
+  void log_kernel_scheduled(const kernel_prep_ptr_t &prp, std::vector<tid_t>tensors);
   void log_gc_scheduled(const gc_request_ptr_t &gc_req);
+
+  void log_mem_usage(int32_t dev, size_t num_bytes);
 
   void save(const std::string file_name);
   std::string log_as_json();
@@ -42,6 +44,9 @@ private:
   size_t base_tick;
 
   gpu_profiler_log_t log;
+
+  int num_scheduled = 0;
+  int num_started = 0;
 };
 
 }

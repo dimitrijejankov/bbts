@@ -60,6 +60,9 @@ public:
   // returns the numa index
   int32_t get_numa_idx(int32_t gpu_idx) const;
 
+  // record the tensor life probabilities in gpu memory
+  void update_tensor_life(std::unordered_map<bbts::tid_t, float> tensor_life_prob);
+
 private: 
 
   // we can do a GC if we have less kernels scheudled than this
@@ -92,6 +95,9 @@ private:
   // schedule a kernel prep for execution, this could 
   // involve preallocating memory as well as issuing a grabage collection request
   bool _schedule_for_execution(kernel_prep_ptr_t prep, int32_t dev);
+
+  // monitor the gpu memory usage of a device
+  int64_t mem_usage(int32_t dev);
 
   // the device where we prefer for the kernel to be launched
   int preffered_dev = 0;
@@ -153,6 +159,10 @@ private:
 
   // this keeps track of all the runtime stats
   gpu_profiler_t profiler;
+
+  // we assign the an id to each kernel prep; this is a duplicate of the varaible in gpu_heuristic.h. Why we created it here is we need to update kerenl id before logging it
+  int32_t cur_prep_id = 0;
+
 };
 using multi_gpu_scheduler_ptr_t = std::shared_ptr<multi_gpu_scheduler_t>;
 

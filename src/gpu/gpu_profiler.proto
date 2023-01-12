@@ -142,6 +142,9 @@ message scheduled_kernel_stat_t {
 
     // the CPU transfers
     repeated gpu_transfer_stat_t gpu_transfers = 12;
+
+    // all the tensors that have been in the GPU
+    repeated int32 all_tensors = 13;
 };
 
 message gc_request_free_stat_t {
@@ -180,6 +183,18 @@ message gc_request_stat_t {
   uint64 free_memory_used = 5;
 };
 
+message gpu_mem_stat_t {
+
+  // the timestamp when recording the memory usage
+  uint64 start = 1;
+
+  // the memory usage of a particular device
+  uint64 memory = 2;
+
+  double memory_in_GB = 3;
+
+};
+
 message gpu_device_log_t {
 
   // the number of devices
@@ -205,6 +220,8 @@ message gpu_device_log_t {
 
   // the garbage requests that were scheduled
   repeated gc_request_stat_t gc_scheduled = 8;
+
+  repeated gpu_mem_stat_t mem_usage = 9;
 
 };
 

@@ -20,6 +20,8 @@ public:
 
   gpu_memory_t(size_t num_devices, size_t mem_per_gpu);
 
+  gpu_memory_t(size_t num_devices, size_t mem_per_gpu, std::map<size_t, float> life_map);
+
   ~gpu_memory_t();
 
   struct gc_approval_t {
@@ -104,6 +106,14 @@ public:
   // returns all the tensors that were deleted in the mean time
   std::vector<tid_t> get_deleted_tensors();
 
+  // returns how much memory is used in a particular device
+  int64_t memory_usage(int32_t dev);
+
+  std::vector<tid_t> all_tensors(int32_t dev);
+
+  // update the tensor lifemap
+  void update_lifemap(std::unordered_map<bbts::tid_t, float> tensor_life_prob);
+
 private:
 
   // sorted by num_copies (first), num_uses (second)
@@ -176,6 +186,9 @@ private:
   // allocate the tensor
   std::shared_ptr<tensor_t> _allocate_tensor(size_t num_bytes, int32_t dev);
 
+  // ADDED: allocate the tensor with its tensor id for more optimal position
+  std::shared_ptr<tensor_t> _allocate_tensor_with_expectation(size_t num_bytes, int32_t dev, tid_t tid);
+
   // is the tensor pinned
   bool _is_pinned(tid_t id, int32_t dev);
 
@@ -236,6 +249,9 @@ private:
   // how many times will this tensor be used
   std::unordered_map<tid_t, gpu_mem_tensor_t> _tensors;
 
+  // map the offset to the tensor
+  // std::map<size_t, tid_t> _offset_to_tid;
+
   // these are the pinned tensors that we will not move out of memory unless unpinned (tid, number of times pinned)
   std::vector<std::unordered_map<tid_t, uint32_t>> _pinned_tensors;
 
@@ -277,6 +293,11 @@ private:
 
   // how much memory is there per GPU
   size_t _mem_per_gpu;
+
+  // the map that keeps track of the probability that a tensor will stay in the gpu memory
+  // key: tid
+  // value: the probability that a tensor will stay in the gpu memory; the higher the value, the more likely that the tensor will stay
+  std::unordered_map<bbts::tid_t, float> _tensor_lifemap;
 };
 
 }

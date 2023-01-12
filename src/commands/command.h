@@ -457,6 +457,26 @@ struct command_t {
     return std::move(tmp);
   }
 
+  // returns the input tensor ids for this command
+  std::vector<tid_t> command_inputs(){
+    uint16_t num_inputs = _num_inputs;
+    std::vector<tid_t> results;
+    for (size_t idx = 0; idx < num_inputs; ++idx){
+      results.push_back(_input_tensors()[idx].tid);
+    }
+    return results;
+  }
+
+  // returns the output tensor ids for this command
+  std::vector<tid_t> command_outputs(){
+    uint16_t num_inputs = _num_outputs;
+    std::vector<tid_t> results;
+    for (size_t idx = 0; idx < num_inputs; ++idx){
+      results.push_back(_output_tensors()[idx].tid);
+    }
+    return results;
+  }
+
   // the impl_id of the operation
   command_id_t id;
 

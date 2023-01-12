@@ -117,6 +117,12 @@ void bbts::gpu_profiler_t::kernel_begin(const kernel_prep_ptr_t &prep) {
   auto &dl = log.mutable_device_logs()->at(prep->dev);
   auto ks = dl.mutable_kernels_stats()->Add();
 
+  // if (num_started < 50){
+  //   std::cout << "*** Kernel_started id: " << prep->kernel_prep_id << "\n";
+  //   num_started += 1;
+  // }
+  
+
   // store the kernel stats
   ks->set_start(tick);
   ks->set_kernel_run_idx(prep->kernel_prep_id);
@@ -186,7 +192,7 @@ void bbts::gpu_profiler_t::tensor_eviction_end(tid_t id, int32_t dev) {
   log.mutable_device_logs()->at(dev).mutable_evicted_tensor_stats()->rbegin()->set_end(tick);
 }
 
-void bbts::gpu_profiler_t::log_kernel_scheduled(const kernel_prep_ptr_t &prp) {
+void bbts::gpu_profiler_t::log_kernel_scheduled(const kernel_prep_ptr_t &prp, std::vector<tid_t> tensors) {
 
   // lock this thing
   std::unique_lock<std::mutex> lck(m);
@@ -224,6 +230,11 @@ void bbts::gpu_profiler_t::log_kernel_scheduled(const kernel_prep_ptr_t &prp) {
     transfer->set_tid(t->tid);
     transfer->set_src_dev(t->src_dev);
   }
+
+  for (auto &t: tensors) {
+    ks->add_all_tensors(t);
+  }
+  
 }
 
 void bbts::gpu_profiler_t::log_gc_scheduled(const gc_request_ptr_t &gc_req) {
@@ -242,6 +253,21 @@ void bbts::gpu_profiler_t::log_gc_scheduled(const gc_request_ptr_t &gc_req) {
     evict->set_num_bytes(evict_me->num_bytes);
     evict->set_tid(evict_me->tid);
   }
+}
+
+void bbts::gpu_profiler_t::log_mem_usage(int32_t dev, size_t num_bytes){
+  std::unique_lock<std::mutex> lck(m);
+
+  auto &dl = log.mutable_device_logs()->at(dev);
+  auto ks = dl.add_mem_usage();
+
+  // get the current timestamp
+  auto now = std::chrono::high_resolution_clock::now();
+  auto tick = duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count() - base_tick;
+
+  ks->set_start(tick);
+  ks->set_memory(num_bytes);
+  ks->set_memory_in_gb(num_bytes / 1024 / 1024 / 1024);
 }
 
 void bbts::gpu_profiler_t::save(const std::string file_name) {
