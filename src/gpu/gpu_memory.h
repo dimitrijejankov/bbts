@@ -1,5 +1,6 @@
 #include "types.h"
 #include "gpu_memory_pool.h"
+#include "gpu_memory_pool_expectation.h"
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -250,7 +251,7 @@ private:
   std::unordered_map<tid_t, gpu_mem_tensor_t> _tensors;
 
   // map the offset to the tensor
-  // std::map<size_t, tid_t> _offset_to_tid;
+  std::map<size_t, tid_t> _offset_to_tid;
 
   // these are the pinned tensors that we will not move out of memory unless unpinned (tid, number of times pinned)
   std::vector<std::unordered_map<tid_t, uint32_t>> _pinned_tensors;
