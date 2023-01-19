@@ -18,7 +18,7 @@ class gpu_memory_pool_t {
   using tid_to_probability = std::map<size_t, float>;
 
 public:
-  gpu_memory_pool_t(int32_t dev, size_t num_bytes) : block_allocator(num_bytes) {
+  gpu_memory_pool_t(int32_t dev, size_t num_bytes) : block_allocator(num_bytes, num_bytes) {
 
     // allocate the memory
     this->dev = dev;

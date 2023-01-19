@@ -1,6 +1,7 @@
 #include "ffnn_types.h"
 #include "ffnn_weighted_sum.h"
 #include <cassert>
+#include <iostream>
 
 bbts::ffnn_weighted_sum::ffnn_weighted_sum() {
 

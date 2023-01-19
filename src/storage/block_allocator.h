@@ -522,12 +522,12 @@ private:
   void add_new_block_with_expectation(offset_type offset, offset_type size, std::vector<float> left, std::vector<float>right){
     auto new_block_it = _free_blocks_by_offset.emplace(offset, size);
     assert(new_block_it.second);
-    // auto order_it = _free_blocks_by_size.emplace(size, new_block_it.first);
+    auto order_it = _free_blocks_by_size.emplace(size, new_block_it.first);
     auto new_expectation = std::min(get_expectation(left), get_expectation(right));
     auto expectation_it = _expectation_to_block.emplace(new_expectation, new_block_it.first->first);
     new_block_it.first->second.left_adjacent_tensor_lives = left;
     new_block_it.first->second.right_adjacent_tensor_lives = right;
-    // new_block_it.first->second.order_by_size_it = order_it;
+    new_block_it.first->second.order_by_size_it = order_it;
     new_block_it.first->second.order_by_expectation_it = expectation_it;
   }
 

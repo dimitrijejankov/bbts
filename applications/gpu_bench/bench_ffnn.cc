@@ -1,9 +1,11 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <dlfcn.h>
+#include <unordered_map>
 #include <vector>
 #include "../../src/tensor/tensor.h"
 #include "../../src/gpu/scheduler.h"
@@ -11,9 +13,10 @@
 #include "../../src/utils/terminal_color.h"
 #include "../ffnn-gpu/ffnn_add.h"
 
+
 float learning_rate = 1.0f;
 
-size_t num_iter = 20;
+size_t num_iter = 10;
 
 // 4000/4000	32000/4000	8000/4000	16000/4000
 
@@ -37,6 +40,33 @@ bbts::tid_t currentTID = 0;
 
 using matrix_index = std::map<std::tuple<int32_t, int32_t>, bbts::tid_t>;
 using matrix_reduce_index = std::map<std::tuple<int32_t, int32_t>, std::vector<bbts::tid_t>>;
+
+class gpu_operation_t{
+public:
+  gpu_operation_t(std::vector<bbts::tid_t> inputs, std::vector<bbts::tid_t> outputs, bbts::command_id_t command_id, bbts::ud_id_t fun_id, bbts::command_t::op_type_t command_type){
+    _inputs = inputs;
+    _outputs = outputs;
+    _command_id = command_id;
+    _fun_id = fun_id;
+    _command_type = command_type;
+  }
+
+  std::vector<bbts::tid_t> get_inputs(){return _inputs;}
+
+  std::vector<bbts::tid_t> get_outputs(){return _outputs;}
+
+  bbts::command_t::op_type_t get_type(){return _command_type;}
+
+  bbts::command_id_t get_command_id(){return _command_id;}
+
+private:
+  std::vector<bbts::tid_t> _inputs;
+  std::vector<bbts::tid_t> _outputs;
+  bbts::command_id_t _command_id;
+  bbts::ud_id_t _fun_id;
+  bbts::command_t::op_type_t _command_type;
+
+};
 
 void load_library(const bbts::tensor_factory_ptr_t &tf,
                   const bbts::udf_manager_ptr udf_manager) {
@@ -519,6 +549,83 @@ int main() {
   }
 
   auto to_schedule = to_vector(ffnn_commands);
+  auto all_operations = std::vector<gpu_operation_t>();
+
+  for (auto &my_command: to_schedule){
+    auto my_operation = gpu_operation_t(my_command->command_inputs(), my_command->command_outputs(), my_command->id, my_command->fun_id.ud_id, my_command->type);
+    all_operations.push_back(my_operation);
+  }
+
+  std::unordered_map<bbts::tid_t, size_t> tensors_currently_tracking;
+  std::unordered_map<bbts::tid_t, size_t> tensor_path_length;
+
+  for (auto my_operation: all_operations){
+
+    auto my_op_type = my_operation.get_type();
+
+    for (auto input: my_operation.get_inputs()){
+
+      auto my_type = my_operation;
+      // we haven't seen this tensor before
+      if (tensors_currently_tracking.count(input) == 0){
+        // if we haven't seen this tensor, then is can't be immediately deleted
+        assert (my_op_type != bbts::command_t::DELETE);
+        tensors_currently_tracking[input] = 1;
+      }
+      else{
+        // we have a delete, marking the end of these tensors
+        if (my_op_type == bbts::command_t::DELETE){
+          // we should never record this tensor before
+          assert(tensor_path_length.count(input) == 0);
+          tensor_path_length[input] = tensors_currently_tracking[input];
+          tensors_currently_tracking.erase(input);
+        }
+        else{
+          // else just add one to their lifetime
+          tensors_currently_tracking[input] += 1;
+        }
+      }
+    }
+
+    for (auto output: my_operation.get_outputs()){
+      auto my_type = my_operation;
+      // we haven't seen this tensor before
+      if (tensors_currently_tracking.count(output) == 0){
+        // if we haven't seen this tensor, then is can't be immediately deleted
+        assert (my_op_type != bbts::command_t::DELETE);
+        tensors_currently_tracking[output] = 1;
+      }
+      else{
+        // we have a delete, marking the end of these tensors
+        if (my_op_type == bbts::command_t::DELETE){
+          // we should never record this tensor before
+          assert(tensor_path_length.count(output) == 0);
+          tensor_path_length[output] = tensors_currently_tracking[output];
+          tensors_currently_tracking.erase(output);
+        }
+        else{
+          // else just add one to their lifetime
+          tensors_currently_tracking[output] += 1;
+        }
+      }
+    }
+  }
+
+  // record the tensors that didn't get a chance to record
+  for (auto unrecorded_tensor: tensors_currently_tracking){
+    auto unrecorded_tid = unrecorded_tensor.first;
+    auto unrecorded_life = unrecorded_tensor.second;
+    // we should never see this tensor before 
+    assert(tensor_path_length.count(unrecorded_tid) == 0);
+    tensor_path_length[unrecorded_tid] = unrecorded_life;
+  }
+
+  std::unordered_map<bbts::tid_t, float> tensor_life_prob;
+  for (auto tensor_path: tensor_path_length){
+    tensor_life_prob[tensor_path.first] = 1.0 - 1.0 / tensor_path.second;
+  }
+
+  scheduler->update_tensor_life(tensor_life_prob);
 
   sleep(2);
   scheduler->schedule(to_schedule);
