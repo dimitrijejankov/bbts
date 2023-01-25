@@ -23,6 +23,12 @@ bbts::ffnn_activation_mult::ffnn_activation_mult() {
   fn = &ffnn_activation_mult::mult;
 }
 
+
+size_t bbts::ffnn_activation_mult::get_required_memory(const bbts::ud_impl_t::tensor_params_t &params,
+                                                       const bbts::ud_impl_t::meta_args_t &_in) const {
+  return 0;
+}
+
 size_t bbts::ffnn_activation_mult::get_complexity_hint(
     const bbts::ud_impl_t::tensor_params_t &params,
     const bbts::ud_impl_t::meta_args_t &_in) {
@@ -33,8 +39,8 @@ size_t bbts::ffnn_activation_mult::get_complexity_hint(
   return 1.45838e-11 * m_a.num_rows * m_a.num_cols * m_b.num_cols;
 }
 
-__global__ void ffnn_activation_mult_bias_add_kernel(float *a, float *b,
-                                                     float *c, int num_rows,
+__global__ void ffnn_activation_mult_bias_add_kernel(float *b, float *c,
+                                                     int num_rows,
                                                      int num_cols) {
 
   // get our global thread ID
@@ -43,7 +49,7 @@ __global__ void ffnn_activation_mult_bias_add_kernel(float *a, float *b,
 
   // make sure we do not go out of bounds
   if (row < num_rows && col < num_cols)
-    c[row * num_cols + col] += b[col];
+    c[col * num_rows + row] += b[col];
 }
 
 void bbts::ffnn_activation_mult::get_out_meta(
@@ -114,7 +120,7 @@ void bbts::ffnn_activation_mult::mult(
   float alpha = 1.0f;
   float beta = 0.0f;
   cublasSgemm(params.cublas_handle, CUBLAS_OP_N, CUBLAS_OP_N, I, J, K, &alpha,
-              in1Data, K, in2Data, J, &beta, outData, J);
+              in1Data, I, in2Data, K, &beta, outData, I);
 
   if (m_a.col_idx == 0 && m_b.row_idx == 0) {
 
@@ -122,7 +128,7 @@ void bbts::ffnn_activation_mult::mult(
     dim3 block_size((int)ceil((float)I / 8), (int)ceil((float)J / 8));
 
     ffnn_activation_mult_bias_add_kernel<<<block_size, threadsPerBlock, 0,
-                                           params.stream>>>(a.data(), b.data(),
+                                           params.stream>>>(b.bias(),
                                                             out.data(), I, J);
   }
 }

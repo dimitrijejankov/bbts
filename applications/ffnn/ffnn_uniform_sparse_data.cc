@@ -1,7 +1,7 @@
 #include "ffnn_uniform_sparse_data.h"
 #include "ffnn_types.h"
-#include <mkl/mkl_cblas.h>
-#include <mkl/mkl.h>
+#include <mkl_cblas.h>
+#include <mkl.h>
 #include <random>
 
 bbts::ffnn_uniform_sparse_data::ffnn_uniform_sparse_data() {
@@ -22,6 +22,11 @@ bbts::ffnn_uniform_sparse_data::ffnn_uniform_sparse_data() {
 
   // set the function that actually performs the add
   fn = &ffnn_uniform_sparse_data::uniform_rand;
+}
+
+size_t bbts::ffnn_uniform_sparse_data::get_required_memory(const bbts::ud_impl_t::tensor_params_t &params,
+                                                           const bbts::ud_impl_t::meta_args_t &_in) const {
+  return 0;
 }
 
 size_t bbts::ffnn_uniform_sparse_data::get_complexity_hint(const bbts::ud_impl_t::tensor_params_t &params,
@@ -72,9 +77,10 @@ void bbts::ffnn_uniform_sparse_data::uniform_rand(const bbts::ud_impl_t::tensor_
   std::uniform_real_distribution<float> val_dist(left, right);
 
   // fill in the data
+  auto out_data = out.data();
   for(auto row = 0; row < m_out.num_rows; ++row) {
-    out.data()[row].val = val_dist(generator);
-    out.data()[row].row = row;
-    out.data()[row].col = col_dist(generator);
+    out_data[row].val = val_dist(generator);
+    out_data[row].row = row;
+    out_data[row].col = col_dist(generator);
   }
 }

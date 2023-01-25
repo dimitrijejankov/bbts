@@ -1,3 +1,10 @@
 [submodule "third_party/cli"]
 	path = third_party/cli
 	url = https://github.com/daniele77/cli.git
+[submodule "third_party/cpp-httplib"]
+	path = third_party/cpp-httplib
+	url = https://github.com/yhirose/cpp-httplib.git
+[submodule "third_party/tensorflow"]
+	path = third_party/tensorflow
+	url = https://github.com/dcbdan/tensorflow.git
+	branch = tos_cpu_kernel

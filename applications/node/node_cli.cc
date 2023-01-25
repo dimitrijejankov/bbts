@@ -1,19 +1,17 @@
 #include <bits/stdint-intn.h>
-#include <cctype>
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
 #include <exception>
 #include <iostream>
 #include <memory>
-#include <sstream>
 #include <string>
 #include <unistd.h>
 #include <filesystem>
-#include "../../src/tensor/tensor.h"
-#include "../../src/tensor/tensor_factory.h"
-#include "../../src/server/node.h"
-#include "../../src/utils/terminal_color.h"
+#include "../../main/tensor/tensor.h"
+#include "../../main/tensor/tensor_factory.h"
+#include "../../main/server/node.h"
+#include "../../main/utils/terminal_color.h"
 
 #include "../../third_party/cli/include/cli/cli.h"
 #include "../../third_party/cli/include/cli/clifilesession.h"
@@ -142,102 +140,6 @@ bool load_shared_library(std::ostream &out, bbts::node_t &node, const std::strin
   }
 
   
-}
-
-// for string delimiter
-std::vector<std::string> split (std::string s, std::string delimiter) {
-    size_t pos_start = 0, pos_end, delim_len = delimiter.length();
-    std::string token;
-    std::vector<std::string> res;
-
-    while ((pos_end = s.find (delimiter, pos_start)) != std::string::npos) {
-        token = s.substr (pos_start, pos_end - pos_start);
-        pos_start = pos_end + delim_len;
-        res.push_back (token);
-    }
-
-    res.push_back (s.substr (pos_start));
-    return res;
-}
-
-bool load_tensors(std::ostream &out, bbts::node_t &node, const std::string &file_list) {
-
-  // kick off a loading message
-  std::atomic_bool b; b = false;
-  auto t = loading_message(out, "Loading tensors from a file", b);
-
-  // try to open the file
-  std::ifstream in(file_list);
-
-  if(in.fail()) {
-    // finish the loading message
-    b = true; t.join();
-
-    out << bbts::red << "Failed to load the filelist " << file_list << '\n' << bbts::reset;
-    return false;
-  }
-
-  std::vector<std::tuple<bbts::tid_t, std::string, std::string>> parsed_file_list;
-  std::string line;
-  while(std::getline(in, line)){
-    
-    // split the file list
-    auto values = split(line, "|");
-    if(values.size() != 3) {
-
-      // finish the loading message
-      b = true; t.join();
-      out << bbts::red << "The file list format must be <tid>|<format>|<file> \n" << bbts::reset;
-      return false;
-    }
-
-    // make sure this is actually an integer
-    std::string tid_string = values[0].c_str();
-    // Check if tid is a non-negative integer
-    for (int i = 0; i < tid_string.size(); i++){
-      if (!isdigit(tid_string[i])){
-        b = true; t.join();
-        out << bbts::red << "\nThe tid must be an integer \n" << bbts::reset;
-        return false;
-      }  
-    }
-    bbts::tid_t parsed_tid = std::atoi(values[0].c_str());
-    
-
-    // turn the values[2] into a full path and make sure it exists
-
-    // get the path of the filelist
-    const std::filesystem::path filelist_path = file_list;
-    std::string directory = filelist_path.parent_path();
-    std::string file_relative_path = values[2];
-    std::string concated_path = directory + "/" + file_relative_path;
-    if(!std::filesystem::exists(concated_path)){
-      b = true; t.join();
-      out << bbts::red << "\nCould not find the tensor file: " << concated_path << " \n" << bbts::reset;
-      return false;
-    } 
-
-
-    // right now it is hardcoded to add  tensors in front of it
-
-    // store this <tid, type, filepath>
-    parsed_file_list.push_back({parsed_tid, values[1], "tensors/" + values[2]});
-  }
-
-  auto [did_load, message] = node.load_tensor_list(parsed_file_list);
-
-  // finish the registering message
-  b = true; t.join();
-
-  if(!did_load) {
-    out << bbts::red << "Failed to load the tensor list : \"" << message << "\"\n" << bbts::reset;
-    return false;
-  } else {
-    out << bbts::green << message << bbts::reset;
-    return true;
-  }
-
-  return false;
 }
 
 void compile_einkorn_commands(std::ostream &out, bbts::node_t &node, int max_kernel_size, 
@@ -601,15 +503,6 @@ void prompt(bbts::node_t &node) {
   
    },"Load a shared object file. Usage : load library <file>\n");
   
-  // file_list.txt
-  // tid|type_name|path_to_file
-  // ...
-  loadSubMenu->Insert("tensors",[&](std::ostream &out, const std::string &file_list) {
-
-    load_tensors(out, node, file_list);
-
-  },"Load tensors from filelist. Usage : load tensors <path_to_file_list>\n");
-
   rootMenu->Insert(std::move(loadSubMenu));
 
   // setup the info command
@@ -715,6 +608,7 @@ void prompt(bbts::node_t &node) {
 
   },"Sets a value in the system. Usage : set <no_threads, max_mem> <value>.\n");
 
+
   // init the command line interface
   Cli cli(std::move(rootMenu));
 
@@ -729,7 +623,8 @@ void prompt(bbts::node_t &node) {
 int main(int argc, char **argv) {
 
   // make the configuration
-  auto config = std::make_shared<bbts::node_config_t>(bbts::node_config_t{.argc=argc, .argv = argv, .num_threads = 8});
+  auto config = std::make_shared<bbts::node_config_t>(argc, argv);
+  config->num_threads = 8;
 
   // create the node
   bbts::node_t node(config);

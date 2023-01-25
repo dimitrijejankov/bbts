@@ -21,6 +21,11 @@ bbts::ffnn_matrix_hadamard::ffnn_matrix_hadamard() {
   fn = &ffnn_matrix_hadamard::mult;
 }
 
+size_t bbts::ffnn_matrix_hadamard::get_required_memory(const bbts::ud_impl_t::tensor_params_t &params,
+                                                       const bbts::ud_impl_t::meta_args_t &_in) const {
+  return 0;
+}
+
 size_t bbts::ffnn_matrix_hadamard::get_complexity_hint(const bbts::ud_impl_t::tensor_params_t &params,
                                                      const bbts::ud_impl_t::meta_args_t &_in) {
 
@@ -97,9 +102,12 @@ void bbts::ffnn_matrix_hadamard::mult(const bbts::ud_impl_t::tensor_params_t &pa
   }
 
   // multiply the bias
+  auto out_bias = out.bias();
+  auto out_a = a.bias();
+  auto out_b = b.bias();
   if(m_a.has_bias) {
     for (auto col = 0; col < m_a.num_cols; ++col) {
-      out.bias()[col] = a.bias()[col] * b.bias()[col];
+      out_bias[col] = out_a[col] * out_b[col];
     }
   }
 }

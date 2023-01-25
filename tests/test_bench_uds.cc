@@ -1,6 +1,6 @@
-#include "../src/tensor/builtin_formats.h"
-#include "../src/ud_functions/builtin_functions.h"
-#include "../src/ud_functions/udf_manager.h"
+#include "../main/tensor/builtin_formats.h"
+#include "../main/ud_functions/builtin_functions.h"
+#include "../main/ud_functions/udf_manager.h"
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
@@ -41,9 +41,9 @@ int main() {
     auto num_bytes = factory->get_tensor_size(m);
 
     // the memory
-    std::unique_ptr<char[]> a_mem(new char[num_bytes]);
-    std::unique_ptr<char[]> b_mem(new char[num_bytes]);
-    std::unique_ptr<char[]> c_mem(new char[num_bytes]);
+    std::unique_ptr<char[]> a_mem(new char[num_bytes]); new (a_mem.get()) tensor_t();
+    std::unique_ptr<char[]> b_mem(new char[num_bytes]); new (b_mem.get()) tensor_t();
+    std::unique_ptr<char[]> c_mem(new char[num_bytes]); new (c_mem.get()) tensor_t();
 
     // init the two tensors
     auto &a =
@@ -84,7 +84,7 @@ int main() {
     auto add_start = high_resolution_clock::now();
     for (int32_t num_iters = 0; num_iters < num_iter; ++num_iters) {
       add->call_ud({._params = bbts::command_param_list_t{._data = nullptr,
-                                                          ._num_elements = 0}},
+                                                          ._num_elements = 0}, ._additional_memory = nullptr},
                    input_args, output_args);
     }
     auto add_stop = high_resolution_clock::now();
@@ -95,7 +95,7 @@ int main() {
     auto mult_start = high_resolution_clock::now();
     for (int32_t num_iters = 0; num_iters < num_iter; ++num_iters) {
       mult->call_ud({._params = bbts::command_param_list_t{._data = nullptr,
-                                                          ._num_elements = 0}},
+                                                          ._num_elements = 0}, ._additional_memory = nullptr},
                    input_args, output_args);
     }
     auto mult_stop = high_resolution_clock::now();

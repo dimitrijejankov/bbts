@@ -15,10 +15,15 @@ bbts::ffnn_matrix_hadamard::ffnn_matrix_hadamard() {
   inputInplace = {0, 1};
 
   // this is a CPU kernel
-  is_gpu = false;
+  is_gpu = true;
 
   // set the function that actually performs the product
   fn = &ffnn_matrix_hadamard::mult;
+}
+
+size_t bbts::ffnn_matrix_hadamard::get_required_memory(const bbts::ud_impl_t::tensor_params_t &params,
+                                                       const bbts::ud_impl_t::meta_args_t &_in) const {
+  return 0;
 }
 
 size_t bbts::ffnn_matrix_hadamard::get_complexity_hint(const bbts::ud_impl_t::tensor_params_t &params,

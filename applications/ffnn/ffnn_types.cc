@@ -22,7 +22,7 @@ tensor_creation_fs_t bbts::ffnn_dense_t::get_creation_fs() {
     num_elements += m.m().has_bias ? m.m().num_cols : 0;
 
     // we add the bias if we have it to the size
-    return sizeof(tensor_meta_t) + num_elements * sizeof(float);
+    return sizeof(tensor_t) + num_elements * sizeof(float);
   };
 
   auto pnt = [](const void *here, std::stringstream &ss) {
@@ -66,7 +66,7 @@ tensor_creation_fs_t bbts::ffnn_sparse_t::get_creation_fs() {
     
     // we add the bias if we have it to the size
     auto &m = *(ffnn_sparse_meta_t *) &_meta;
-    return sizeof(tensor_meta_t) + m.m().nnz * sizeof(ffnn_sparse_t::ffnn_sparse_value_t);
+    return sizeof(tensor_t) + m.m().nnz * sizeof(ffnn_sparse_t::ffnn_sparse_value_t);
   };
 
   auto pnt = [](const void *here, std::stringstream &ss) {

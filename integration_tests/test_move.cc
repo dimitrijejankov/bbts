@@ -1,11 +1,11 @@
-#include "../src/operations/move_op.h"
+#include "../main/operations/move_op.h"
 
 using namespace bbts;
 
 int main(int argc, char **argv) {
 
   // make the configuration
-  auto config = std::make_shared<bbts::node_config_t>(bbts::node_config_t{.argc=argc, .argv = argv});
+  auto config = std::make_shared<bbts::node_config_t>(argc, argv);
 
   // create the tensor factory
   bbts::tensor_factory_ptr_t factory = std::make_shared<bbts::tensor_factory_t>();
@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
   }
 
   // create the storage
-  bbts::storage_t storage(comm);
+  bbts::storage_t storage(comm, config);
 
   // get the impl_id
   auto id = factory->get_tensor_ftm("dense");

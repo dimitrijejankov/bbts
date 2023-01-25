@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
-#include "../src/tensor/tensor_factory.h"
-#include "../src/tensor/builtin_formats.h"
+#include "../main/tensor/tensor_factory.h"
+#include "../main/tensor/builtin_formats.h"
 
 namespace bbts {
 
@@ -33,7 +33,7 @@ TEST(TestDenseTensor, GetSize) {
       auto &m = *((tensor_meta_t *) &dm);
 
       // we expect the size to be sizeof(tensor_meta_t) + 10 * 10 * sizeof(float)
-      EXPECT_EQ(sizeof(tensor_meta_t) + dm.m().num_rows * dm.m().num_cols * sizeof(float), factory.get_tensor_size(m));
+      EXPECT_EQ(sizeof(tensor_t) + dm.m().num_rows * dm.m().num_cols * sizeof(float), factory.get_tensor_size(m));
     }
   }
 }
@@ -54,8 +54,8 @@ TEST(TestDenseTensor, Init) {
   auto size = factory.get_tensor_size(m);
 
   // the memory
-  std::unique_ptr<char[]> a_mem(new char[size]);
-  std::unique_ptr<char[]> b_mem(new char[size]);
+  std::unique_ptr<char[]> a_mem(new char[size]); new (a_mem.get()) tensor_t();
+  std::unique_ptr<char[]> b_mem(new char[size]); new (b_mem.get()) tensor_t();
 
   // init the two tensors
   auto &a = factory.init_tensor((tensor_t*) a_mem.get(), m).as<dense_tensor_t>();

@@ -22,6 +22,11 @@ bbts::ffnn_add::ffnn_add() {
   fn = &ffnn_add::add;
 }
 
+size_t bbts::ffnn_add::get_required_memory(const bbts::ud_impl_t::tensor_params_t &params,
+                                           const bbts::ud_impl_t::meta_args_t &_in) const {
+  return 0;
+}
+
 size_t bbts::ffnn_add::get_complexity_hint(
     const bbts::ud_impl_t::tensor_params_t &params,
     const bbts::ud_impl_t::meta_args_t &_in) {
@@ -87,23 +92,29 @@ void bbts::ffnn_add::add(const bbts::ud_impl_t::tensor_params_t &params,
   assert(m_a.has_bias == m_b.has_bias);
 
   // add a and b
+  float *out_data = out.data();
+  float *a_data = a.data();
+  float *b_data = b.data();
   for (auto row = 0; row < m_a.num_rows; ++row) {
     for (auto col = 0; col < m_a.num_cols; ++col) {
       // std::cout << row * m_a.num_cols + col << "\n" << std::flush;
-      auto tmp_a = a.data()[row * m_a.num_cols + col];
-      auto tmp_b = b.data()[row * m_b.num_cols + col];
+      auto tmp_a = a_data[row * m_a.num_cols + col];
+      auto tmp_b = b_data[row * m_b.num_cols + col];
 
-      out.data()[row * m_a.num_cols + col] = tmp_a + tmp_b;
+      out_data[row * m_a.num_cols + col] = tmp_a + tmp_b;
     }
   }
 
+  float *out_bias = out.bias();
+  auto out_a = a.bias();
+  auto out_b = b.bias();
   if (m_a.has_bias && m_b.has_bias) {
     for (auto col = 0; col < m_a.num_cols; ++col) {
 
-      float ta = a.bias()[col];
-      float tb = b.bias()[col];
+      float ta = out_a[col];
+      float tb = out_b[col];
 
-      out.bias()[col] = ta + tb;
+      out_bias[col] = ta + tb;
     }
   }
 

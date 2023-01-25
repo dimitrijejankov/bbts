@@ -1,8 +1,8 @@
 #include "ffnn_mult.h"
 #include "ffnn_types.h"
 #include <cmath>
-#include <mkl/mkl_cblas.h>
-#include <mkl/mkl.h>
+#include <mkl_cblas.h>
+#include <mkl.h>
 
 bbts::ffnn_mult::ffnn_mult() {
 
@@ -18,10 +18,15 @@ bbts::ffnn_mult::ffnn_mult() {
   inputInplace = {};
 
   // this is a CPU dense mult
-  is_gpu = false;
+  is_gpu = true;
 
   // set the function that actually performs the add
   fn = &ffnn_mult::mult;
+}
+
+size_t bbts::ffnn_mult::get_required_memory(const bbts::ud_impl_t::tensor_params_t &params,
+                                            const bbts::ud_impl_t::meta_args_t &_in) const {
+  return 0;
 }
 
 size_t bbts::ffnn_mult::get_complexity_hint(const bbts::ud_impl_t::tensor_params_t &params,
@@ -91,6 +96,10 @@ void bbts::ffnn_mult::mult(const bbts::ud_impl_t::tensor_params_t &params,
   uint32_t K1 = !params.get_bool_or_default<0>(false) ? m_a.num_cols : m_a.num_rows;
   uint32_t K2 = !params.get_bool_or_default<1>(false) ? m_a.num_rows : m_a.num_cols;
 
+  uint32_t lda = m_a.num_rows;
+  uint32_t ldb = m_b.num_rows;
+  uint32_t ldc = I;
+
   // make sure the matrix size matches, this is only present during the debug build
   assert(K1 == K2);
 
@@ -107,7 +116,7 @@ void bbts::ffnn_mult::mult(const bbts::ud_impl_t::tensor_params_t &params,
   float alpha = 1.0f;
   float beta = 0.0f;
   cublasSgemm(params.cublas_handle, l_trans, r_trans, I, J, K1, &alpha,
-              in1Data, K1, in2Data, J, &beta, outData, J);
+              in1Data, lda, in2Data, ldb, &beta, outData, ldc);
 
   // set the new meta data
   m_out = {.num_rows = I, 

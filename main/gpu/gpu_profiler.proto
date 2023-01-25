@@ -1,0 +1,214 @@
+syntax = "proto3";
+
+package bbts;
+
+// this stores the relevant information about the kernls that were just run
+message kernel_run_stats_t {
+
+  // maps it to the krenel_run in the profiler
+  uint64 kernel_run_idx = 1;
+
+  // the start timestamp of the kernel
+  uint64 start = 2;
+
+  // the end of the timestamp of the kernel
+  uint64 end = 3;
+}
+
+// this stores all the relevant information about the gpu2gpu copies performed 
+message gpu_to_gpu_stat_t {
+
+    message gpu_to_gpu_tensor_stat_t {
+      
+      int32 tensor = 1;
+      
+      uint64 num_bytes = 2;
+
+      int32 src_dev = 3;
+    }
+
+    // the start timestamp of the kernel
+    uint64 start = 1;
+
+    // the end of the timestamp of the kernel
+    uint64 end = 2;
+
+    // the tensors we copied
+    repeated gpu_to_gpu_tensor_stat_t tensors = 3;
+
+    // the source device we are copying from
+    int32 source_dev = 4;
+
+    // the destination device we are copying to
+    int32 dst_dev = 5;
+
+}
+
+// this stores the relevant information about the cpu2gpu transfers
+message cpu_to_gpu_stat_t {
+
+    // the start timestamp of the kernel
+    uint64 start = 1;
+    
+    // the end of the timestamp of the kernel
+    uint64 end = 2;
+
+    // the tensors we copied
+    repeated int32 tensors = 3;
+
+    // the destination device we are copying to
+    int32 dst_dev = 4;
+
+    // the number of bytes
+    uint64 num_bytes = 5;
+
+};
+
+// logs the relevant information about the tensors feed
+message tensor_freed_stat_t {
+
+    // the start timestamp of the kernel
+    uint64 start = 1;
+    
+    // the tensors we copied
+    int32 tensor = 2;
+
+    // the destination device we are copying to
+    int32 dst_dev = 3;
+
+    // the number of bytes
+    uint64 num_bytes = 4;
+};
+
+message tensor_evicted_stat_t {
+
+    // the start timestamp of the kernel
+    uint64 start = 1;
+
+    // the end of the timestamp of the kernel
+    uint64 end = 2;
+
+    // the tensors we copied
+    int32 tensor = 3;
+
+    // the destination device we are copying to
+    int32 dst_dev = 4;
+
+    // the number of bytes
+    uint64 num_bytes = 5;
+};
+
+message scheduled_kernel_stat_t {
+
+    // stores the relevant info about the GPU transfer
+    message gpu_transfer_stat_t { 
+
+        int32 src_dev = 1;
+        int32 tid = 2;
+    }
+
+    //  the id of the kernel
+    uint64 kernel_run_id = 1;
+
+    // the id of the command the kernel is associated with
+    uint64 command_id = 2;
+
+    // the name of the ud function
+    string ud_name = 3;
+
+    // the name of the implementation used to run the kernel
+    string impl_name = 4;
+
+    // the start timestamp of the kernel
+    uint64 start = 5;
+
+    // the device where we are scheduling it
+    int32 dev = 6;
+
+    // the inputs
+    repeated int32 input = 7;
+
+    // the input sizes in bytes
+    repeated uint64 input_sizes = 8;
+
+    // the outputs that were created
+    repeated int32 output = 9;
+
+    // the output sizes in bytes
+    repeated uint64 output_sizes = 10;
+
+    // cpu tensors to load
+    repeated int32 cpu_transfers = 11;
+
+    // the CPU transfers
+    repeated gpu_transfer_stat_t gpu_transfers = 12;
+};
+
+message gc_request_free_stat_t {
+  
+  // the tid 
+  int32 tid = 1;
+  
+  // the number of bytes
+  uint64 num_bytes = 2;
+};
+
+message gc_request_evict_stat_t  {
+
+  // the tid of the evicted tensor
+  int32 tid = 1;
+
+  // the number of bytes evicted
+  uint64 num_bytes = 2;
+};
+  
+message gc_request_stat_t {
+
+  // the device for which the request is for
+  int32 dev = 1;
+
+  // list of tensors we are supposed to free
+  repeated gc_request_free_stat_t to_free = 2;
+
+  // list of tensors we are supposed to evict
+  repeated gc_request_evict_stat_t to_evict = 3;
+
+  // the kernel prep to run once the request is finished
+  uint64 kernel_run_id = 4;
+
+  // total memory free
+  uint64 free_memory_used = 5;
+};
+
+message gpu_device_log_t {
+
+  // the number of devices
+  uint32 num_devices = 1;
+
+  // the stats about the kernels that were run
+  repeated kernel_run_stats_t kernels_stats = 2;
+
+  // the stats about the gpu2gpu that were run
+  repeated gpu_to_gpu_stat_t gpu2gpu_transfer_stats = 3;
+  
+  // the stats about the cpu2gpu that were run
+  repeated cpu_to_gpu_stat_t cpu2gpu_transfer_stats = 4;
+
+  // the stats about the tensors that were freed
+  repeated tensor_freed_stat_t free_tensor_stats = 5;
+
+  // the stats about the tensors that were evicted
+  repeated tensor_evicted_stat_t evicted_tensor_stats = 6;
+
+  // the krenels that were scheduled
+  repeated scheduled_kernel_stat_t kernels_scheduled = 7;
+
+  // the garbage requests that were scheduled
+  repeated gc_request_stat_t gc_scheduled = 8;
+
+};
+
+message gpu_profiler_log_t {
+
+  repeated gpu_device_log_t device_logs = 1;
+};

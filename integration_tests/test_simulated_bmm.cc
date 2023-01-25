@@ -1,13 +1,13 @@
 #include <map>
 #include <thread>
 #include <chrono>
-#include "../src/operations/move_op.h"
-#include "../src/operations/reduce_op.h"
-#include "../src/commands/reservation_station.h"
-#include "../src/commands/tensor_notifier.h"
-#include "../src/commands/command_runner.h"
-#include "../src/server/node.h"
-#include "../src/server/static_config.h"
+#include "../main/operations/move_op.h"
+#include "../main/operations/reduce_op.h"
+#include "../main/commands/reservation_station.h"
+#include "../main/commands/command_notifier.h"
+#include "../main/commands/command_runner.h"
+#include "../main/server/node.h"
+#include "../main/server/static_config.h"
 
 using namespace bbts;
 using namespace std::chrono;
@@ -301,7 +301,8 @@ std::vector<bbts::command_ptr_t> generate_commands(size_t split, bbts::node_t &n
 int main(int argc, char **argv) {
 
   // make the configuration
-  auto config = std::make_shared<bbts::node_config_t>(bbts::node_config_t{.argc=argc, .argv = argv, .num_threads = 8});
+  auto config = std::make_shared<bbts::node_config_t>(argc, argv);
+  config->num_threads = 8;
 
   // create the node
   bbts::node_t node(config);

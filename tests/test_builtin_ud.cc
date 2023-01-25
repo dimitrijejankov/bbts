@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
-#include "../src/tensor/builtin_formats.h"
-#include "../src/ud_functions/builtin_functions.h"
-#include "../src/ud_functions/udf_manager.h"
+#include "../main/tensor/builtin_formats.h"
+#include "../main/ud_functions/builtin_functions.h"
+#include "../main/ud_functions/udf_manager.h"
 
 namespace bbts {
 
@@ -36,8 +36,8 @@ TEST(TestBuiltinMatrix, TestDenseMatrixAdditonInplace) {
   auto size = factory->get_tensor_size(m);
 
   // the memory
-  std::unique_ptr<char[]> a_mem(new char[size]);
-  std::unique_ptr<char[]> b_mem(new char[size]);
+  std::unique_ptr<char[]> a_mem(new char[size]); new (a_mem.get()) tensor_t();
+  std::unique_ptr<char[]> b_mem(new char[size]); new (b_mem.get()) tensor_t();
 
   // init the two tensors
   auto &a = factory->init_tensor((tensor_t*) a_mem.get(), m).as<dense_tensor_t>();
@@ -63,7 +63,7 @@ TEST(TestBuiltinMatrix, TestDenseMatrixAdditonInplace) {
   ud_impl_t::tensor_args_t output_args = {{&a}};
 
   // call the addition
-  ud->call_ud({ ._params = bbts::command_param_list_t {._data = nullptr, ._num_elements = 0} }, input_args, output_args);
+  ud->call_ud({ ._params = bbts::command_param_list_t {._data = nullptr, ._num_elements = 0}, ._additional_memory = nullptr }, input_args, output_args);
 
   // check that the values are correct
   for(auto row = 0; row < am.num_rows; ++row) {

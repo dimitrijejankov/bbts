@@ -1,0 +1,26 @@
+<html>
+
+<head>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"
+        integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
+
+    <script src="https://unpkg.com/timelines-chart@2.11.5/dist/timelines-chart.min.js"></script>
+</head>
+
+<body>
+
+    <script>
+
+        $.getJSON( "api/logs/all", function( fetched ) {
+            
+            groups = []
+            for (let i = 0; i < fetched.length; i++) {
+                $("#links").append("<p><a href=\"view_log.html?log=" + fetched[i] + "\">" + fetched[i] + "</a></p>");
+            }
+        });
+
+    </script>
+    <div id="links"></div>
+</body>
+
+</html>

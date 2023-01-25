@@ -15,16 +15,14 @@ add_library(ffnn_gpu_lib SHARED ${app_dir}/ffnn_lib_init.cc
                                 ${app_dir}/ffnn_mult.cc      
                                 ${app_dir}/ffnn_uniform_data.cc
                                 ${app_dir}/ffnn_uniform_weights.cc
-                                ${app_dir}/ffnn_types.cc            
+                                ${app_dir}/ffnn_types.cc    
+                                ${app_dir}/ffnn_diff_mm_kernel.cu        
                                 ${app_dir}/ffnn_weighted_sum.cu
                                 ${app_dir}/ffnn_matrix_hadamard.cu  
                                 ${app_dir}/ffnn_back_mult.cu  
                                 ${app_dir}/ffnn_uniform_sparse_data.cc  
                                 ${app_dir}/ffnn_weighted_sum_sparse_dense.cc)
-
-# link the curand library
-find_package(curand REQUIRED)
-target_link_libraries(ffnn_gpu_lib curand)
+target_link_libraries(ffnn_gpu_lib CUDA::curand)  
 
 # add the dependencies
 add_dependencies(applications generate_gpu_ffnn)

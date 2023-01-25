@@ -1,8 +1,8 @@
 #include "ffnn_activation_mult.h"
 #include "ffnn_types.h"
 #include <cassert>
-#include <mkl/mkl.h>
-#include <mkl/mkl_cblas.h>
+#include <mkl.h>
+#include <mkl_cblas.h>
 
 bbts::ffnn_activation_mult::ffnn_activation_mult() {
 
@@ -22,6 +22,11 @@ bbts::ffnn_activation_mult::ffnn_activation_mult() {
 
   // set the function that actually performs the add
   fn = &ffnn_activation_mult::mult;
+}
+
+size_t bbts::ffnn_activation_mult::get_required_memory(const bbts::ud_impl_t::tensor_params_t &params,
+                                                       const bbts::ud_impl_t::meta_args_t &_in) const {
+  return 0;
 }
 
 size_t bbts::ffnn_activation_mult::get_complexity_hint(
@@ -86,9 +91,9 @@ void bbts::ffnn_activation_mult::mult(
   assert(m_b.has_bias);
 
   // get the ptrs
-  float *outData = out.data();
-  float *in1Data = a.data();
-  float *in2Data = b.data();
+  float *out_data = out.data();
+  float *in1_data = a.data();
+  float *in2_data = b.data();
 
   // set the new meta data
   m_out = {.num_rows = I,
@@ -99,15 +104,16 @@ void bbts::ffnn_activation_mult::mult(
            .num_aggregated = 1};
 
   // do the multiply
-  cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, I, J, K, 1.0f, in1Data,
-              m_a.num_cols, in2Data, m_b.num_cols, 0.0f, outData, J);
+  cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, I, J, K, 1.0f, in1_data,
+              m_a.num_cols, in2_data, m_b.num_cols, 0.0f, out_data, J);
 
   if(m_a.col_idx == 0 && m_b.row_idx == 0) {
     
     // add the bias
+    auto bias_data = b.bias();
     for (auto row = 0; row < I; ++row) {
       for (auto col = 0; col < J; ++col) {
-        outData[row * J + col] += b.bias()[col];
+        out_data[row * J + col] += bias_data[col];
       }
     }
   }

@@ -17,10 +17,15 @@ bbts::ffnn_uniform_data::ffnn_uniform_data() {
   inputInplace = {};
 
   // this is a CPU dense add
-  is_gpu = false;
+  is_gpu = true;
 
   // set the function that actually performs the add
   fn = &ffnn_uniform_data::uniform_rand;
+}
+
+size_t bbts::ffnn_uniform_data::get_required_memory(const bbts::ud_impl_t::tensor_params_t &params,
+                                                    const bbts::ud_impl_t::meta_args_t &_in) const {
+  return 0;
 }
 
 size_t bbts::ffnn_uniform_data::get_complexity_hint(const bbts::ud_impl_t::tensor_params_t &params,

@@ -1,0 +1,33 @@
+#pragma once
+
+#include <cassert>
+#include "../ud_function.h"
+
+namespace bbts {
+
+struct dense_uniform_t : public ud_impl_t {
+
+  // initializes the function
+  dense_uniform_t();
+  
+  // get the required temporary memory
+  size_t get_required_memory(const bbts::ud_impl_t::tensor_params_t &params,
+                           const meta_args_t &_in) const override;
+
+  // returns an estimate of the complexity
+  size_t get_complexity_hint(const bbts::ud_impl_t::tensor_params_t &params,
+                             const meta_args_t &_in) override;
+
+  // return the meta of the output
+  void get_out_meta(const bbts::ud_impl_t::tensor_params_t &params,
+                    const meta_args_t &_in,
+                    meta_args_t &_out) const override;
+
+  // does the work
+  static void uniform_rand(const bbts::ud_impl_t::tensor_params_t &params,
+                           const tensor_args_t &_in,
+                           tensor_args_t &_out);
+
+};
+
+}

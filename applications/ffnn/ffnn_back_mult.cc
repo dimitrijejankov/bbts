@@ -1,7 +1,7 @@
 #include "ffnn_back_mult.h"
 #include "ffnn_types.h"
-#include <mkl/mkl.h>
-#include <mkl/mkl_cblas.h>
+#include <mkl.h>
+#include <mkl_cblas.h>
 
 bbts::ffnn_back_mult::ffnn_back_mult() {
 
@@ -21,6 +21,11 @@ bbts::ffnn_back_mult::ffnn_back_mult() {
 
   // set the function that actually performs the add
   fn = &ffnn_back_mult::mult;
+}
+
+size_t bbts::ffnn_back_mult::get_required_memory(const bbts::ud_impl_t::tensor_params_t &params,
+                                                 const bbts::ud_impl_t::meta_args_t &_in) const {
+  return 0;
 }
 
 size_t bbts::ffnn_back_mult::get_complexity_hint(
@@ -99,9 +104,10 @@ void bbts::ffnn_back_mult::mult(const bbts::ud_impl_t::tensor_params_t &params,
            .num_aggregated = 1};
 
   // add the bias
+  float *out_bias = out.bias();
   for (auto row = 0; row < m_b.num_rows; ++row) {
     for (auto col = 0; col < m_b.num_cols; ++col) {
-      out.bias()[col] += b.data()[row * m_b.num_cols + col];
+      out_bias[col] += in2Data[row * m_b.num_cols + col];
     }
   }
 }

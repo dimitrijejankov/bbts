@@ -22,6 +22,11 @@ bbts::ffnn_weighted_sum::ffnn_weighted_sum() {
   fn = &ffnn_weighted_sum::add;
 }
 
+size_t bbts::ffnn_weighted_sum::get_required_memory(const bbts::ud_impl_t::tensor_params_t &params,
+                                                    const bbts::ud_impl_t::meta_args_t &_in) const {
+  return 0;
+}
+
 size_t bbts::ffnn_weighted_sum::get_complexity_hint(const bbts::ud_impl_t::tensor_params_t &params,
                                                      const bbts::ud_impl_t::meta_args_t &_in) {
 
@@ -74,10 +79,13 @@ void bbts::ffnn_weighted_sum::add(const bbts::ud_impl_t::tensor_params_t &params
   assert(m_a.has_bias == m_b.has_bias);
 
   // add a and b
+  auto out_data = out.data();
+  auto a_data = a.data();
+  auto b_data = b.data();
   for (auto row = 0; row < m_a.num_rows; ++row) {
     for (auto col = 0; col < m_a.num_cols; ++col) {
-      out.data()[row * m_a.num_cols + col] = ca * a.data()[row * m_a.num_cols + col] +
-                                             cb * b.data()[row * m_a.num_cols + col];
+      out_data[row * m_a.num_cols + col] = ca * a_data[row * m_a.num_cols + col] +
+                                           cb * b_data[row * m_a.num_cols + col];
     }
   }
 
@@ -90,9 +98,12 @@ void bbts::ffnn_weighted_sum::add(const bbts::ud_impl_t::tensor_params_t &params
            .num_aggregated = 1};
 
   // sum their biases if they exists
+  auto out_bias = out.bias();
+  auto a_bias = a.bias();
+  auto b_bias = b.bias();
   if(m_a.has_bias && m_b.has_bias) {
     for (auto col = 0; col < m_a.num_cols; ++col) {
-      out.bias()[col] = ca * a.bias()[col] + cb * b.bias()[col];
+      out_bias[col] = ca * a_bias[col] + cb * b_bias[col];
     }
   }
 }

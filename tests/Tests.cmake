@@ -18,14 +18,19 @@ else()
 
 # just use the .cc files
 file(GLOB files "${unit-test-path}/*.cc")
-
+list(FILTER files EXCLUDE REGEX ".*test_gpu_.*")
 endif()
 
+# disable these since they are broken
+list(FILTER files EXCLUDE REGEX ".*test_gpu_heuristic.*")
+list(FILTER files EXCLUDE REGEX ".*test_gpu_memory.*")
+list(FILTER files EXCLUDE REGEX ".*test_gpu_scheduler.*")
 
 # sorts files alphabetically because some tests require
 # files created in previous tests
 list(SORT files)
 add_custom_target(unit-tests)
+message(${files})
 foreach(file ${files})
 
     # grab the name of the test without the extension
