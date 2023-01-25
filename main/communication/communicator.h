@@ -17,7 +17,7 @@ namespace bbts {
 
 // identifier for any node
 const node_id_t ANY_NODE = MPI_ANY_SOURCE;
- 
+
 // defines some of the most common message request
 using com_tags = int32_t;
 
@@ -29,7 +29,7 @@ const com_tags SEND_CMD_TAG = 1;
 const com_tags SHUTDOWN_TAG = 2;
 const com_tags COORDINATOR_TAG = 3;
 const com_tags COORDINATOR_BCAST_CMD_TAG = 4;
-const com_tags NOTIFY_REDUCE_TAG = 5;
+const com_tags NOTIFY_TENSOR_TAG = 5;
 const com_tags RESPONSE_STRING_TAG = 6;
 const com_tags COORDINATOR_BCAST_BYTES = 7;
 const com_tags TENSOR_META_TAG_SIZE = 8;
@@ -52,7 +52,7 @@ public:
 
     // the type of the message
     com_tags message_tag{};
-    
+
     // the number of bytes
     int32_t num_bytes{};
 
@@ -62,7 +62,7 @@ public:
     // the message identifier
     MPI_Message message{};
 
-    // the success 
+    // the success
     bool success = true;
   };
 
@@ -71,7 +71,7 @@ public:
     // the message request identifier
     MPI_Request request{};
 
-    // the success 
+    // the success
     bool success = true;
   };
 
@@ -91,10 +91,10 @@ public:
   bool wait_async(async_request_t &_request);
 
   // notify a node that tensors were created
-  bool reduce_finished_notification(node_id_t out_node, const std::vector<bbts::command_t::command_tid_id_t> &notifications);
+  bool tensors_created_notification(node_id_t out_node, const std::vector<bbts::tid_t> &tensor);
 
   // wait to receive a notification
-  std::tuple<node_id_t, std::vector<bbts::command_t::command_tid_id_t>> receive_reduce_finished_notification();
+  std::tuple<node_id_t, std::vector<bbts::tid_t>> receive_tensor_created_notification();
 
   // shutdown the notification handler
   bool shutdown_notification_handler();
@@ -120,6 +120,9 @@ public:
   // send the coord op to all nodes
   bool send_coord_op(const bbts::coordinator_op_t &op);
 
+  // send a coord op to one node only
+  bool send_coord_op(const bbts::coordinator_op_t &op, node_id_t node);
+
   // expect the a coord op
   bbts::coordinator_op_t expect_coord_op();
 
@@ -133,7 +136,7 @@ public:
   bool send_tensor_meta(const std::vector<std::tuple<tid_t, tensor_meta_t>> &meta);
 
   // get the meta from a node
-  bool recv_meta(node_id_t node, std::vector<std::tuple<tid_t, tensor_meta_t>> &data); 
+  bool recv_meta(node_id_t node, std::vector<std::tuple<tid_t, tensor_meta_t>> &data);
 
   // expect the a coord op
   bool expect_coord_cmds(size_t num_cmds, std::vector<command_ptr_t> &out);
@@ -157,7 +160,7 @@ public:
   }
 
   async_request_t send_tensor_size_async(node_id_t _node, com_tags _tag, uint64_t val) {
-    
+
     // initiate an asynchronous send request
     async_request_t _req;
     _req.success = MPI_Isend(&val, 1, MPI_UINT64_T, _node, _tag + FREE_TAG, MPI_COMM_WORLD, &_req.request) == MPI_SUCCESS;
@@ -168,7 +171,7 @@ public:
 
   // send the tensor size
   bool send_tensor_size(node_id_t node, com_tags tag, uint64_t val) {
-    return MPI_Ssend(&val, 1, MPI_UINT64_T, node, tag + FREE_TAG, MPI_COMM_WORLD) == MPI_SUCCESS;  
+    return MPI_Ssend(&val, 1, MPI_UINT64_T, node, tag + FREE_TAG, MPI_COMM_WORLD) == MPI_SUCCESS;
   }
   bool expect_bytes(size_t num_bytes, std::vector<char> &out);
 
@@ -201,6 +204,6 @@ public:
 
 // the default communicator is the mpi communicator
 using communicator_t = mpi_communicator_t;
-using communicator_ptr_t = std::shared_ptr<communicator_t>;
+using communicator_ptr_t = std::shared_ptr<mpi_communicator_t>;
 
 }
