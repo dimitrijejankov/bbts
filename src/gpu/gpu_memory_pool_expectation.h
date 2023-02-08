@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <set>
 #include <stdexcept>
 #include <unordered_set>
 
@@ -32,10 +33,10 @@ public:
     cudaFree(memory);
   }
 
-  void* allocate_with_expectation(size_t num_bytes, float tensor_life_prob) {
+  void* allocate_with_expectation(size_t num_bytes, float tensor_life_prob, std::set<size_t> &_tensor_offsets, tid_t tid, int32_t dev) {
 
     // allocate the host pinned memory
-
+    ++allocation_count;
     // TODO: do more check on this 
     // assert(_tensor_lifemap.count(tid) != 0);
     block_allocator_t::offset_type real_offset;
@@ -62,20 +63,31 @@ public:
     offset_to_aligned_offset.insert({real_offset, aligned_offset});
     aligned_offset_to_offset.insert({aligned_offset, real_offset});
 
+    _tensor_offsets.insert(real_offset);
+
+    std::cout << "Dev: " << dev << " Allocating Block: Size: " << num_bytes << " Allocated Offset: " 
+                  << real_offset << " tid: " << tid << " # of total allocates: " << allocation_count << "\n";
+
     return memory + aligned_offset;
   }
 
-  void free_with_offset_map(void *aligned_address, size_t num_bytes, std::map<size_t, int32_t> _offset_to_tid) {
+  void free_with_offset_map(void *aligned_address, size_t num_bytes, std::set<size_t> &_tensor_offsets, int32_t dev) {
+
+    ++free_count;
 
     // free the GPU
     auto aligned_offset = (size_t) ((uint8_t*) aligned_address - memory);
     auto real_offset = aligned_offset_to_offset[aligned_offset];
 
     // just free this
-    block_allocator_t_expectation.free_with_expectation(real_offset, num_bytes + target_aligment, _offset_to_tid);
+    block_allocator_t_expectation.free_with_expectation(real_offset, num_bytes + target_aligment, _tensor_offsets);
 
     offset_to_aligned_offset.erase(real_offset);
     aligned_offset_to_offset.erase(aligned_offset);
+
+    _tensor_offsets.erase(real_offset);
+
+    std::cout << "Dev: " << dev << " Freed tensor from offset: " << real_offset << " # of total frees: " << free_count << "\n";
   }
 
   size_t get_real_offset(void *aligned_address){
@@ -97,6 +109,9 @@ public:
   block_allocator_t_expectation block_allocator_t_expectation;
 
   tid_to_probability _tensor_lifemap;
+
+  int32_t allocation_count;
+  int32_t free_count;
 };
 
 using gpu_memory_pool_t_expectation_ptr_t = std::shared_ptr<gpu_memory_pool_t_expectation>;

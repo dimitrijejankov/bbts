@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <set>
 #include <sys/types.h>
 #include <unordered_map>
 #include <unordered_set>
@@ -250,8 +251,8 @@ private:
   // how many times will this tensor be used
   std::unordered_map<tid_t, gpu_mem_tensor_t> _tensors;
 
-  // map the offset to the tensor
-  std::map<size_t, tid_t> _offset_to_tid;
+  // map the offset to the tensor; each device has a unique mapping
+  std::vector<std::set<size_t>> _tensor_offsets;
 
   // these are the pinned tensors that we will not move out of memory unless unpinned (tid, number of times pinned)
   std::vector<std::unordered_map<tid_t, uint32_t>> _pinned_tensors;
